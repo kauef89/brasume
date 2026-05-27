@@ -9,11 +9,11 @@
                 class="flex flex-col justify-center flex-1 pr-2 overflow-hidden"
             >
                 <h2
-                                    class="text-xl font-bold text-gray-900 dark:text-white truncate"
-                                    :title="headerTitle"
-                                >
-                                    {{ headerTitle }}
-                                </h2>
+                    class="text-xl font-bold text-gray-900 dark:text-white truncate"
+                    :title="headerTitle"
+                >
+                    {{ headerTitle }}
+                </h2>
                 <div
                     v-if="headerSubtitle"
                     class="text-sm text-gray-500 truncate"
@@ -295,7 +295,7 @@ import OrderRouting from "./OrderRouting.vue";
 import OrderSummaryCopier from "../Checkout/OrderSummaryCopier.vue";
 
 // 🚀 IMPORTAÇÃO DOS NOSSOS FORMATADORES PADRÃO-OURO
-import { formatCurrency, formatName } from "@/Utils/formatters";
+import { formatCurrency, abbreviateName } from "@/Utils/formatters";
 
 const props = defineProps({
     operatorName: String,
@@ -356,7 +356,7 @@ const headerTitle = computed(() => {
     if (orderMetadata.value.type === "counter") return "Pedido Balcão";
 
     if (orderMetadata.value.type === "delivery")
-        return formatName(orderMetadata.value.customer?.name || "Delivery"); // 🚀 Aplicação do Formatter!
+        return abbreviateName(orderMetadata.value.customer?.name || "Delivery"); // 🚀 Aplicação do Formatter!
 
     return "Pedido Atual";
 });
@@ -371,9 +371,9 @@ const headerSubtitle = computed(() => {
 
     if (orderMetadata.value.type === "counter") {
         if (orderMetadata.value.customer)
-            return formatName(orderMetadata.value.customer.name); // 🚀 Aplicação do Formatter!
+            return abbreviateName(orderMetadata.value.customer.name); // 🚀 Aplicação do Formatter!
         if (orderMetadata.value.identifier)
-            return formatName(orderMetadata.value.identifier); // 🚀 Aplicação do Formatter!
+            return abbreviateName(orderMetadata.value.identifier); // 🚀 Aplicação do Formatter!
     }
 
     if (orderMetadata.value.type === "delivery") {

@@ -21,7 +21,7 @@
                     </h2>
                     <span
                         class="text-sm font-bold text-gray-500 uppercase tracking-widest"
-                        >{{ formatName(order?.customer_name) }}</span
+                        >{{ abbreviateName(order?.customer_name) }}</span
                     >
                 </div>
             </div>
@@ -158,7 +158,7 @@
 import { ref, computed } from "vue";
 import Dialog from "primevue/dialog";
 import ManagerAuthModal from "@/Components/ManagerAuthModal.vue";
-import { formatCurrency, formatName } from "@/Utils/formatters"; // Importando formatadores globais!
+import { formatCurrency, abbreviateName } from "@/Utils/formatters"; // Importando formatadores globais!
 
 const props = defineProps({ visible: Boolean, order: Object });
 const emit = defineEmits([

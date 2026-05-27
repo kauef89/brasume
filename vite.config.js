@@ -1,17 +1,18 @@
-import { defineConfig } from 'vite';
-import laravel from 'laravel-vite-plugin';
-import vue from '@vitejs/plugin-vue';
-import tailwindcss from '@tailwindcss/vite'; // <-- 1. O MOTOR IMPORTADO AQUI
-import path from 'path';
+import { defineConfig } from "vite";
+import laravel from "laravel-vite-plugin";
+import vue from "@vitejs/plugin-vue";
+import tailwindcss from "@tailwindcss/vite";
+import path from "path";
 
 export default defineConfig({
     plugins: [
-        tailwindcss(), // <-- 2. O MOTOR LIGADO AQUI!
+        tailwindcss(),
         laravel({
-            input: ['resources/css/app.css',
-                    'resources/js/app.js',
-                    'resources/css/filament/store/theme.css'
-                ],
+            input: [
+                "resources/css/app.css",
+                "resources/js/app.js",
+                "resources/css/filament/store/theme.css",
+            ],
             refresh: true,
         }),
         vue({
@@ -25,7 +26,13 @@ export default defineConfig({
     ],
     resolve: {
         alias: {
-            '@': path.resolve(__dirname, './resources/js'),
+            "@": path.resolve(__dirname, "./resources/js"),
         },
+    },
+    // 🚀 ATUALIZE ESTE BLOCO
+    server: {
+        host: true, // Liga para a rede externa (não precisa mais do --host no terminal)
+        allowedHosts: true, // 🚀 OPÇÃO NUCLEAR: Aceita qualquer domínio! Fim do bloqueio.
+        cors: true,
     },
 });
