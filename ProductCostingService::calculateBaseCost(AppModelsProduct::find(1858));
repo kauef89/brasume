@@ -1,0 +1,16 @@
+[90m= [39m[
+    "[34mid[39m" => [35m383[39m,
+    "[34mproduct_id[39m" => [35m1858[39m,
+    "[34msupplier_id[39m" => [35m1704[39m,
+    "[34mnfe_key[39m" => "[32m42260536956955000164550010000343481919811479[39m",
+    "[34mxml_name[39m" => "[32mPASTEL ESPECIAL 21 X 21 (1500GR)[39m",
+    "[34mquantity[39m" => "[32m1200.000[39m",
+    "[34mconversion_factor[39m" => "[32m20.0000[39m",
+    "[34moriginal_quantity[39m" => "[32m60.000[39m",
+    "[34moriginal_unit_of_measure[39m" => "[32mUN[39m",
+    "[34munit_cost[39m" => "[32m1.05000[39m",
+    "[34moriginal_unit_cost[39m" => "[32m21.00000[39m",
+    "[34mcreated_at[39m" => "[32m2026-05-18T22:05:56.000000Z[39m",
+    "[34mupdated_at[39m" => "[32m2026-05-18T22:05:56.000000Z[39m",
+  ]
+

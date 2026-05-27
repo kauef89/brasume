@@ -1,0 +1,19 @@
+@import "../../../../vendor/filament/filament/resources/css/theme.css";
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+
+/* 🚀 A MÁGICA: Ensinando o Tailwind v4 a ler o Livewire */
+@source '../../../../app/Livewire/**/*';
+@source '../../../../resources/views/livewire/**/*';
+
+/* ==========================================
+   IMPORTAÇÃO DOS MÓDULOS DE COMPONENTES
+   ========================================== */
+@import "./components/_base.css";
+@import "./components/_sidebar.css";
+@import "./components/_conciliator.css";
+@import "./components/_calendar.css";
+@import "./components/_etc.css";
+@import "./components/_shadowless.css";
+@import "./components/_welcome-modal.css";

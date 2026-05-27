@@ -1,0 +1,113 @@
+/* ==========================================
+   SIDEBAR PANEL - PAINEL ADM DAS LOJAS
+   ========================================== */
+
+/* 1. REMOVER BOLINHAS E LINHAS NATIVAS */
+.fi-sidebar-group ul .fi-sidebar-item-icon,
+.fi-sidebar-group ul svg.fi-icon,
+.fi-sidebar-item-grouped-border {
+    @apply !hidden !w-0 !h-0 !opacity-0;
+}
+
+.fi-sidebar-group ul .fi-sidebar-item-label {
+    @apply !ml-1;
+}
+
+/* 2. FORÇAR ÍCONES DE GRUPO PARA SIZE-MD */
+.fi-sidebar-group-button svg.fi-icon {
+    @apply !w-4 !h-4 !min-w-4 !min-h-4;
+}
+
+.fi-sidebar-item-label, .fi-sidebar-group-label {
+    @apply !text-[13px];
+}
+
+/* 3. INDENTAÇÃO COM DARK MODE */
+.fi-sidebar-group ul {
+    @apply !border-l !border-gray-200 dark:!border-white/10 !ml-5 !pl-1 !gap-0;
+}
+.fi-sidebar-item { 
+    @apply !m-0; 
+}
+
+.fi-sidebar {
+    @apply !border-r !border-black/10 dark:!border-white/10;
+}
+
+/* 4. SEARCH BAR CUSTOMIZADA */
+.nav-searchbar {
+    @apply !bg-primary-500/10 hover:!bg-primary-500/15 !p-2 !gap-2 !rounded-lg;
+}
+
+input#menu-search {
+    outline: 0;
+}
+
+.fi-sidebar-group svg {
+    width: 18px !important;
+}
+
+/* 5. HOVERS E BACKGROUNDS */
+.fi-sidebar-group-button {
+    @apply !transition-all !duration-200 !ease-in-out !rounded-lg;
+}
+.fi-sidebar-group-button:hover {
+    @apply !bg-gray-100 dark:!bg-white/5;
+}
+
+.fi-sidebar-item a {
+    @apply !transition-all !duration-200 !ease-in-out !rounded-lg !py-1.5 !px-2;
+}
+.fi-sidebar-item a:hover {
+    @apply !bg-gray-100 dark:!bg-white/5;
+}
+
+.fi-sidebar-nav-groups {
+    @apply !gap-0;
+}
+
+/* 6. FIX DO MENU RECOLHIDO (COLLAPSED) */
+.fi-sidebar-is-collapsed .fi-sidebar-group ul,
+.fi-sidebar-is-collapsed .fi-sidebar-group-items,
+.fi-sidebar-is-collapsed #menu-search {
+    @apply !hidden;
+}
+
+.fi-sidebar-is-collapsed .fi-input-wrapper {
+    @apply !p-2 !justify-center;
+}
+
+/* ==========================================
+   6. FIX DO MENU RECOLHIDO (COLLAPSED)
+   ========================================== */
+
+/* Se a sidebar NÃO tem a classe 'fi-sidebar-open', ela está recolhida. Escondemos os itens: */
+.fi-sidebar:not(.fi-sidebar-open) .fi-sidebar-group ul,
+.fi-sidebar:not(.fi-sidebar-open) .fi-sidebar-group-items {
+    display: none !important;
+}
+
+/* Como o menu recolhido tem apenas 2rem (32px), removemos o padding para a lupa caber perfeitamente */
+.fi-sidebar:not(.fi-sidebar-open) #search-wrapper {
+    padding-left: 0.35rem !important;
+    padding-right: 0.35rem !important;
+}
+
+/* Esconde o campo de texto e o botão X */
+.fi-sidebar:not(.fi-sidebar-open) #menu-search,
+.fi-sidebar:not(.fi-sidebar-open) #clear-search {
+    display: none !important;
+}
+
+/* Centraliza a lupa para ela parecer apenas mais um ícone do menu recolhido */
+.fi-sidebar:not(.fi-sidebar-open) .nav-searchbar {
+    justify-content: center !important;
+    padding: 0.5rem !important;
+    background-color: transparent !important;
+    cursor: pointer !important;
+}
+
+/* Efeito de hover (fundo translúcido) na lupa quando recolhido */
+.fi-sidebar:not(.fi-sidebar-open) .nav-searchbar:hover {
+    background-color: color-mix(in srgb, var(--color-primary-500) 15%, transparent) !important;
+}

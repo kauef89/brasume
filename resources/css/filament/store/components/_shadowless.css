@@ -1,0 +1,21 @@
+/* ==========================================
+   FLAT DESIGN (REMOÇÃO GLOBAL DE SOMBRAS)
+   ========================================== */
+/* Zeramos apenas a variável de sombra do Tailwind, preservando a variável de Rings */
+.shadow-sm,
+.shadow,
+.shadow-md,
+.shadow-lg,
+.shadow-xl,
+.shadow-2xl {
+    --tw-shadow: 0 0 #0000 !important;
+    --tw-shadow-colored: 0 0 #0000 !important;
+}
+
+/* Opcional: Alguns modais ou dropdowns muito específicos do Filament
+   podem tentar forçar a sombra. Garantimos o estilo chapado neles também */
+.fi-modal-window,
+.fi-dropdown-panel {
+    --tw-shadow: 0 0 #0000 !important;
+    --tw-shadow-colored: 0 0 #0000 !important;
+}

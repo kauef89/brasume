@@ -1,0 +1,209 @@
+﻿ID;"Nome do Produto";"Tipo de Produto Atual";"ID Categoria";"Nome da Categoria Atual";"Tipo da Categoria Atual"
+453;"Pastel Salgado";manufactured;6;Pastéis;external
+454;"Pastel Doce";manufactured;6;Pastéis;external
+455;"Água Mineral 500 ml";resale;44;Água;external
+456;"Suco de Polpa 400 ml";manufactured;57;"Sucos de Polpa";external
+457;"Suco Natural Copo";manufactured;58;"Sucos Naturais";external
+458;"Limonada Suíça 400 ml";manufactured;58;"Sucos Naturais";external
+459;"Milk Shake 400 ml";manufactured;55;Milk-shakes;external
+460;"Soda Italiana 400 ml";manufactured;56;"Sodas Italianas";external
+461;"Refrigerante 200 ml";resale;50;"Refri 200 ml";external
+462;"Refrigerante Lata 350 ml";resale;53;"Refri Lata";external
+463;"Refrigerante 600 ml";resale;8;"Bebidas sem Álcool";external
+464;"H2OH! Limão 500 ml";resale;51;"Refri 600 ml";external
+465;"Refrigerante 1,5 litro";resale;1;Uncategorized;external
+466;"Refrigerante 2 litros";resale;49;"Refri 2 l";external
+467;"Batata Frita 150g";manufactured;9;"Batata Frita";external
+468;"Batata Frita 400g";manufactured;9;"Batata Frita";external
+469;"Batata Frita 700g";manufactured;9;"Batata Frita";external
+470;"Crocante de Frango";manufactured;10;Porções;external
+471;"Frango & Fritas";manufactured;10;Porções;external
+472;"Quarteto Fantástico";manufactured;10;Porções;external
+473;"Espetinho de Camarão";manufactured;11;"Frutos do Mar";external
+474;"Isca de Pescada";manufactured;11;"Frutos do Mar";external
+475;"Fish & Chips";manufactured;11;"Frutos do Mar";external
+476;"Camarão Crocante";manufactured;11;"Frutos do Mar";external
+477;"Camarão Empanado";manufactured;11;"Frutos do Mar";external
+478;"X-Burguer Bovino";manufactured;14;"Sanduíches sem Salada";external
+479;"X-Burguer Bovino Smash";manufactured;14;"Sanduíches sem Salada";external
+480;"X-Burguer de Pernil Suíno";manufactured;14;"Sanduíches sem Salada";external
+481;"X-Burguer de Frango";manufactured;14;"Sanduíches sem Salada";external
+482;"X-Burguer de Frango Crispy";manufactured;14;"Sanduíches sem Salada";external
+483;"X-Burguer de Costela Bovina";manufactured;14;"Sanduíches sem Salada";external
+484;"Pão com Linguiça";manufactured;13;"Sanduíches da Casa";external
+485;"Vaca Louca";manufactured;13;"Sanduíches da Casa";external
+507;X-Salada;manufactured;15;"Sanduíches com Salada";external
+508;X-Frango;manufactured;15;"Sanduíches com Salada";external
+509;"X-Frango Crispy";manufactured;15;"Sanduíches com Salada";external
+510;X-Pernil;manufactured;15;"Sanduíches com Salada";external
+511;X-Costela;manufactured;15;"Sanduíches com Salada";external
+512;X-Bacon;manufactured;15;"Sanduíches com Salada";external
+513;X-Calabresa;manufactured;15;"Sanduíches com Salada";external
+514;X-Egg;manufactured;15;"Sanduíches com Salada";external
+516;Predileto;manufactured;13;"Sanduíches da Casa";external
+533;"Combo S1";combo;25;Combos;external
+618;"Combo S2";combo;25;Combos;external
+620;"Combo S3";combo;25;Combos;external
+621;"Combo S4";combo;25;Combos;external
+624;"Combo S5";combo;25;Combos;external
+625;"Combo S6";combo;25;Combos;external
+626;"Combo P1";combo;25;Combos;external
+627;"Combo P2";combo;25;Combos;external
+629;"Combo P3";combo;25;Combos;external
+630;"Combo P4";combo;25;Combos;external
+631;"Combo P5";combo;25;Combos;external
+632;"Combo P6";combo;25;Combos;external
+665;"Misto Quente";manufactured;14;"Sanduíches sem Salada";external
+666;"Tapioca Salgada";manufactured;26;Tapiocas;external
+667;"Tapioca Doce";manufactured;26;Tapiocas;external
+958;"Espetinho de Camarão com Queijo";manufactured;11;"Frutos do Mar";external
+1138;"Pastel de Vento";manufactured;6;Pastéis;external
+1140;"Amstel Lata 350ml";manufactured;45;"Cerveja Lata";external
+1142;"Cerveja Lata 350 ml";resale;30;"Bebidas Alcoólicas";external
+1144;"Cerveja Long Neck 330 ml";resale;30;"Bebidas Alcoólicas";external
+1171;"Big Cheddar";manufactured;13;"Sanduíches da Casa";external
+1179;Cremosão;manufactured;13;"Sanduíches da Casa";external
+1481;"Água Mineral Com Gás 500 ml";resale;44;Água;external
+1482;"Água Mineral Sem Gás 500 ml";resale;44;Água;external
+1483;"Água Mineral Com Gás 500 ml";resale;44;Água;external
+1484;"Água Mineral Sem Gás 500 ml";resale;44;Água;external
+1485;"Heineken Lata 350 ml";resale;45;"Cerveja Lata";external
+1486;"Heineken Long Neck 330 ml";resale;47;"Cervejas Long Neck";external
+1487;"Heineken Zero Lata 350 ml";resale;45;"Cerveja Lata";external
+1488;"Heineken Zero Long Neck 330 ml";resale;47;"Cervejas Long Neck";external
+1489;"Brahma Zero Lata 350 ml";resale;45;"Cerveja Lata";external
+1490;"Heineken 600 ml";resale;46;"Cervejas 600ml";external
+1491;"Brahma 600 ml";resale;46;"Cervejas 600ml";external
+1492;"Amstel 600 ml";resale;46;"Cervejas 600ml";external
+1493;"Original 600 ml";resale;46;"Cervejas 600ml";external
+1494;"Brahma Malzbier Long Neck 330 ml";resale;47;"Cervejas Long Neck";external
+1495;"Budweiser Long Neck 330 ml";resale;47;"Cervejas Long Neck";external
+1496;"Spaten Long Neck 330 ml";resale;47;"Cervejas Long Neck";external
+1497;"Stella Long Neck 330 ml";resale;47;"Cervejas Long Neck";external
+1498;"Coca-cola 1,5 l";resale;1;Uncategorized;external
+1499;"Coca-cola Zero 1,5 l";resale;1;Uncategorized;external
+1500;"Guaraná Antártica 1,5 l";resale;1;Uncategorized;external
+1501;"Guaraná Antártica Zero 1,5 l";resale;1;Uncategorized;external
+1502;"Sprite Fresh Lemon 1,5 l";resale;1;Uncategorized;external
+1503;"Coca-cola 2 l";resale;49;"Refri 2 l";external
+1504;"Coca-cola Zero 2 l";resale;49;"Refri 2 l";external
+1505;"Guaraná Antártica 2 l";resale;49;"Refri 2 l";external
+1506;"Coca-cola 200 ml";resale;50;"Refri 200 ml";external
+1507;"Coca-cola Zero 200 ml";resale;50;"Refri 200 ml";external
+1508;"Fanta Laranja 200 ml";resale;50;"Refri 200 ml";external
+1509;"Guaraná Antártica 200 ml";resale;50;"Refri 200 ml";external
+1511;"H2OH! Limonetto 500 ml";resale;51;"Refri 600 ml";external
+1512;"Coca-cola 600 ml";resale;51;"Refri 600 ml";external
+1513;"Coca-cola Zero 600 ml";resale;51;"Refri 600 ml";external
+1514;"Sprite 600 ml";resale;51;"Refri 600 ml";external
+1515;"Guaraná Antártica 600 ml";resale;51;"Refri 600 ml";external
+1516;"Coca-cola KS 290 ml";resale;52;"Refri KS";external
+1517;"Coca-cola Zero KS 290 ml";resale;52;"Refri KS";external
+1518;"Coca-cola Lata 350 ml";resale;53;"Refri Lata";external
+1519;"Coca-cola Zero Lata 350 ml";resale;53;"Refri Lata";external
+1520;"Guaraná Antártica Lata 350 ml";resale;53;"Refri Lata";external
+1521;"Guaraná Antártica Zero Lata 350 ml";resale;53;"Refri Lata";external
+1523;"Água Tônica Antártica Zero Lata 350 ml";resale;53;"Refri Lata";external
+1524;"Água Tônica Antártica Lata 350 ml";resale;53;"Refri Lata";external
+1525;"Fanta Laranja Lata 350 ml";resale;53;"Refri Lata";external
+1526;"Fanta Uva Lata 350 ml";resale;53;"Refri Lata";external
+1527;"Sprite Lata 350 ml";resale;53;"Refri Lata";external
+1528;"Caipirinha de Limão Vodka Média";manufactured;54;Caipirinhas;external
+1529;"Caipirinha de Limão Vodka Grande";manufactured;54;Caipirinhas;external
+1530;"Caipirinha de Limão Cachaça Média";manufactured;54;Caipirinhas;external
+1531;"Caipirinha de Limão Cachaça Grande";manufactured;54;Caipirinhas;external
+1532;"Caipirinha de Limão Steinhaeger Média";manufactured;54;Caipirinhas;external
+1533;"Caipirinha de Limão Steinhaeger Grande";manufactured;54;Caipirinhas;external
+1534;"Caipirinha de Limão Vinho Média";manufactured;54;Caipirinhas;external
+1535;"Caipirinha de Limão Vinho Grande";manufactured;54;Caipirinhas;external
+1536;"Milk-shake Morango 400 ml";manufactured;55;Milk-shakes;external
+1537;"Milk-shake Chocolate 400 ml";manufactured;55;Milk-shakes;external
+1538;"Milk-shake Paçoca 400 ml";manufactured;55;Milk-shakes;external
+1539;"Milk-shake Ovomaltine 400 ml";manufactured;55;Milk-shakes;external
+1540;"Soda Italiana Pink Lemonade 400 ml";manufactured;56;"Sodas Italianas";external
+1541;"Soda Italiana Tangerina 400 ml";manufactured;56;"Sodas Italianas";external
+1542;"Soda Italiana Maçã Verde 400 ml";manufactured;56;"Sodas Italianas";external
+1543;"Suco de Abacaxi Polpa Copo 400 ml";manufactured;57;"Sucos de Polpa";external
+1544;"Suco de Abacaxi com Hortelã Polpa Copo 400 ml";manufactured;57;"Sucos de Polpa";external
+1546;"Suco de Abacaxi Polpa Jarra G 1,5 l";manufactured;1;Uncategorized;external
+1547;"Suco de Abacaxi com Hortelã Polpa Jarra P 700ml";manufactured;57;"Sucos de Polpa";external
+1548;"Suco de Acerola Polpa Jarra P 700ml";manufactured;57;"Sucos de Polpa";external
+1549;"Suco de Abacaxi Polpa Jarra P 700ml";manufactured;57;"Sucos de Polpa";external
+1550;"Suco de Abacaxi com Hortelã Polpa Jarra G 1,5 l";manufactured;1;Uncategorized;external
+1551;"Suco de Acerola Polpa Jarra G 1,5 l";manufactured;1;Uncategorized;external
+1552;"Suco de Abacaxi Natural Copo 400 ml";manufactured;58;"Sucos Naturais";external
+1553;"Suco de Limão Natural Copo 400 ml";manufactured;58;"Sucos Naturais";external
+1554;"Suco de Manga Natural Copo 400 ml";manufactured;58;"Sucos Naturais";external
+1555;"Suco de Maracujá Natural Copo 400 ml";manufactured;58;"Sucos Naturais";external
+1556;"Suco de Manga Natural Copo 400 ml";manufactured;58;"Sucos Naturais";external
+1557;"Suco de Morango Natural Copo 400 ml";manufactured;58;"Sucos Naturais";external
+1558;"Suco de Abacaxi Natural Jarra P 700 ml";manufactured;58;"Sucos Naturais";external
+1559;"Suco de Limão Natural Jarra P 700 ml";manufactured;58;"Sucos Naturais";external
+1560;"Suco de Manga Natural Jarra P 700 ml";manufactured;58;"Sucos Naturais";external
+1561;"Suco de Maracujá Natural Jarra P 700 ml";manufactured;58;"Sucos Naturais";external
+1562;"Suco de Manga Natural Jarra P 700 ml";manufactured;58;"Sucos Naturais";external
+1563;"Suco de Morango Natural Jarra P 700 ml";manufactured;58;"Sucos Naturais";external
+1564;"Suco de Abacaxi Natural Jarra G 1,5 l";manufactured;1;Uncategorized;external
+1565;"Suco de Limão Natural Jarra G 1,5 l";manufactured;1;Uncategorized;external
+1566;"Suco de Manga Natural Jarra G 1,5 l";manufactured;1;Uncategorized;external
+1567;"Suco de Maracujá Natural Jarra G 1,5 l";manufactured;1;Uncategorized;external
+1568;"Suco de Manga Natural Jarra G 1,5 l";manufactured;1;Uncategorized;external
+1569;"Suco de Morango Natural Jarra G 1,5 l";manufactured;1;Uncategorized;external
+1570;"Taça de Vinho Tinto Seco";manufactured;59;Vinhos;external
+1571;"Taça de Vinho Tinto Suave";manufactured;59;Vinhos;external
+1584;X-Smash;manufactured;15;"Sanduíches com Salada";external
+1595;"Del Valle Pêssego";resale;63;"Suco em Lata";external
+1596;"Del Valle Uva";resale;63;"Suco em Lata";external
+1616;"Sprite Fresh Lemon 510 ml";resale;51;"Refri 600 ml";external
+1636;"Limonada Suíça Jarra P 700ml";manufactured;58;"Sucos Naturais";external
+1637;"Limonada Suíça Jarra 1,5 l";manufactured;1;Uncategorized;external
+1656;"Guaraná Antártica Zero 600 ml";resale;1;Uncategorized;external
+1657;"Coca-cola 2 l Retornável";resale;49;"Refri 2 l";external
+1658;"Coca-cola Zero 2 l Retornável";resale;49;"Refri 2 l";external
+1681;"Suco de Acerola Copo 400 ml";manufactured;57;"Sucos de Polpa";external
+1682;"Brahma Lata 350 ml";resale;1;Uncategorized;external
+1683;"Bacon Fatiado";ingredient;64;"Carnes e Frios";internal
+1684;Ketchup;resale;71;Molhos;external
+1685;"Despesa Pessoal";supply;72;"Uso pessoal";internal
+1686;"Nuggets Perdigão";ingredient;64;"Carnes e Frios";internal
+1687;"Carne seca";manufactured;64;"Carnes e Frios";internal
+1688;"Alface crespa";ingredient;65;Hortifruti;internal
+1689;Banana;ingredient;65;Hortifruti;internal
+1690;"Cebola branca";ingredient;65;Hortifruti;internal
+1691;Champignon;ingredient;66;"Mercearia e Condimentos";internal
+1692;"Ketchup Pote";ingredient;66;"Mercearia e Condimentos";internal
+1693;Limão;ingredient;65;Hortifruti;internal
+1694;"Mostarda Pote";ingredient;66;"Mercearia e Condimentos";internal
+1695;Ovo;ingredient;64;"Carnes e Frios";internal
+1696;"Cheddar bisnaga";ingredient;67;Laticínios;internal
+1697;Salsa;ingredient;65;Hortifruti;internal
+1698;Tomate;ingredient;65;Hortifruti;internal
+1699;"Queijo muçarela triturado";ingredient;67;Laticínios;internal
+1700;"Presunto triturado";ingredient;64;"Carnes e Frios";internal
+1701;"Creme de Leite Ninho";ingredient;73;Bomboniere;internal
+1702;"Bisnaga Kinder Bueno";ingredient;73;Bomboniere;internal
+1703;"Taça Água/Refri";supply;74;Utensílios;supply
+1704;Detergente;supply;69;"Material de Limpeza e Uso";supply
+1705;"Taça Cerveja";supply;74;Utensílios;supply
+1706;"Álcool líquido";supply;69;"Material de Limpeza e Uso";supply
+1707;Vinagre;supply;69;"Material de Limpeza e Uso";supply
+1708;"Óleo de soja";supply;69;"Material de Limpeza e Uso";supply
+1709;"Guardanapo Pastel";ingredient;68;"Embalagens e Descartáveis";supply
+1710;"Batata palha";ingredient;66;"Mercearia e Condimentos";internal
+1711;Requeijão;ingredient;67;Laticínios;internal
+1712;"Ouro branco";ingredient;73;Bomboniere;internal
+1713;"Massa de Tapioca";ingredient;66;"Mercearia e Condimentos";internal
+1714;Açúcar;ingredient;66;"Mercearia e Condimentos";internal
+1715;"Cheddar fatiado";ingredient;67;Laticínios;internal
+1716;"Alho triturado";ingredient;66;"Mercearia e Condimentos";internal
+1717;"Gordura vegetal";ingredient;66;"Mercearia e Condimentos";internal
+1718;"Pepino em conserva";ingredient;66;"Mercearia e Condimentos";internal
+1719;"Ervilha em conserva";ingredient;66;"Mercearia e Condimentos";internal
+1720;"Milho em conserva";ingredient;66;"Mercearia e Condimentos";internal
+1721;Colorau;ingredient;66;"Mercearia e Condimentos";internal
+1722;Peperoni;ingredient;64;"Carnes e Frios";internal
+1723;"Batata crinkle";ingredient;66;"Mercearia e Condimentos";internal
+1724;"Filé de peito de frango";ingredient;64;"Carnes e Frios";internal
+1725;"Linguiça calabresa";ingredient;64;"Carnes e Frios";internal
+1726;"Lombinho canadense";ingredient;64;"Carnes e Frios";internal
+1727;"Chocolate branco gotas";ingredient;73;Bomboniere;internal

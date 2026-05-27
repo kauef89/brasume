@@ -1,0 +1,50 @@
+/* ==========================================
+   CONFIGURAÇÕES BASE E GLOBAIS
+   ========================================== */
+
+body {
+    font-family: "SF Pro Rounded", ui-rounded, system-ui, sans-serif;
+}
+
+.justify-self-end {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+.fi-grid {
+    align-items: center;
+}
+
+/* ==========================================
+   CABEÇALHO DA PÁGINA FIXO (STICKY HEADER)
+   ========================================== */
+.fi-header {
+    /* 1. Comportamento Sticky e sobreposição */
+    @apply sticky z-20;
+
+    /* IMPORTANTE: Se a sua barra superior (top-navbar) original existir, ela tem 4rem (64px) de altura.
+       Use 'top-16' para o header grudar logo abaixo dela.
+       Se você ocultou a top-navbar, troque para 'top-0' */
+    @apply top-16 lg:top-16;
+
+    /* 2. Cores de Fundo e Efeito de Vidro Fosco (Light e Dark Mode) */
+    @apply bg-gray-50 dark:bg-gray-900;
+
+    /* 3. Padding vertical e borda sutil para separar do conteúdo rolado */
+    @apply py-4 border-b border-gray-200 dark:border-white/5;
+
+    /* 4. Ajuste fino de layout */
+    /* Como o painel do Filament tem um padding em volta de tudo, isso puxa o fundo do
+       cabeçalho um pouco para cima para não vazar conteúdo no buraco acima dele. */
+    margin-top: -2rem;
+    padding-top: 2rem;
+    margin-left: -2rem;
+    margin-right: -2rem;
+    padding-left: 2rem;
+    padding-right: 2rem;
+}
+
+.fi-main-ctn {
+    @apply bg-gray-100 dark:bg-gray-900;
+}

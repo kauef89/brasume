@@ -1,0 +1,74 @@
+/* resources/css/_welcome-modal.css */
+
+.wm-container {
+    @apply space-y-6 text-base text-left leading-relaxed text-gray-600 mt-4 overflow-y-auto pr-2;
+    max-height: 60vh;
+}
+
+.wm-alert-box {
+    @apply p-5 bg-primary-50 rounded-2xl border border-primary-100 shadow-sm mb-4;
+}
+
+.wm-alert-title {
+    @apply font-bold text-primary-700 mb-2 flex items-center gap-2 text-base;
+}
+
+.wm-alert-text {
+    @apply text-sm text-primary-900 leading-relaxed;
+}
+
+.wm-step-list {
+    @apply space-y-5;
+}
+
+.wm-step-item {
+    @apply flex items-start gap-4;
+}
+
+.wm-step-icon {
+    @apply mt-1 flex-shrink-0 bg-primary-50 p-2 rounded-full text-primary-600;
+}
+
+.wm-step-icon svg {
+    @apply w-5 h-5;
+}
+
+.wm-step-title {
+    @apply font-bold text-primary-600;
+}
+
+.wm-step-description {
+    @apply text-sm mt-1;
+}
+
+.wm-tip-box {
+    @apply mt-4 p-4 bg-gray-50 rounded-xl border border-gray-100;
+}
+
+.wm-tip-text {
+    @apply text-sm text-gray-500;
+}
+
+.wm-alert-title svg {
+    @apply w-6 h-6 shrink-0;
+}
+
+.wm-modal .fi-modal-header {
+    @apply flex flex-col items-center pt-4;
+}
+
+/* 🚀 Ícone em 2xl com fundo suave */
+.wm-modal .fi-modal-icon-container {
+    @apply mb-4 p-6 bg-primary-50 rounded-full flex items-center justify-center;
+    width: 100px;
+    height: 100px;
+}
+
+.wm-modal .fi-modal-icon {
+    @apply w-16 h-16; /* Aqui o bicho fica grande! */
+}
+
+/* 🚀 Título maior e com mais destaque */
+.wm-modal .fi-modal-heading {
+    @apply text-lg font-extrabold tracking-tight text-gray-900 sm:text-3xl mt-2;
+}

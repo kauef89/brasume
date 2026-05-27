@@ -1,0 +1,138 @@
+/* ==============================================================
+   UX: MODAL DE CONCILIAÇÃO WIZARD
+   ============================================================== */
+
+/* Layout do Item do Radio */
+.ux-modal-conciliacao .fi-fo-radio-label {
+    @apply flex flex-row items-center p-3 mb-2 bg-gray-50 dark:bg-white/5 rounded-xl border-2 border-transparent transition-all cursor-pointer w-full !gap-0;
+}
+
+/* Força os textos a preencherem a linha */
+.ux-modal-conciliacao .fi-fo-radio-label-text {
+    @apply flex-grow w-full m-0 p-0;
+}
+
+.ux-modal-conciliacao .fi-fo-radio-label-description {
+    @apply w-full m-0 p-0 block;
+}
+
+/* Esconde tags default do Filament geradas pelo campo rádio vazio */
+.ux-modal-conciliacao .fi-fo-radio-label-text > p:first-child {
+    display: none !important;
+}
+
+/* Efeito Hover Geral */
+.ux-modal-conciliacao .fi-fo-radio-label:hover {
+    @apply border-primary-400 bg-white dark:bg-gray-800 shadow-sm;
+}
+
+/* Estilo do Radio Nativo */
+.ux-modal-conciliacao input[type="radio"] {
+    @apply mr-4 text-primary-600 border-gray-300 focus:ring-primary-500;
+}
+
+.ux-modal-conciliacao .transaction-card-container {
+    @apply !bg-gray-50 dark:!bg-gray-900;
+}
+
+svg.conciliation-icon {
+    height: 16px;
+    margin-right: 4px;
+}
+
+.ux-conciliation-modal .fi-fo-radio-label-text {
+    width: 100%;
+}
+
+/* ==============================================================
+   EFEITOS DE SELEÇÃO DA LINHA MATCH (UX CONCILIATION MODAL)
+============================================================== */
+
+.ux-conciliation-modal .fi-fo-radio-label:has(input[type="radio"]:checked) {
+    @apply bg-primary-500/20 dark:bg-primary-900/30 rounded-xl;
+}
+
+.ux-conciliation-modal .fi-fo-radio-label:has(input[type="radio"]) {
+    @apply bg-gray-100 dark:bg-gray-800 rounded-xl;
+}
+
+/* Troca de cor dos elementos internos na seleção */
+.ux-conciliation-modal
+    .fi-fo-radio-label:has(input[type="radio"]:checked)
+    .match-row-name,
+.ux-conciliation-modal
+    .fi-fo-radio-label:has(input[type="radio"]:checked)
+    .match-row-value,
+.ux-conciliation-modal
+    .fi-fo-radio-label:has(input[type="radio"]:checked)
+    .match-row-date {
+    @apply text-primary-900 dark:text-primary-100;
+}
+
+.ux-conciliation-modal .match-row-container {
+    @apply p-2;
+}
+
+.ux-conciliation-modal .fi-fo-radio-label {
+    padding-top: 0 !important;
+    margin: 12px !important;
+}
+
+.ux-conciliation-modal .match-row-name {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+}
+
+.ux-conciliation-modal .fi-radio-input {
+    display: none !important;
+}
+
+.ux-conciliation-modal .match-row-badge {
+    text-wrap-mode: nowrap;
+}
+
+/* ==============================================================
+   🚀 CORREÇÃO: ITEM ÚNICO ESTICADO
+============================================================== */
+/* Impede que o container do Filament estique o item solitário verticalmente */
+.ux-conciliation-modal .fi-fo-radio {
+    align-content: start !important;
+}
+
+/* Força a etiqueta a ter uma altura fixa e não expandir */
+.ux-conciliation-modal .fi-fo-radio-label {
+    height: 56px !important;
+    max-height: 56px !important;
+    min-height: 56px !important;
+    overflow: hidden !important;
+}
+
+.ux-conciliation-modal .match-row-container {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    align-items: center;
+}
+
+.match-row-date {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ux-conciliation-modal .match-row-name {
+    flex-direction: row;
+    justify-content: space-between;
+    display: flex;
+    align-items: center;
+}
+
+.match-row-value {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}

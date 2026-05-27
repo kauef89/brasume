@@ -1,0 +1,136 @@
+﻿ID;Nome;Descricao;Preco_Salao;Preco_Delivery
+453;"Pastel Salgado";;25.5;25.5
+454;"Pastel Doce";;16;16
+456;"Suco de Polpa 400 ml";;10.5;10.5
+457;"Suco Natural Copo";;12.5;12.5
+458;"Limonada Suíça 400 ml";;12.5;12.5
+460;"Soda Italiana 400 ml";;12.5;12.5
+464;"H2OH! Limão 500 ml";;7;7
+467;"Batata Frita 150g";;9.5;9.5
+468;"Batata Frita 400g";;26.5;26.5
+469;"Batata Frita 700g";;37;37
+470;"Crocante de Frango";;40.5;40.5
+471;"Frango & Fritas";;58.5;58.5
+472;"Quarteto Fantástico";;66;66
+473;"Espetinho de Camarão";;14;14
+474;"Isca de Pescada";;44.5;44.5
+475;"Fish & Chips";;69;69
+476;"Camarão Crocante";;69;69
+477;"Camarão Empanado";;79.5;79.5
+478;"X-Burguer Bovino";;21;21
+479;"X-Burguer Bovino Smash";;22;22
+480;"X-Burguer de Pernil Suíno";;24.5;24.5
+481;"X-Burguer de Frango";;24.5;24.5
+482;"X-Burguer de Frango Crispy";;26.5;26.5
+483;"X-Burguer de Costela Bovina";;26.5;26.5
+484;"Pão com Linguiça";;35;35
+485;"Vaca Louca";;38;38
+507;X-Salada;;26.5;26.5
+508;X-Frango;;30;30
+509;"X-Frango Crispy";;32;32
+510;X-Pernil;;30;30
+511;X-Costela;;32;32
+512;X-Bacon;;30;30
+513;X-Calabresa;;30;30
+514;X-Egg;;30;30
+516;Predileto;;28;28
+665;"Misto Quente";;11;11
+666;"Tapioca Salgada";;25.5;25.5
+667;"Tapioca Doce";;16;16
+958;"Espetinho de Camarão com Queijo";;14;14
+1138;"Pastel de Vento";;8;8
+1140;"Amstel Lata 350ml";;8.5;8.5
+1171;"Big Cheddar";;35.5;35.5
+1179;Cremosão;;41;41
+1483;"Água Mineral Com Gás 500 ml (vidro)";;10.5;10.5
+1484;"Água Mineral Sem Gás 500 ml (vidro)";;10.5;10.5
+1485;"Heineken Lata 350 ml";;8.5;8.5
+1486;"Heineken Long Neck 330 ml";;14.5;14.5
+1487;"Heineken Zero Lata 350 ml";;14.5;14.5
+1488;"Heineken Zero Long Neck 330 ml";;14.5;14.5
+1489;"Brahma Zero Lata 350 ml";;8.5;8.5
+1490;"Heineken 600 ml";;19;19
+1491;"Brahma 600 ml";;17;17
+1492;"Amstel 600 ml";;17;17
+1493;"Original 600 ml";;19;19
+1494;"Brahma Malzbier Long Neck 330 ml";;14.5;14.5
+1495;"Budweiser Long Neck 330 ml";;14.5;14.5
+1496;"Spaten Long Neck 330 ml";;14.5;14.5
+1497;"Stella Long Neck 330 ml";;14.5;14.5
+1498;"Coca-cola 1,5 l";;15;15
+1499;"Coca-cola Zero 1,5 l";;15;15
+1500;"Guaraná Antártica 1,5 l";;15;15
+1501;"Guaraná Antártica Zero 1,5 l";;15;15
+1502;"Sprite Fresh Lemon 1,5 l";;15;15
+1505;"Guaraná Antártica 2 l";;18;18
+1506;"Coca-cola 200 ml";;3;3
+1507;"Coca-cola Zero 200 ml";;3;3
+1508;"Fanta Laranja 200 ml";;3;3
+1509;"Guaraná Antártica 200 ml";;3;3
+1511;"H2OH! Limonetto 500 ml";;7;7
+1512;"Coca-cola 600 ml";;10;10
+1513;"Coca-cola Zero 600 ml";;10;10
+1514;"Sprite 600 ml";;10;10
+1515;"Guaraná Antártica 600 ml";;10;10
+1516;"Coca-cola KS 290 ml";;6;6
+1517;"Coca-cola Zero KS 290 ml";;6;6
+1518;"Coca-cola Lata 350 ml";;7;7
+1519;"Coca-cola Zero Lata 350 ml";;7;7
+1520;"Guaraná Antártica Lata 350 ml";;7;7
+1521;"Guaraná Antártica Zero Lata 350 ml";;7;7
+1523;"Água Tônica Antártica Zero Lata 350 ml";;7;7
+1524;"Água Tônica Antártica Lata 350 ml";;7;7
+1525;"Fanta Laranja Lata 350 ml";;7;7
+1526;"Fanta Uva Lata 350 ml";;7;7
+1527;"Sprite Lata 350 ml";;7;7
+1528;"Caipirinha de Limão Vodka Média";;19;19
+1529;"Caipirinha de Limão Vodka Grande";;23;23
+1530;"Caipirinha de Limão Cachaça Média";;17;17
+1531;"Caipirinha de Limão Cachaça Grande";;21;21
+1532;"Caipirinha de Limão Steinhaeger Média";;19;19
+1533;"Caipirinha de Limão Steinhaeger Grande";;23;23
+1534;"Caipirinha de Limão Vinho Média";;15;15
+1535;"Caipirinha de Limão Vinho Grande";;19;19
+1536;"Milk-shake Morango 400 ml";;17;17
+1537;"Milk-shake Chocolate 400 ml";;17;17
+1538;"Milk-shake Paçoca 400 ml";;17;17
+1539;"Milk-shake Ovomaltine 400 ml";;17;17
+1540;"Soda Italiana Pink Lemonade 400 ml";;12.5;12.5
+1541;"Soda Italiana Tangerina 400 ml";;12.5;12.5
+1542;"Soda Italiana Maçã Verde 400 ml";;12.5;12.5
+1543;"Suco de Abacaxi Polpa Copo 400 ml";;10.5;10.5
+1544;"Suco de Abacaxi com Hortelã Polpa Copo 400 ml";;10.5;10.5
+1546;"Suco de Abacaxi Polpa Jarra G 1,5 l";;28;28
+1547;"Suco de Abacaxi com Hortelã Polpa Jarra P 700ml";;19;19
+1548;"Suco de Acerola Polpa Jarra P 700ml";;19;19
+1549;"Suco de Abacaxi Polpa Jarra P 700ml";;19;19
+1550;"Suco de Abacaxi com Hortelã Polpa Jarra G 1,5 l";;28;28
+1551;"Suco de Acerola Polpa Jarra G 1,5 l";;28;28
+1552;"Suco de Abacaxi Natural Copo 400 ml";;12.5;12.5
+1553;"Suco de Limão Natural Copo 400 ml";;12.5;12.5
+1554;"Suco de Manga Natural Copo 400 ml";;12.5;12.5
+1555;"Suco de Maracujá Natural Copo 400 ml";;12.5;12.5
+1556;"Suco de Manga Natural Copo 400 ml";;12.5;12.5
+1557;"Suco de Morango Natural Copo 400 ml";;12.5;12.5
+1558;"Suco de Abacaxi Natural Jarra P 700 ml";;19;19
+1559;"Suco de Limão Natural Jarra P 700 ml";;19;19
+1560;"Suco de Manga Natural Jarra P 700 ml";;19;19
+1561;"Suco de Maracujá Natural Jarra P 700 ml";;19;19
+1562;"Suco de Manga Natural Jarra P 700 ml";;19;19
+1563;"Suco de Morango Natural Jarra P 700 ml";;19;19
+1564;"Suco de Abacaxi Natural Jarra G 1,5 l";;28;28
+1565;"Suco de Limão Natural Jarra G 1,5 l";;28;28
+1566;"Suco de Manga Natural Jarra G 1,5 l";;28;28
+1567;"Suco de Maracujá Natural Jarra G 1,5 l";;28;28
+1568;"Suco de Manga Natural Jarra G 1,5 l";;28;28
+1569;"Suco de Morango Natural Jarra G 1,5 l";;28;28
+1570;"Taça de Vinho Tinto Seco";;15;15
+1571;"Taça de Vinho Tinto Suave";;15;15
+1584;X-Smash;;27.5;27.5
+1616;"Sprite Fresh Lemon 510 ml";;10;10
+1636;"Limonada Suíça Jarra P 700ml";;19;19
+1637;"Limonada Suíça Jarra 1,5 l";;28;28
+1656;"Guaraná Antártica Zero 600 ml";;9;9
+1657;"Coca-cola 2 l Retornável";;18;18
+1681;"Suco de Acerola Copo 400 ml";;10.5;10.5
+1682;"Brahma Lata 350 ml";;8.5;8.5
