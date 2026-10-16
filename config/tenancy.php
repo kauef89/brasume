@@ -15,11 +15,13 @@ return [
     /**
      * The list of domains hosting your central app.
      */
-    'central_domains' => [
-    'brasume.com.br',      // O domínio principal
-    'app.brasume.com.br',
-    ],
-
+     'central_domains' => [
+             '127.0.0.1',
+             'localhost',
+             'brasume.com.br',
+             'www.brasume.com.br',
+             env('CENTRAL_DOMAIN', 'adm.brasume.com.br'), // 🚀 GARANTA QUE O SEU DOMÍNIO ESTÁ AQUI
+         ],
     /**
      * Tenancy bootstrappers.
      */
@@ -56,9 +58,7 @@ return [
     ],
 
     'filesystem' => [
-        // A MÁGICA ESTÁ AQUI: Mudamos de 'tenant' para 'tenants/' (com a barra no final)
         'suffix_base' => 'tenants/',
-
         'disks' => [
             'local',
             'public',
@@ -66,6 +66,9 @@ return [
         'root_override' => [
             'local' => '%storage_path%/app/',
             'public' => '%storage_path%/app/public/',
+        ],
+        'url_override' => [
+            'public' => '/media/file?path=',
         ],
         'suffix_storage_path' => true,
         'asset_helper_tenancy' => false,

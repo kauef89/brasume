@@ -13,7 +13,7 @@ use App\Filament\Resources\AccountPayables\Tables\AccountPayablesTable;
 class AccountPayableResource extends Resource
 {
     protected static ?string $model = AccountPayable::class;
-    protected static string|\UnitEnum|null $navigationGroup = "Financeiro";
+    protected static string|\UnitEnum|null $navigationGroup = 'Financeiro';
     protected static ?string $modelLabel = "Conta a Pagar";
     protected static ?string $pluralModelLabel = "Contas a Pagar";
     protected static ?string $slug = "contas-a-pagar";

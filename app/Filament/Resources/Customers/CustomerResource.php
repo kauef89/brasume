@@ -14,7 +14,7 @@ class CustomerResource extends Resource {
     use HasGlobalSearch;
     protected static ?string $model = Customer::class;
     // protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-users';
-    protected static string | \UnitEnum | null $navigationGroup = 'CRM'; // Um novo grupo para Clientes!
+    protected static string | \UnitEnum | null $navigationGroup = 'CRM & Marketing'; // Um novo grupo para Clientes!
     protected static ?string $modelLabel = 'Cliente';
     protected static ?string $pluralModelLabel = 'Clientes';
 

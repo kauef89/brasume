@@ -7,6 +7,11 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * @mixin Builder
+ * @property-read \App\Models\Order|null $order
+ * @method static Builder<static>|FiscalDocument newModelQuery()
+ * @method static Builder<static>|FiscalDocument newQuery()
+ * @method static Builder<static>|FiscalDocument query()
+ * @mixin \Illuminate\Database\Eloquent\Builder
  */
 class FiscalDocument extends Model
 {

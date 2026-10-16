@@ -1,0 +1,657 @@
+<template>
+    <OrderEntryTopbar
+        :is-mounted="isMounted"
+        :is-active="isActive"
+        v-model:search-query="searchQuery"
+        v-model:category-layout="categoryLayout"
+        v-model:product-card-layout="productCardLayout"
+        :selected-category="selectedCategory"
+        :has-favorites="favorites.length > 0"
+        :is-favorites-active="isFavoritesViewActive"
+        :is-manager-active="isCategoryManagerActive"
+        @toggle-favorites="handleToggleFavorites"
+        @toggle-manager="handleToggleManager"
+    />
+
+    <div
+        class="grid h-full w-full bg-surface-1 text-surface-text overflow-hidden font-sans p-2 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        :class="isCategoryManagerActive ? 'grid-cols-[1fr_0px] gap-0' : 'grid-cols-[1fr_380px] md:grid-cols-[1fr_400px] lg:grid-cols-[1fr_480px] gap-2'"
+    >
+        <div class="flex flex-col h-full min-h-0 min-w-0 gap-6 rounded-4xl overflow-hidden">
+            <div class="flex flex-1 min-h-0 min-w-0 gap-6" :class="categoryLayout === 'vertical' ? 'flex-row' : 'flex-col'">
+
+                <CatalogWorkspace
+                    v-show="!isModifiersVisible && !isComboVisible"
+                    :search-query="searchQuery"
+                    :category-hierarchy="categoryHierarchy"
+                    :selected-category="selectedCategory"
+                    :is-favorites-active="isFavoritesViewActive"
+                    :is-manager-active="isCategoryManagerActive"
+                    :catalog-breadcrumbs="catalogBreadcrumbs"
+                    :favorites="favorites"
+                    :history-stack="historyStack"
+                    v-model:local-categories="localCategories"
+                    :should-show-category-grid="shouldShowCategoryGrid"
+                    :visible-grid-categories="visibleGridCategories"
+                    :category-layout="categoryLayout"
+                    :should-show-product-grid="shouldShowProductGrid"
+                    :filtered-products="filteredProducts"
+                    :product-card-layout="productCardLayout"
+                    @navigate="handleBreadcrumbNavigate"
+                    @close-manager="isCategoryManagerActive = false"
+                    @undo-category-change="undoCategoryChange"
+                    @save-category="handleCategorySave"
+                    @favorite-click="handleFavoriteClick"
+                    @category-click="handleCategorySelect"
+                    @product-click="onProductClick"
+                />
+
+                <ProductModifiers
+                    v-if="isModifiersVisible"
+                    key="modifiers"
+                    :product="activeProduct"
+                    :order-type="orderType"
+                    :breadcrumbs="catalogBreadcrumbs"
+                    :is-edit-mode="editItemIndex !== null"
+                    :show-breadcrumbs="true"
+                    @confirm="handleModifiersConfirm"
+                    @close="closeConfigurators"
+                    @crumb-click="handleBreadcrumbNavigate"
+                    class="w-full h-full"
+                />
+
+                <ComboWizard
+                    v-if="isComboVisible"
+                    key="combo"
+                    :product="activeProduct"
+                    :order-type="orderType"
+                    :breadcrumbs="catalogBreadcrumbs"
+                    :is-edit-mode="editItemIndex !== null"
+                    :show-breadcrumbs="true"
+                    :global-products-list="initialProducts"
+                    @confirm-combo="handleComboConfirm"
+                    @close="closeConfigurators"
+                    @crumb-click="handleBreadcrumbNavigate"
+                    class="w-full h-full"
+                />
+            </div>
+        </div>
+
+        <div
+            class="flex flex-col bg-surface-2 rounded-4xl overflow-hidden min-h-0 relative transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] shrink-0"
+            :class="isCategoryManagerActive ? 'opacity-0 scale-95 pointer-events-none translate-x-4' : 'opacity-100 scale-100 translate-x-0'"
+        >
+            <PaymentIntentModal
+                v-if="activeCartSidebarView === 'payment'"
+                key="payment"
+                mode="inline"
+                :visible="true"
+                :order="currentOrderContext"
+                :order-type="orderType"
+                :customer="currentOrderContext?.customer || draftRouting?.customer"
+                :order-total="Number(stashedCheckoutData?.totals?.finalTotal || balanceDue || cartSubtotal || 0)"
+                :existing-intent="currentOrderContext?.payment_intent_status"
+                :existing-methods="currentOrderContext?.payment_intent_methods"
+                :payment-methods="$page.props.paymentMethods || $page.props.cashierData?.paymentMethods"
+                @cancel="activeCartSidebarView = 'cart'"
+                @confirm="handleDeliveryPaymentConfirm"
+            />
+
+            <Cart
+                v-else
+                key="cart"
+                class="w-full h-full"
+                :cart="cart"
+                :cart-subtotal="cartSubtotal"
+                :order-type="orderType"
+                :table-areas="initialTableAreas"
+                :customers="initialCustomers"
+                :streets="initialStreets"
+                :edit-order-data="currentOrderContext"
+                @update-qty="updateQty"
+                @clear-cart="resetAppendState"
+                @park-order="parkOrder || autoParkCurrent"
+                @edit-item="openEditModifiers"
+                @toggle-gift-filter="handleGiftFilterTrigger"
+                @checkout="onCartCheckout"
+                @update:orderType="orderType = $event"
+            />
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import { router, usePage } from "@inertiajs/vue3";
+import Fuse from "fuse.js";
+import { useConfirm } from 'primevue/useconfirm';
+
+import AppLayout from "@/Layouts/DesktopLayout.vue";
+import Cart from "@/Pages/Pos/Components/Cart/Cart.vue";
+import PaymentIntentModal from "@/Pages/Pos/Components/Checkout/PaymentIntentModal.vue";
+import ProductModifiers from "@/Pages/Shared/Configurators/ProductModifiers.vue";
+import ComboWizard from "@/Pages/Shared/Configurators/ComboWizard.vue";
+
+import OrderEntryTopbar from '@/Pages/Operations/Components/Catalog/OrderEntryTopbar.vue';
+import CatalogWorkspace from '@/Pages/Operations/Components/Catalog/CatalogWorkspace.vue';
+
+import { useCart } from "@/Pages/Shared/Composables/useCart";
+import { usePosSettings } from "@/Pages/Pos/Composables/usePosSettings";
+import { useMenuNavigation } from "@/Pages/Shared/Composables/useMenuNavigation";
+import { useOrderFlow } from "@/Pages/Shared/Composables/useOrderFlow";
+import { useCustomerFavorites } from '@/Pages/Customer/Composables/useCustomerFavorites';
+import { useOrderWorkspace } from '@/Pages/Shared/Composables/useOrderWorkspace';
+import { useOrderAppend } from '@/Pages/Shared/Composables/useOrderAppend';
+import { useCategoryManager } from '@/Pages/Shared/Composables/useCategoryManager';
+import { useCatalogBreadcrumbs } from '@/Pages/Shared/Composables/useCatalogBreadcrumbs';
+
+defineOptions({ layout: AppLayout, inheritAttrs: false });
+
+const props = defineProps({
+    operatorName: String,
+    initialCategories: Array,
+    categoryTree: Array,
+    initialProducts: Array,
+    initialTableAreas: Array,
+    initialCustomers: Array,
+    initialStreets: Array,
+    editOrderData: Object,
+    isActive: { type: Boolean, default: false }
+});
+
+const emit = defineEmits(['close', 'open-checkout', 'order-created']);
+
+const page = usePage();
+const confirm = useConfirm();
+const settings = usePosSettings();
+const { categoryLayout, productCardLayout, categoryHierarchy } = settings;
+
+const cartContext = useCart();
+const favoritesContext = useCustomerFavorites();
+const { cart, cartSubtotal, updateQty, autoParkCurrent, draftRouting, orderType, clearCart, parkOrder, resetDraftState } = cartContext;
+const { favorites } = favoritesContext;
+
+const isMounted = ref(false);
+const currentOrderContext = ref(props.editOrderData || null);
+const isPendingCheckoutSubmission = ref(false);
+
+const categoryTreeProp = computed(() => props.categoryTree);
+const {
+    isCategoryManagerActive, localCategories, historyStack,
+    handleCategorySave, undoCategoryChange
+} = useCategoryManager(categoryTreeProp);
+
+const initialOrdersRef = computed(() => page.props.initialOrders || page.props.orders || []);
+const { balanceDue } = useOrderAppend(draftRouting, cartSubtotal, initialOrdersRef);
+
+const {
+    isFavoritesViewActive, activeCartSidebarView, stashedCheckoutData,
+    handleClearWorkspace, handleCheckoutWrapper, handleInlinePaymentConfirm
+} = useOrderWorkspace(cartContext, favoritesContext, currentOrderContext);
+
+const syncAppendUrl = (orderId = null) => {
+    if (typeof window === 'undefined') return;
+
+    const url = new URL(window.location.href);
+    if (orderId) {
+        url.searchParams.set('append_to_order', orderId);
+        url.searchParams.delete('order_id');
+    } else {
+        url.searchParams.delete('append_to_order');
+        url.searchParams.delete('order_id');
+    }
+
+    window.history.replaceState({}, document.title, url.toString());
+};
+
+const cleanEditUrlParams = () => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('edit_item');
+    url.searchParams.delete('edit_qty');
+    url.searchParams.delete('original_qty');
+    url.searchParams.delete('is_combo');
+    url.searchParams.delete('auth_reason');
+    url.searchParams.delete('is_loss');
+    window.history.replaceState({}, document.title, url.toString());
+};
+
+const resetAppendState = () => {
+    currentOrderContext.value = null;
+    syncAppendUrl(null);
+    cleanEditUrlParams();
+
+    if (typeof resetDraftState === 'function') resetDraftState('table');
+    else if (typeof clearCart === 'function') clearCart();
+
+    if (typeof handleClearWorkspace === 'function') handleClearWorkspace();
+};
+
+const handleDeliveryPaymentConfirm = async (payload) => {
+    try {
+        isPendingCheckoutSubmission.value = true;
+
+        // Captura o ID antes de qualquer limpeza de workspace
+        const targetId = currentOrderContext.value?.id || draftRouting.value?.existing_order_id;
+
+        const result = await handleInlinePaymentConfirm(payload);
+
+        if (typeof clearCart === 'function') clearCart();
+        if (typeof handleClearWorkspace === 'function') handleClearWorkspace();
+
+        if (payload?.intent === 'pay_now') {
+            const resolvedId = result?.order?.id || result?.data?.id || targetId;
+            if (resolvedId) {
+                emit('open-checkout', resolvedId);
+            }
+            // Se for um pedido novo, o evento 'pos-open-checkout' disparado pelo useOrderSubmission
+            // se encarregará da abertura assim que o backend responder.
+        } else {
+            window.dispatchEvent(new CustomEvent('pos-tab-changed', { detail: 'orders' }));
+            emit('order-created');
+        }
+
+    } catch (error) {
+        isPendingCheckoutSubmission.value = false;
+        console.error('Erro ao finalizar pedido com promessa de pagamento:', error);
+    }
+};
+
+const onCartCheckout = async (checkoutPayload) => {
+    try {
+        await handleCheckoutWrapper(checkoutPayload);
+
+        if (activeCartSidebarView.value === 'payment') return;
+
+        isPendingCheckoutSubmission.value = true;
+
+        // 🚀 O FIX: Esvazia a memória do carrinho e reseta os configuradores antes de sair
+        if (typeof clearCart === 'function') clearCart();
+        if (typeof handleClearWorkspace === 'function') handleClearWorkspace();
+
+        window.dispatchEvent(new CustomEvent('pos-tab-changed', { detail: 'orders' }));
+        emit('order-created');
+    } catch (error) {
+        console.error('Erro ao processar checkout do carrinho:', error);
+    }
+};
+
+const handleOrderCompleted = () => {
+    resetAppendState();
+    isPendingCheckoutSubmission.value = false;
+};
+
+const {
+    isModifiersVisible, isComboVisible, activeProduct, editItemIndex,
+    initializeFlow, closeConfigurators: baseCloseConfigurators, handleProductClick, openEditModifiers,
+    handleModifiersConfirm, handleComboConfirm: baseHandleComboConfirm, productBreadcrumbs, handleFavoriteClick
+} = useOrderFlow(props, cartContext, () => {
+    let deliveryFee = 0, discount = 0, meta = {}, finalTotal = cartSubtotal.value;
+    try {
+        meta = draftRouting.value || {};
+        deliveryFee = meta.address?.delivery_fee || meta.deliveryAddress?.delivery_fee || 0;
+    } catch (e) {}
+
+    onCartCheckout({ meta, totals: { subtotal: cartSubtotal.value, deliveryFee, discount, finalTotal } });
+});
+
+const handleComboConfirm = (comboData) => {
+    const editingMeta = activeProduct.value?.cartItem;
+    baseHandleComboConfirm(comboData);
+
+    if (editingMeta?.replaces_item_id) {
+        const lastItem = cart.value[cart.value.length - 1];
+        if (lastItem) {
+            lastItem.replaces_item_id = editingMeta.replaces_item_id;
+            lastItem.auth_reason = editingMeta.auth_reason;
+            lastItem.is_loss = editingMeta.is_loss;
+            if (editingMeta.qty) {
+                lastItem.qty = editingMeta.qty;
+            }
+        }
+        cleanEditUrlParams();
+    }
+};
+
+const closeConfigurators = () => {
+    baseCloseConfigurators();
+    cleanEditUrlParams();
+};
+
+const handleCategorySelect = (categoryId) => {
+    selectedCategory.value = categoryId;
+    closeConfigurators();
+};
+
+const handleComboEditCheck = (order, editItemId, isComboRequested, urlParams) => {
+    const items = order.items || [];
+    const targetItem = items.find(i => String(i.id) === String(editItemId));
+
+    if (!targetItem) return;
+
+    const isCombo = isComboRequested ||
+                    Boolean(targetItem.is_combo_item) ||
+                    items.some(i => String(i.parent_item_id) === String(targetItem.id));
+
+    if (!isCombo) return;
+
+    const catalogProduct = (props.initialProducts || []).find(p => String(p.id) === String(targetItem.product_id));
+    if (!catalogProduct) return;
+
+    const children = items.filter(i => String(i.parent_item_id) === String(targetItem.id) && i.status !== 'cancelled');
+
+    const hydratedComboItems = children.map(c => {
+        const rawMods = c.modifiers || c.structured_modifiers || c.structuredModifiers || [];
+        const structuredModifiers = rawMods.map(m => ({
+            id: m.id ?? m.modifier_option_id ?? null,
+            group_id: m.group_id ?? m.modifier_group_id ?? null,
+            name: m.name,
+            price: Number(m.price || 0),
+            qty: Number(m.qty || m.quantity || 1)
+        }));
+
+        const modifiersText = structuredModifiers.map(m => (m.qty > 1 ? `${m.qty}x ` : '') + m.name).join(', ');
+
+        return {
+            id: c.id,
+            product_id: Number(c.product_id),
+            name: c.name || c.product_name,
+            group_id: c.group_id || null,
+            modifiersText: modifiersText,
+            structuredModifiers: structuredModifiers
+        };
+    });
+
+    const editQtyParam = urlParams.get('edit_qty');
+    const resolvedQty = editQtyParam === 'all' || !editQtyParam ? Number(targetItem.quantity || 1) : Number(editQtyParam);
+
+    const comboToEdit = {
+        ...catalogProduct,
+        cartItem: {
+            cartId: targetItem.id,
+            replaces_item_id: targetItem.id,
+            auth_reason: urlParams.get('auth_reason') || '',
+            is_loss: urlParams.get('is_loss') === 'true',
+            qty: resolvedQty,
+            comboItems: hydratedComboItems
+        }
+    };
+
+    baseCloseConfigurators();
+    activeProduct.value = comboToEdit;
+    editItemIndex.value = targetItem.id;
+    isComboVisible.value = true;
+    isModifiersVisible.value = false;
+};
+
+const applyOrderContext = (orderData = null) => {
+    const urlParams = new URLSearchParams(window.location.search);
+    initializeFlow(urlParams);
+
+    let targetOrder = orderData || currentOrderContext.value;
+
+    if (!targetOrder) {
+        const targetOrderId = urlParams.get('append_to_order') || urlParams.get('order_id');
+        if (targetOrderId) {
+            const initialOrders = page.props.initialOrders || [];
+            targetOrder = initialOrders.find(o => o.id == targetOrderId) || { id: Number(targetOrderId) };
+        }
+    }
+
+    if (targetOrder && targetOrder.id) {
+        currentOrderContext.value = targetOrder;
+        syncAppendUrl(targetOrder.id);
+
+        let targetType = targetOrder.type || 'table';
+        if (!targetOrder.type && targetOrder.table_number) targetType = 'table';
+
+        let targetTable = null;
+        let resolvedIdentifier = targetOrder.identifier || targetOrder.customer_name || '';
+
+        if (targetType === 'table') {
+            let tableId = targetOrder.dining_table_id || targetOrder.table_id || targetOrder.table?.id || null;
+            let tableName = targetOrder.table_number || targetOrder.table?.name || '';
+
+            if (!tableId && tableName && props.initialTableAreas?.length > 0) {
+                const found = props.initialTableAreas
+                    .flatMap(a => a.tables || [])
+                    .find(t => t.name == tableName || t.number == tableName);
+                if (found) tableId = found.id;
+            }
+
+            targetTable = { id: tableId, name: tableName };
+            if (!resolvedIdentifier) resolvedIdentifier = `Mesa ${tableName}`;
+        }
+
+        if (targetType === 'counter' && !resolvedIdentifier) {
+            resolvedIdentifier = targetOrder.customer?.name || 'Cliente Avulso';
+        }
+
+        draftRouting.value = {
+            order_id: targetOrder.id || null,
+            existing_order_id: targetOrder.id || null,
+            type: targetType,
+            table: targetTable,
+            identifier: resolvedIdentifier,
+            customer: targetOrder.customer || (targetOrder.customer_name ? { name: targetOrder.customer_name, phone: targetOrder.customer_phone } : null),
+            address: targetOrder.address || null
+        };
+
+        orderType.value = targetType;
+
+        const editItemId = urlParams.get('edit_item');
+        const isComboRequested = urlParams.get('is_combo') === 'true';
+
+        if (editItemId && targetOrder) {
+            handleComboEditCheck(targetOrder, editItemId, isComboRequested, urlParams);
+        }
+    }
+};
+
+if (typeof window !== 'undefined') applyOrderContext(props.editOrderData);
+
+watch(() => props.isActive, (active) => {
+    if (active) {
+        isPendingCheckoutSubmission.value = false;
+        applyOrderContext(currentOrderContext.value || props.editOrderData);
+    } else {
+        if (!isPendingCheckoutSubmission.value) {
+            const items = cart.value?.items || cart.value || [];
+            const hasItems = Array.isArray(items) ? items.length > 0 : Object.keys(items).length > 0;
+
+            if (hasItems) {
+                if (typeof autoParkCurrent === 'function') autoParkCurrent();
+                else if (typeof parkOrder === 'function') parkOrder();
+            }
+        }
+
+        closeConfigurators();
+        isCategoryManagerActive.value = false;
+        isFavoritesViewActive.value = false;
+        activeCartSidebarView.value = 'cart';
+
+        if (!currentOrderContext.value && !isPendingCheckoutSubmission.value) {
+            resetAppendState();
+            orderType.value = 'table';
+            if (draftRouting.value) draftRouting.value.type = 'table';
+        }
+    }
+});
+
+const handleAppendOrderEvent = (event) => {
+    if (event.detail) applyOrderContext(event.detail);
+};
+
+const handleTabReset = (event) => {
+    if (event.detail !== 'pos') return;
+
+    const items = cart.value?.items || cart.value || [];
+    const hasItems = Array.isArray(items) ? items.length > 0 : Object.keys(items).length > 0;
+
+    if (!hasItems) {
+        resetAppendState();
+        orderType.value = 'table';
+        return;
+    }
+
+    confirm.require({
+        message: 'Você possui um pedido em andamento no caixa. O que deseja fazer com este rascunho?',
+        header: 'Pedido em Andamento',
+        icon: 'pi pi-exclamation-triangle',
+        rejectProps: { label: 'Descartar e Limpar', severity: 'danger', outlined: true, icon: 'pi pi-trash' },
+        acceptProps: { label: 'Estacionar Rascunho', severity: 'warn', icon: 'pi pi-pause-circle' },
+        accept: () => {
+            if (typeof parkOrder === 'function') parkOrder();
+            else autoParkCurrent();
+            resetAppendState();
+            orderType.value = 'table';
+        },
+        reject: () => {
+            resetAppendState();
+            orderType.value = 'table';
+        }
+    });
+};
+
+const closeOrderDetails = () => { emit('close'); };
+
+onMounted(() => {
+    isMounted.value = true;
+    window.addEventListener('pos-tab-reset', handleTabReset);
+    window.addEventListener('pos-append-to-order', handleAppendOrderEvent);
+    window.addEventListener('pos-close-order-details', closeOrderDetails);
+    window.addEventListener('pos-order-completed', handleOrderCompleted);
+
+    const tenantId = page.props.tenantId || page.props.tenant?.id || window.Laravel?.tenant_id || 'central';
+    window.Echo.channel(`tenant.${tenantId}.catalog`)
+        .listen('.catalog.updated', () => {
+            router.reload({
+                only: ['initialCategories', 'categoryTree', 'initialProducts'],
+                preserveState: true,
+                preserveScroll: true
+            });
+        });
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('pos-tab-reset', handleTabReset);
+    window.removeEventListener('pos-append-to-order', handleAppendOrderEvent);
+    window.removeEventListener('pos-close-order-details', closeOrderDetails);
+    window.removeEventListener('pos-order-completed', handleOrderCompleted);
+
+    if (!isPendingCheckoutSubmission.value) {
+        autoParkCurrent();
+    }
+
+    const tenantId = page.props.tenantId || page.props.tenant?.id || window.Laravel?.tenant_id || 'central';
+    window.Echo.leaveChannel(`tenant.${tenantId}.catalog`);
+});
+
+const {
+    searchQuery, selectedCategory, breadcrumbs,
+    visibleGridCategories, shouldShowCategoryGrid, shouldShowProductGrid
+} = useMenuNavigation(() => props.initialCategories, () => props.initialProducts, settings);
+
+watch(searchQuery, (newQuery) => {
+    const q = (newQuery || "").trim();
+    if (q.length > 0) {
+        if (isFavoritesViewActive.value) isFavoritesViewActive.value = false;
+        if (isCategoryManagerActive.value) isCategoryManagerActive.value = false;
+    }
+});
+
+const handleToggleFavorites = () => {
+    isFavoritesViewActive.value = !isFavoritesViewActive.value;
+    if (isFavoritesViewActive.value) {
+        isCategoryManagerActive.value = false;
+        searchQuery.value = '';
+    }
+};
+
+const handleToggleManager = () => {
+    isCategoryManagerActive.value = !isCategoryManagerActive.value;
+    if (isCategoryManagerActive.value) {
+        isFavoritesViewActive.value = false;
+        searchQuery.value = '';
+    }
+};
+
+const onProductClick = (product) => {
+    searchQuery.value = '';
+    handleProductClick(product);
+};
+
+const { catalogBreadcrumbs, handleBreadcrumbNavigate } = useCatalogBreadcrumbs(
+    breadcrumbs,
+    props.initialCategories,
+    closeConfigurators,
+    handleCategorySelect
+);
+
+const isGiftFilterActive = ref(false);
+const allowedGiftPoints = ref(0);
+
+const handleGiftFilterTrigger = (payload) => {
+    isGiftFilterActive.value = payload.active;
+    allowedGiftPoints.value = payload.points;
+};
+
+const productFuse = computed(() => {
+    return new Fuse(props.initialProducts || [], {
+        keys: [
+            { name: 'name', weight: 0.7 },
+            { name: 'description', weight: 0.3 }
+        ],
+        threshold: 0.35,
+        distance: 100,
+        ignoreLocation: true,
+        minMatchCharLength: 2
+    });
+});
+
+const filteredProducts = computed(() => {
+    if (!props.initialProducts) return [];
+    let list = props.initialProducts;
+
+    if (isGiftFilterActive.value) {
+        return list.filter(p => p.loyalty_reward === true && p.loyalty_points_cost > 0 && p.loyalty_points_cost <= allowedGiftPoints.value && p.status === 'available');
+    }
+
+    if (settings.outOfStockMode.value === 'hide') {
+        list = list.filter(p => p.status !== 'out_of_stock' && p.status !== 'unavailable');
+    }
+
+    const q = (searchQuery.value || "").trim();
+    if (q.length >= 2) {
+        list = productFuse.value.search(q).map(hit => hit.item);
+    } else if (selectedCategory.value) {
+        list = list.filter(p => p.category_id == selectedCategory.value);
+    } else if (categoryLayout.value !== 'horizontal' && categoryLayout.value !== 'vertical') {
+        return [];
+    }
+
+    const isProdBlocked = (p) => {
+        if (!p) return false;
+        const s = String(p.status || '').toLowerCase();
+        if (['out_of_stock', 'unavailable', 'paused'].includes(s)) return true;
+        if (p.track_inventory && parseFloat(p.current_stock ?? 0) <= 0) return true;
+        return false;
+    };
+
+    if (settings.outOfStockMode.value === 'hide') {
+        list = list.filter(p => !isProdBlocked(p));
+    }
+
+    if (settings.outOfStockMode.value === 'disable_bottom') {
+        list = [...list].sort((a, b) => {
+            const aOos = isProdBlocked(a);
+            const bOos = isProdBlocked(b);
+            if (aOos && !bOos) return 1;
+            if (!aOos && bOos) return -1;
+            return 0;
+        });
+    }
+
+    return list;
+});
+</script>

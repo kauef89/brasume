@@ -4,6 +4,7 @@ namespace App\Filament\Central\Resources\Tenants\Tables;
 
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Actions\EditAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\BulkActionGroup;
@@ -15,11 +16,43 @@ class TenantsTable
     public static function configure(Table $table): Table
     {
         return $table
-            // ... (as suas columns e filters ficam iguais) ...
+            ->columns([
+                TextColumn::make('name')
+                    ->label('Lanchonete')
+                    ->searchable()
+                    ->sortable()
+                    ->weight('bold'),
+
+                TextColumn::make('domains.domain')
+                    ->label('Domínio')
+                    ->badge()
+                    ->color('success')
+                    ->searchable(),
+
+                TextColumn::make('email')
+                    ->label('E-mail')
+                    ->searchable()
+                    ->toggleable(),
+
+                TextColumn::make('phone')
+                    ->label('Telefone')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                // Exibe o status da conta como um ícone
+                IconColumn::make('is_active')
+                    ->label('Ativo')
+                    ->boolean(),
+
+                TextColumn::make('created_at')
+                    ->label('Criado em')
+                    ->dateTime('d/m/Y')
+                    ->sortable()
+                    ->toggleable(),
+            ])
             ->actions([
                 EditAction::make(),
-                
-                // 🚨 Ação de Eliminação com Desafio de Segurança
+
                 DeleteAction::make()
                     ->modalHeading(fn ($record) => "Excluir Lanchonete: {$record->name}")
                     ->modalDescription('ATENÇÃO: Esta ação é irreversível e destruirá todo o banco de dados desta lanchonete. Para continuar, confirme a sua intenção.')
@@ -38,7 +71,6 @@ class TenantsTable
             ])
             ->bulkActions([
                 BulkActionGroup::make([
-                    // Para a exclusão em massa, um desafio genérico
                     DeleteBulkAction::make()
                         ->modalHeading('Excluir Múltiplas Lanchonetes')
                         ->form([

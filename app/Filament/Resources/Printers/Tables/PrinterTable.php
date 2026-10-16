@@ -3,8 +3,12 @@
 namespace App\Filament\Resources\Printers\Tables;
 
 use Filament\Tables\Table;
-use Filament\Tables;
-use Filament\Actions;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\ToggleColumn;
+use Filament\Actions\EditAction;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
 
 class PrinterTable
 {
@@ -12,16 +16,50 @@ class PrinterTable
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('Nome')->searchable(),
-                Tables\Columns\TextColumn::make('ip_address')->label('IP')->searchable(),
-                Tables\Columns\TextColumn::make('port')->label('Porta'),
-                Tables\Columns\ToggleColumn::make('is_active')->label('Ativa'),
+                TextColumn::make('name')
+                    ->label('Apelido')
+                    ->searchable()
+                    ->sortable(),
+
+                IconColumn::make('is_cashier')
+                    ->label('Caixa Principal')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-minus')
+                    ->alignCenter(),
+
+                TextColumn::make('connection_type')
+                    ->label('Conexão')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => match($state) {
+                        'usb' => 'USB',
+                        'network' => 'Rede Local (IP)',
+                        'bluetooth' => 'Bluetooth',
+                        default => $state
+                    })
+                    ->color(fn (string $state): string => match ($state) {
+                        'usb' => 'info',
+                        'network' => 'success',
+                        'bluetooth' => 'primary',
+                        default => 'gray',
+                    }),
+
+                TextColumn::make('os_name')
+                    ->label('Endereço / Porta')
+                    ->limit(20)
+                    ->tooltip(function (TextColumn $column): ?string {
+                        $state = $column->getState();
+                        return strlen($state) > 20 ? $state : null;
+                    }),
+
+                ToggleColumn::make('is_active')
+                    ->label('Ativa'),
             ])
             ->recordActions([
-                Actions\EditAction::make()->iconButton()->tooltip('Editar')
+                EditAction::make()->iconButton()->tooltip('Editar')
             ])
             ->toolbarActions([
-                Actions\BulkActionGroup::make([Actions\DeleteBulkAction::make()])
+                BulkActionGroup::make([DeleteBulkAction::make()])
             ]);
     }
 }

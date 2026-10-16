@@ -2,12 +2,15 @@
 
 namespace App\Filament\Resources\Employees\Schemas;
 
+use App\Enums\EmploymentType;
+use App\Enums\PaymentCycle;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\CheckboxList;
+use App\Models\CompanySetting;
 
 class EmployeeForm
 {
@@ -23,6 +26,12 @@ class EmployeeForm
                         ->maxLength(14),
                     TextInput::make("email")->email()->label("E-mail"),
                     TextInput::make("phone")->label("Telefone/WhatsApp"),
+
+                    // 🚀 TRAVA DE COLABORADOR
+                    Toggle::make("is_active")
+                        ->label("Colaborador Ativo")
+                        ->default(true)
+                        ->columnSpanFull(),
                 ])
                 ->columns(2),
 
@@ -45,25 +54,24 @@ class EmployeeForm
                 ->schema([
                     Select::make("employment_type")
                         ->label("Tipo de Vínculo")
-                        ->options([
-                            "clt_44" => "CLT (44h)",
-                            "clt_40" => "CLT (40h)",
-                            "freelance_fixed" => "Freelancer Fixo",
-                            "freelance_eventual" => "Freelancer Eventual",
-                        ])
+                        ->options(EmploymentType::class)
+                        ->enum(EmploymentType::class)
                         ->required()
                         ->live()
                         ->columnSpan(1),
 
+                    // 🚀 RÓTULO MÁGICO: Vinculado aos casos do Enum tipado
                     TextInput::make("base_remuneration")
-                        ->label(
-                            fn($get) => str_contains(
-                                $get("employment_type") ?? "",
-                                "clt",
-                            )
-                                ? "Salário Base"
-                                : "Valor da Diária",
-                        )
+                        ->label(function ($get) {
+                            $type = $get("employment_type");
+                            $val = $type instanceof EmploymentType ? $type->value : $type;
+                            return match ($val) {
+                                'clt_44', 'clt_40', 'intern' => 'Salário Base',
+                                'partner' => 'Pró-Labore',
+                                'pj' => 'Valor do Contrato',
+                                default => 'Valor da Diária',
+                            };
+                        })
                         ->numeric()
                         ->prefix('R$')
                         ->required()
@@ -71,23 +79,27 @@ class EmployeeForm
 
                     Select::make("payment_cycle")
                         ->label("Ciclo de Pagamento")
-                        ->options([
-                            "daily" => "Diário",
-                            "weekly" => "Semanal",
-                            "biweekly" => "Quinzenal",
-                            "monthly" => "Mensal",
-                        ]),
+                        ->options(PaymentCycle::class)
+                        ->enum(PaymentCycle::class)
+                        ->required(),
 
-                    TextInput::make("transportation_voucher")
-                        ->label('Vale Transporte (R$)')
+                    TextInput::make('food_allowance_amount')
+                        ->label('Limite do Vale-Alimentação')
                         ->numeric()
-                        ->prefix('R$'),
+                        ->prefix('R$')
+                        ->helperText('Defina o valor do vale para este colaborador. O saldo será renovado automaticamente conforme a frequência configurada no RH.')
+                        ->visible(function () {
+                            $settings = CompanySetting::getCached();
+                            return $settings && $settings->has_food_allowance && $settings->allowance_scope === 'individual';
+                        }),
+
                 ])
                 ->columns(2),
 
             Section::make("Benefícios & Escala")->schema([
+
                 CheckboxList::make("work_days")
-                    ->label("Dias de Trabalho")
+                    ->label("Dias de Trabalho (Escala Padrão)")
                     ->options([
                         "seg" => "Segunda",
                         "ter" => "Terça",
@@ -99,16 +111,27 @@ class EmployeeForm
                     ])
                     ->columns(4),
 
-                Toggle::make("receives_night_premium")->label(
-                    "Recebe Adicional Noturno?",
-                ),
+                Toggle::make("receives_night_premium")
+                    ->label("Recebe Adicional Noturno?")
+                    ->default(false),
 
-                Toggle::make("receives_hazard_pay")->label(
-                    "Recebe Periculosidade?",
-                ),
+                Toggle::make("receives_hazard_pay")
+                    ->label("Recebe Periculosidade?")
+                    ->default(false),
+
+                Select::make("kitchens")
+                    ->relationship('kitchens', 'name')
+                    ->label("Acesso a Praças de Produção (KDS)")
+                    ->multiple()
+                    ->preload()
+                    ->searchable()
+                    ->helperText("Deixe vazio se ele não trabalha na cozinha/bar.")
+                    ->visible(fn() => \App\Models\CompanySetting::getCached()?->kds_access_mode === 'individual')
+                    ->columnSpanFull(),
             ]),
         ];
     }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema->schema(self::getFormSchema());

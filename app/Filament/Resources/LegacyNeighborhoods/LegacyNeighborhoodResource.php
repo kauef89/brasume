@@ -14,7 +14,7 @@ class LegacyNeighborhoodResource extends Resource
 {
     protected static ?string $model = LegacyNeighborhood::class;
     protected static string|\BackedEnum|null $navigationIcon = "heroicon-o-map";
-    protected static string|\UnitEnum|null $navigationGroup = "Legado Fiscal";
+    protected static string|\UnitEnum|null $navigationGroup = 'Sistema Legado';
     protected static ?string $modelLabel = "Bairro Antigo";
     protected static ?string $pluralModelLabel = "Bairros Antigos";
 

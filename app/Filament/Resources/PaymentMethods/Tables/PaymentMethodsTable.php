@@ -12,11 +12,11 @@ class PaymentMethodsTable
     {
         return $table->columns([
             Tables\Columns\TextColumn::make('name')->label('Forma de Pagamento')->searchable()->sortable(),
-            Tables\Columns\TextColumn::make('destinationAccount.name')
+                        Tables\Columns\TextColumn::make('destinationAccount.name')
                 ->label('Conta Destino')
-                ->default('Sem Vínculo (Perda/Cortesia)')
+                ->placeholder('Sem Vínculo (Perda/Cortesia)')
                 ->badge()
-                ->color('success'),
+                ->color(fn ($state) => filled($state) ? 'success' : 'gray'),
             Tables\Columns\TextColumn::make('engine_type')->label('Comportamento')->badge(),
             Tables\Columns\ToggleColumn::make('show_on_pos')->label('PDV?'),
             Tables\Columns\ToggleColumn::make('show_on_delivery')->label('Delivery?'),

@@ -5,89 +5,149 @@ namespace App\Http\Controllers;
 use Laravel\Socialite\Facades\Socialite;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Log;
+use App\Services\Auth\GoogleAuthService;
+use App\Services\Customers\CustomerRegistrationService;
 
 class GoogleController extends Controller
 {
     public function redirectToGoogle(Request $request)
     {
-        // Pega o domínio de origem (ex: nativa.brasume.com.br ou app.brasume.com.br)
         $tenantHost = $request->query('host', request()->getHost());
+        $intent = $request->query('intent', 'team');
+        $returnTo = $request->query('return_to', $request->header('referer', '/'));
+
+        $statePayload = base64_encode(json_encode([
+            'host'      => $tenantHost,
+            'intent'    => $intent,
+            'return_to' => $returnTo,
+        ]));
 
         return Socialite::driver('google')
-            ->with(['state' => base64_encode($tenantHost)]) 
+            ->with(['state' => $statePayload])
             ->redirect();
+    }
+
+    public function getGoogleUrl(Request $request)
+    {
+        $tenantHost = $request->query('host', request()->getHost());
+        $intent = $request->query('intent', 'customer');
+        $returnTo = $request->input('return_to', $request->header('referer', '/'));
+
+        $statePayload = base64_encode(json_encode([
+            'host'      => $tenantHost,
+            'intent'    => $intent,
+            'return_to' => $returnTo,
+        ]));
+
+        $redirectUrl = Socialite::driver('google')
+            ->with(['state' => $statePayload])
+            ->redirect()
+            ->getTargetUrl();
+
+        return response()->json(['url' => $redirectUrl]);
     }
 
     public function handleGoogleCallback(Request $request)
     {
         try {
             $googleUser = Socialite::driver('google')->stateless()->user();
-            $tenantHost = base64_decode($request->input('state'));
+            $stateDecoded = base64_decode($request->input('state'));
+            $stateData = json_decode($stateDecoded, true);
 
-            // =========================================================
-            // LÓGICA 1: PAINEL CENTRAL (O Hub de Gestão)
-            // =========================================================
-            if ($tenantHost === 'app.brasume.com.br') {
+            $returnTo = '/';
+            if (is_array($stateData)) {
+                $tenantHost = $stateData['host'];
+                $intent = $stateData['intent'] ?? 'team';
+                $returnTo = $stateData['return_to'] ?? '/';
+            } else {
+                $tenantHost = $stateDecoded;
+                $intent = 'team';
+            }
+
+            if ($tenantHost === 'adm.brasume.com.br') {
                 $user = User::where('email', $googleUser->getEmail())->first();
 
                 if (! $user) {
-                    return redirect('/hub/login')->with('error', 'Acesso negado. Utilizador não registado no sistema central.');
+                    return redirect()->route('filament.central.auth.login')->with('error', 'Acesso negado. Administrador do SaaS não encontrado.');
                 }
 
                 Auth::login($user);
-                return redirect('/hub'); 
+                return redirect()->to('/admin');
             }
 
-            // =========================================================
-            // LÓGICA 2: PAINEL DAS LOJAS / TENANTS
-            // =========================================================
-            // Se o código chegou aqui, é porque o destino é uma Lanchonete.
-            // Guardamos os dados no cache e geramos um Token de Uso Único.
-            $token = Str::random(40);
-            
-            Cache::put("google_auth_{$token}", [
-                'email' => $googleUser->getEmail(),
-                'name' => $googleUser->getName(),
-            ], now()->addMinutes(2));
+            $payload = json_encode([
+                'email'      => $googleUser->getEmail(),
+                'name'       => $googleUser->getName(),
+                'intent'     => $intent,
+                'return_to'  => $returnTo,
+                'expires_at' => now()->addMinutes(5)->timestamp
+            ]);
 
-            // Redireciona o utilizador de volta para o domínio da lanchonete dele!
-            return redirect("https://{$tenantHost}/auth/google/magic-login?token={$token}");
+            $token = urlencode(Crypt::encryptString($payload));
+
+            if ($intent === 'customer') {
+                return redirect("https://{$tenantHost}/auth/google/magic-login-customer?token={$token}");
+            }
+            return redirect("https://{$tenantHost}/auth/google/magic-login-team?token={$token}");
 
         } catch (\Exception $e) {
-            // Em caso de erro ou cancelamento
-            return redirect('/login')->with('error', 'Falha ao autenticar com o Google. O processo foi cancelado.');
+            Log::error('🔥 [GOOGLE OAUTH CALLBACK ERROR] ' . $e->getMessage());
+            return redirect('/')->with('error', 'Falha ao autenticar com o Google. O processo foi cancelado.');
         }
     }
 
-    public function magicLogin(Request $request)
+    public function magicLoginCustomer(Request $request, GoogleAuthService $authService, CustomerRegistrationService $registrationService)
     {
         $token = $request->query('token');
 
-        // Puxa os dados do cache
-        $googleData = Cache::get("google_auth_{$token}");
+        try {
+            $result = $authService->processCustomerLogin($token, session('guest_customer_id'), $registrationService);
 
-        if (! $googleData) {
-            return redirect('/admin/login')->with('error', 'Link de login expirado ou inválido.');
+            $targetUrl = $result['return_to'] ?? '/';
+
+            // Higienização de segurança para evitar loops
+            if (empty($targetUrl) || str_contains($targetUrl, '/auth/google')) {
+                $targetUrl = '/';
+            }
+
+            if ($result['status'] === 'requires_cpf') {
+                $targetUrl = preg_replace('/([?&])open_upgrade=[^&]+(&|$)/', '$1', $targetUrl);
+                $targetUrl = rtrim($targetUrl, '?&');
+
+                $separator = str_contains($targetUrl, '?') ? '&' : '?';
+                $targetUrl .= $separator . 'open_upgrade=true';
+
+                return redirect()->to($targetUrl)->with('info', $result['message']);
+            }
+
+            $request->session()->regenerate();
+            $request->session()->save();
+
+            return redirect()->to($targetUrl)->with('success', $result['message']);
+
+        } catch (\Exception $e) {
+            Log::error('🔥 [ERRO CRÍTICO] Falha no Magic Login B2C: ' . $e->getMessage());
+            return redirect()->to('/')->with('error', $e->getMessage());
         }
+    }
 
-        // Apaga o token do cache imediatamente por segurança
-        Cache::forget("google_auth_{$token}");
+    public function magicLoginTeam(Request $request, GoogleAuthService $authService)
+    {
+        $token = $request->query('token');
 
-        // NESTE PONTO: O Stancl Tenancy JÁ INICIALIZOU a base de dados da Lanchonete!
-        // Apenas utilizadores que já foram registados nesta loja podem entrar.
-        $user = User::where('email', $googleData['email'])->first();
+        try {
+            $result = $authService->processTeamLogin($token);
+            $request->session()->regenerate();
+            $request->session()->save();
 
-        if (! $user) {
-            return redirect('/admin/login')->with('error', 'Acesso negado. O seu email não está registado nesta loja.');
+            return redirect()->to($result['redirect'] ?? '/team');
+
+        } catch (\Exception $e) {
+            Log::error('🛑 [GOOGLE TEAM ERROR] ' . $e->getMessage());
+            return redirect()->route('team.login')->with('error', $e->getMessage());
         }
-
-        // Faz o login no contexto da loja isolada
-        Auth::login($user);
-
-        // Leva-o para o dashboard da loja
-        return redirect('/admin');
     }
 }

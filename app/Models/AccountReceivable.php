@@ -5,6 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property-read \App\Models\BankAccount|null $bankAccount
+ * @property-read \App\Models\Customer|null $customer
+ * @property-read \App\Models\Order|null $order
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|AccountReceivable newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|AccountReceivable newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|AccountReceivable onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|AccountReceivable query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|AccountReceivable withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|AccountReceivable withoutTrashed()
+ * @mixin \Illuminate\Database\Eloquent\Builder
+ */
 class AccountReceivable extends Model
 {
     use SoftDeletes;

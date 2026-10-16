@@ -1,0 +1,81 @@
+<?php
+
+namespace App\Services\SupplyChain;
+
+use App\Models\Product;
+use App\Models\ProductionOrder;
+use App\Models\TechnicalSheet;
+use App\Models\CompanySetting;
+use App\Models\ShoppingListItem;
+use Illuminate\Support\Facades\Log;
+
+class ProductionPlanningService
+{
+    public function generateDailyProductionOrders(): void
+    {
+        $settings = CompanySetting::getCached();
+        $mode = $settings->demand_forecast_mode ?? 'manual_par';
+
+        // Busca apenas produtos que são produzidos internamente (WIP)
+        $manufacturedProducts = Product::where('type', 'manufactured')
+            ->where('is_active', true)
+            ->get();
+
+        foreach ($manufacturedProducts as $product) {
+            $targetQty = 0;
+
+            if ($mode === 'manual_par') {
+                $targetQty = (float) ($product->par_level ?? 0);
+            } else {
+                // Inteligência: Poderia buscar a média de vendas das últimas 4 semanas do mesmo dia
+                // Aqui simplificaremos usando o par_level + um buffer de segurança
+                $bufferDays = (int) ($settings->production_buffer_days ?? 1);
+                $targetQty = ((float) ($product->par_level ?? 0)) * $bufferDays;
+            }
+
+            $currentStock = (float) ($product->current_stock ?? 0);
+            $qtyToProduce = $targetQty - $currentStock;
+
+            if ($qtyToProduce > 0) {
+                // 1. Gera a Ordem para a Cozinha
+                ProductionOrder::create([
+                    'product_id' => $product->id,
+                    'planned_qty' => $qtyToProduce,
+                    'status' => 'pending',
+                    'due_date' => today(),
+                ]);
+
+                Log::info("👨‍🍳 [Produção] Ordem gerada: {$qtyToProduce}x {$product->name}");
+
+                // 2. EXPLOSÃO DA FICHA TÉCNICA (BOM)
+                // Vamos verificar se a produção disso vai esgotar os ingredientes do estoque!
+                $ingredients = TechnicalSheet::where('parent_product_id', $product->id)->where('is_active', true)->get();
+
+                foreach ($ingredients as $ingredientLine) {
+                    $rawMaterial = Product::find($ingredientLine->ingredient_product_id);
+                    if (!$rawMaterial || !$rawMaterial->track_inventory) continue;
+
+                    // Quanto vamos consumir dessa matéria-prima para essa produção?
+                    $neededQty = $qtyToProduce * (float) $ingredientLine->quantity;
+                    $projectedStock = $rawMaterial->current_stock - $neededQty;
+
+                    // Se a produção for zerar o estoque ou deixá-lo abaixo do mínimo, aciona as Compras!
+                    if ($projectedStock <= (float) ($rawMaterial->min_stock ?? 0)) {
+                        $suggestedPurchase = max(0, ($rawMaterial->max_stock ?? 0) - $projectedStock);
+
+                        if ($suggestedPurchase > 0) {
+                            ShoppingListItem::updateOrCreate(
+                                ['product_id' => $rawMaterial->id, 'status' => 'pending'],
+                                [
+                                    'suggested_qty' => \Illuminate\Support\Facades\DB::raw("suggested_qty + {$suggestedPurchase}"),
+                                    'urgency_level' => 'normal',
+                                    'notes' => "Demanda gerada pela Ordem de Produção do item: {$product->name}"
+                                ]
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

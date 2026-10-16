@@ -19,7 +19,16 @@ class Coupon extends Model
         "expires_at" => "datetime",
         "value" => "decimal:2",
         "min_subtotal" => "decimal:2",
-        // O Laravel converte automaticamente o array do Filament para JSON no banco e vice-versa!
         "restricted_categories" => "array",
     ];
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
+    }
+
+    public function orders()
+    {
+        return $this->hasMany(Order::class);
+    }
 }

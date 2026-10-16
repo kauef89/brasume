@@ -3,32 +3,33 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ReceivedInvoice extends Model
 {
-    // Força o Laravel a usar o nome exato da tabela
     protected $table = 'received_invoices';
 
     protected $guarded = [];
 
     protected $casts = [
-        'issue_date' => 'datetime',
-        'total_value' => 'decimal:2',
+        'issue_date'   => 'datetime',
+        'total_value'  => 'decimal:2',
+        'has_full_xml' => 'boolean',
     ];
 
     /**
-     * Itens enviados para o estoque
+     * Itens de estoque associados a esta nota fiscal via chave estrangeira
      */
-    public function costHistories()
+    public function costHistories(): HasMany
     {
-        return $this->hasMany(\App\Models\ProductCostHistory::class, 'nfe_key', 'nfe_key');
+        return $this->hasMany(ProductCostHistory::class, 'received_invoice_id');
     }
 
     /**
-     * Itens enviados para compras pessoais/despesas
+     * Despesas ou compras pessoais associadas a esta nota fiscal via chave estrangeira
      */
-    public function personalPurchases()
+    public function personalPurchases(): HasMany
     {
-        return $this->hasMany(\App\Models\PersonalPurchase::class, 'nfe_key', 'nfe_key');
+        return $this->hasMany(PersonalPurchase::class, 'received_invoice_id');
     }
 }

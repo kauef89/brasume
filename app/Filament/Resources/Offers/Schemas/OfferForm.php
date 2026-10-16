@@ -31,8 +31,7 @@ class OfferForm
                         ->label("Produto Gatilho (Opcional)")
                         ->searchable()
                         ->preload()
-                        ->helperText(
-                            "O cliente precisa comprar qual produto para ganhar esta oferta?",
+                        ->helperText("O cliente precisa comprar qual produto para ganhar esta oferta?",
                         )
                         ->columnSpan(2),
 

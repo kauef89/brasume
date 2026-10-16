@@ -2,7 +2,8 @@
 
 namespace App\Filament\Resources\Transactions\Schemas;
 
-use Filament\Schemas\Schema;
+
+use App\Enums\TransactionType;use Filament\Schemas\Schema;
 use Filament\Schemas\Components as SchemaComponents;
 use Filament\Forms\Components as FormComponents;
 use Illuminate\Support\Facades\Auth;
@@ -16,10 +17,7 @@ class TransactionForm
                 SchemaComponents\Grid::make(2)->schema([
                     FormComponents\Select::make("type")
                         ->label("Tipo de Movimento")
-                        ->options([
-                            "in" => "Entrada (Receita / Suprimento)",
-                            "out" => "Saída (Despesa / Sangria)",
-                        ])
+                        ->options(TransactionType::class)
                         ->required()
                         ->live()
                         ->columnSpan(1),

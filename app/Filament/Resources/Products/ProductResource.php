@@ -4,6 +4,11 @@ namespace App\Filament\Resources\Products;
 
 use App\Filament\Traits\HasGlobalSearch;
 use App\Filament\Resources\Products\Pages;
+use App\Filament\Resources\Products\RelationManagers\CostHistoriesRelationManager;
+use App\Filament\Resources\Products\RelationManagers\InventoryMovementsRelationManager;
+use App\Filament\Resources\Products\RelationManagers\ProductModifiersRelationManager;
+use App\Filament\Resources\Products\RelationManagers\SimulatorRelationManager;
+use App\Filament\Resources\Products\RelationManagers\TechnicalSheetsRelationManager;
 use App\Filament\Resources\Products\Schemas\ProductForm;
 use App\Filament\Resources\Products\Tables\ProductTable;
 use App\Models\Product;
@@ -21,18 +26,17 @@ class ProductResource extends Resource
     protected static ?string $model = Product::class;
 
     protected static string|\BackedEnum|null $navigationIcon = "heroicon-o-shopping-bag";
-    protected static string|\UnitEnum|null $navigationGroup = "Cardápio";
+    protected static string|\UnitEnum|null $navigationGroup = 'Cardápio';
 
     protected static ?string $modelLabel = "Produto";
     protected static ?string $pluralModelLabel = "Produtos";
 
     public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()->whereHas(
-            "category",
-            fn($query) => $query->where("type", "external"),
-        );
-    }
+{
+    return parent::getEloquentQuery()
+        ->whereIn('type', ['resale', 'dish', 'combo', 'service'])
+        ->whereHas('category', fn($query) => $query->where('type', 'external'));
+}
 
     public static function form(Schema $schema): Schema
     {
@@ -47,10 +51,11 @@ class ProductResource extends Resource
     public static function getRelations(): array
     {
         return [
-            \App\Filament\Resources\Products\RelationManagers\CostHistoriesRelationManager::class,
-            \App\Filament\Resources\Products\RelationManagers\TechnicalSheetsRelationManager::class,
-            \App\Filament\Resources\Products\RelationManagers\ProductModifiersRelationManager::class,
-            \App\Filament\Resources\Products\RelationManagers\SimulatorRelationManager::class,
+            CostHistoriesRelationManager::class,
+            TechnicalSheetsRelationManager::class,
+            ProductModifiersRelationManager::class,
+            SimulatorRelationManager::class,
+            InventoryMovementsRelationManager::class, // 🚀 Extrato Kardex
         ];
     }
 

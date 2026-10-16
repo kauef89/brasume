@@ -4,7 +4,7 @@ namespace App\Filament\Resources\Users;
 
 use App\Filament\Resources\Users\Pages;
 use App\Filament\Resources\Users\Schemas\UserForm;
-use App\Filament\Resources\Users\Tables\UserTable;
+use App\Filament\Resources\Users\Tables\UsersTable;
 use App\Models\User;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -29,7 +29,7 @@ class UserResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return UserTable::configure($table);
+        return UsersTable::configure($table);
     }
 
     public static function getRelations(): array

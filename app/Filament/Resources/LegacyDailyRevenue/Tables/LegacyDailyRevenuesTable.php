@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Filament\Resources\LegacyDailyRevenueResource\Tables;
+namespace App\Filament\Resources\LegacyDailyRevenue\Tables;
 
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;

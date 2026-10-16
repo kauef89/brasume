@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Filament\Resources\Transactions; 
+namespace App\Filament\Resources\Transactions;
 
 use App\Filament\Resources\Transactions\Pages;
 use App\Models\Transaction;
@@ -10,12 +10,14 @@ use Filament\Tables\Table;
 
 // ======= AS LINHAS MÁGICAS QUE FALTAVAM =======
 use App\Filament\Resources\Transactions\Schemas\TransactionForm;
-use App\Filament\Resources\Transactions\Tables\TransactionsTable; 
+use App\Filament\Resources\Transactions\Tables\TransactionsTable;
 // ==============================================
 
 class TransactionResource extends Resource
 {
     protected static ?string $model = Transaction::class;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'Financeiro';
 
     public static function getNavigationIcon(): string | \BackedEnum | null
     {

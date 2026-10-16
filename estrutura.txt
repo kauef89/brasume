@@ -1,0 +1,888 @@
+.
+├── app
+│   ├── Console
+│   │   └── Commands
+│   │       ├── AuditModifiers.php
+│   │       ├── CacheTopCombinations.php
+│   │       ├── DebugCost.php
+│   │       ├── ExpireLoyaltyPoints.php
+│   │       ├── ImportProductsCsv.php
+│   │       ├── ImportWpCatalog.php
+│   │       ├── ImportWpCustomers.php
+│   │       ├── ImportWpFiscal.php
+│   │       ├── ImportWpOrders.php
+│   │       ├── InspectWpCustomers.php
+│   │       ├── MapDatabasesCommand.php
+│   │       ├── MigrateLegacyLoyaltyPoints.php
+│   │       ├── MigrateLegacyTenant.php
+│   │       ├── MonitorChecklists.php
+│   │       ├── NotifyStoreOpening.php
+│   │       ├── ProcessAbandonedCarts.php
+│   │       ├── ProcessPredictiveWeights.php
+│   │       ├── PruneOldPrintJobs.php
+│   │       ├── RecalculateLoyaltyBalances.php
+│   │       ├── RenewEmployeeAllowances.php
+│   │       ├── SefazSync.php
+│   │       ├── SetupSicrediWebhook.php
+│   │       └── TrainPredictiveModel.php
+│   ├── Events
+│   │   ├── BridgeStatusUpdated.php
+│   │   ├── CatalogUpdated.php
+│   │   ├── ChecklistsUpdated.php
+│   │   ├── DeviceQrAuthorized.php
+│   │   ├── DeviceRemoteLocked.php
+│   │   ├── DeviceRemoteUnlocked.php
+│   │   ├── DeviceUnlockRequested.php
+│   │   ├── MagicLoginAuthorized.php
+│   │   ├── OrderCancelled.php
+│   │   ├── OrderCreated.php
+│   │   ├── OrderItemsSentToKitchen.php
+│   │   ├── OrderUpdated.php
+│   │   ├── PrintJobCreated.php
+│   │   ├── SettingsUpdated.php
+│   │   ├── ShiftClosed.php
+│   │   ├── StockLowDetected.php
+│   │   └── TerminalUnlocked.php
+│   ├── Filament
+│   │   ├── Central
+│   │   │   ├── Pages
+│   │   │   │   └── Dashboard.php
+│   │   │   ├── Resources
+│   │   │   │   ├── FailedJobs
+│   │   │   │   ├── Tenants
+│   │   │   │   └── Users
+│   │   │   └── Widgets
+│   │   │       └── SystemStatusWidget.php
+│   │   ├── Pages
+│   │   │   ├── Actions
+│   │   │   │   ├── ImportV0ConsolidatedAction.php
+│   │   │   │   ├── ImportV1OrdersAction.php
+│   │   │   │   ├── ImportV2XmlAction.php
+│   │   │   │   ├── MapFiscalDocumentsAction.php
+│   │   │   │   └── UndoImportAction.php
+│   │   │   ├── BillingDashboard.php
+│   │   │   ├── ImportFiscalHistory.php
+│   │   │   ├── ImportInvoice
+│   │   │   │   ├── Actions
+│   │   │   │   └── Schemas
+│   │   │   ├── ImportInvoice.php
+│   │   │   ├── LocalIntegration.php
+│   │   │   ├── ManageAutomations.php
+│   │   │   ├── Schemas
+│   │   │   │   └── BillingFiltersSchema.php
+│   │   │   └── Settings
+│   │   │       ├── ManageCompanySettings.php
+│   │   │       └── Schemas
+│   │   ├── Resources
+│   │   │   ├── AccountPayables
+│   │   │   │   ├── AccountPayableResource.php
+│   │   │   │   ├── Actions
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   ├── Tables
+│   │   │   │   └── Widgets
+│   │   │   ├── AccountReceivables
+│   │   │   │   ├── AccountReceivableResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── BankAccounts
+│   │   │   │   ├── BankAccountResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── RelationManagers
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── BankStatements
+│   │   │   │   ├── Actions
+│   │   │   │   ├── BankStatementResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── CashShifts
+│   │   │   │   ├── CashShiftResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Categories
+│   │   │   │   ├── CategoryResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Checklists
+│   │   │   │   ├── ChecklistResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Coupons
+│   │   │   │   ├── CouponResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── RelationManagers
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Customers
+│   │   │   │   ├── CustomerResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── RelationManagers
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Devices
+│   │   │   │   ├── DeviceResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Employees
+│   │   │   │   ├── EmployeeResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── RelationManagers
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Ingredients
+│   │   │   │   ├── IngredientResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── InventoryLosses
+│   │   │   │   ├── InventoryLossResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Kitchens
+│   │   │   │   ├── KitchenResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── LegacyCustomers
+│   │   │   │   ├── LegacyCustomerResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── LegacyDailyRevenue
+│   │   │   │   ├── LegacyDailyRevenueResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   └── Tables
+│   │   │   ├── LegacyModifiers
+│   │   │   │   ├── Actions
+│   │   │   │   ├── LegacyModifierResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── LegacyNeighborhoods
+│   │   │   │   ├── LegacyNeighborhoodResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── LegacyOrders
+│   │   │   │   ├── Actions
+│   │   │   │   ├── Infolists
+│   │   │   │   ├── LegacyOrderResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   └── Tables
+│   │   │   ├── LegacyPaymentMethods
+│   │   │   │   ├── LegacyPaymentMethodResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── LegacyProducts
+│   │   │   │   ├── Actions
+│   │   │   │   ├── LegacyProductResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Neighborhoods
+│   │   │   │   ├── NeighborhoodResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Offers
+│   │   │   │   ├── OfferResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Orders
+│   │   │   │   ├── OrderResource.php
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── PaymentMethods
+│   │   │   │   ├── Pages
+│   │   │   │   ├── PaymentMethodResource.php
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── PersonalPurchases
+│   │   │   │   ├── Pages
+│   │   │   │   ├── PersonalPurchaseResource.php
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── PosAudits
+│   │   │   │   ├── Pages
+│   │   │   │   ├── PosAuditResource.php
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Printers
+│   │   │   │   ├── Pages
+│   │   │   │   ├── PrinterResource.php
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── PrintJobs
+│   │   │   │   ├── Pages
+│   │   │   │   ├── PrintJobResource.php
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── ProductionOrders
+│   │   │   │   ├── Pages
+│   │   │   │   ├── ProductionOrderResource.php
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── ProductModifiers
+│   │   │   │   ├── Pages
+│   │   │   │   ├── ProductModifierResource.php
+│   │   │   │   ├── RelationManagers
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── Products
+│   │   │   │   ├── Actions
+│   │   │   │   ├── Pages
+│   │   │   │   ├── ProductResource.php
+│   │   │   │   ├── RelationManagers
+│   │   │   │   ├── Schemas
+│   │   │   │   ├── Tables
+│   │   │   │   └── Widgets
+│   │   │   ├── ReceivedInvoices
+│   │   │   │   ├── Actions
+│   │   │   │   ├── Pages
+│   │   │   │   ├── ReceivedInvoiceResource.php
+│   │   │   │   └── Tables
+│   │   │   ├── RecurringExpenses
+│   │   │   │   ├── Pages
+│   │   │   │   ├── RecurringExpenseResource.php
+│   │   │   │   ├── RelationManagers
+│   │   │   │   ├── Schemas
+│   │   │   │   └── Tables
+│   │   │   ├── ShoppingListItems
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   ├── ShoppingListItemResource.php
+│   │   │   │   └── Tables
+│   │   │   ├── StorageLocations
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   ├── StorageLocationResource.php
+│   │   │   │   └── Tables
+│   │   │   ├── Streets
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   ├── StreetResource.php
+│   │   │   │   └── Tables
+│   │   │   ├── Suppliers
+│   │   │   │   ├── Actions
+│   │   │   │   ├── Pages
+│   │   │   │   ├── RelationManagers
+│   │   │   │   ├── Schemas
+│   │   │   │   ├── SupplierResource.php
+│   │   │   │   └── Tables
+│   │   │   ├── Supplies
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   ├── SupplyResource.php
+│   │   │   │   └── Tables
+│   │   │   ├── TableAreas
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   ├── TableAreaResource.php
+│   │   │   │   └── Tables
+│   │   │   ├── Transactions
+│   │   │   │   ├── Pages
+│   │   │   │   ├── Schemas
+│   │   │   │   ├── Tables
+│   │   │   │   └── TransactionResource.php
+│   │   │   └── Users
+│   │   │       ├── Pages
+│   │   │       ├── Schemas
+│   │   │       ├── Tables
+│   │   │       └── UserResource.php
+│   │   ├── Traits
+│   │   │   ├── HasGlobalSearch.php
+│   │   │   ├── HasWelcomeModal.php
+│   │   │   ├── RedirectsToIndex.php
+│   │   │   └── TeleportsTabs.php
+│   │   └── Widgets
+│   │       ├── BillingChartWidget.php
+│   │       ├── BillingComparativeChartWidget.php
+│   │       └── BillingStatsWidget.php
+│   ├── Helpers
+│   │   └── CurrencyHelper.php
+│   ├── Http
+│   │   ├── Controllers
+│   │   │   ├── Controller.php
+│   │   │   ├── GoogleController.php
+│   │   │   └── Tenant
+│   │   │       ├── Auth
+│   │   │       ├── Catalog
+│   │   │       ├── Customers
+│   │   │       ├── DynamicManifestController.php
+│   │   │       ├── Financial
+│   │   │       ├── Fiscal
+│   │   │       ├── Marketing
+│   │   │       ├── MediaServeController.php
+│   │   │       ├── Operations
+│   │   │       ├── Orders
+│   │   │       ├── PredictiveMatrixController.php
+│   │   │       ├── PushSubscriptionController.php
+│   │   │       ├── QrCodeDownloadController.php
+│   │   │       ├── RestaurantOps
+│   │   │       └── Terminals
+│   │   ├── Middleware
+│   │   │   ├── ApplyTenantTheme.php
+│   │   │   ├── CaptureMarketingTraffic.php
+│   │   │   ├── EnsureShiftAttendance.php
+│   │   │   ├── EnsureTwoFactorAuthenticated.php
+│   │   │   ├── HandleInertiaRequests.php
+│   │   │   └── SessionProbeMiddleware.php
+│   │   └── Requests
+│   │       ├── Customer
+│   │       │   ├── CustomerCheckoutRequest.php
+│   │       │   ├── RegisterCustomerRequest.php
+│   │       │   └── StoreCustomerAddressRequest.php
+│   │       └── Pos
+│   │           ├── CancelOrderRequest.php
+│   │           ├── CloseShiftRequest.php
+│   │           ├── ManagerOperationRequest.php
+│   │           ├── OpenShiftRequest.php
+│   │           └── PosOrderSubmitRequest.php
+│   ├── Jobs
+│   │   ├── DispatchScheduledTasksJob.php
+│   │   ├── DispatchShiftTasksJob.php
+│   │   ├── SyncTenantSefazJob.php
+│   │   └── SystemHeartbeatJob.php
+│   ├── Listeners
+│   │   ├── AddLowStockToShoppingList.php
+│   │   ├── ProcessGatewayRefund.php
+│   │   ├── ReturnStockAndNotifyCatalog.php
+│   │   ├── SendShiftSummaryReport.php
+│   │   └── SendToKitchenPrinters.php
+│   ├── Livewire
+│   │   ├── EmployeeConsumptions.php
+│   │   ├── EmployeeStatement.php
+│   │   ├── ProcessedPersonalTable.php
+│   │   ├── ProcessedStockTable.php
+│   │   ├── QuickCreateMenu.php
+│   │   └── SystemAlerts.php
+│   ├── Models
+│   │   ├── AccountPayable.php
+│   │   ├── AccountReceivable.php
+│   │   ├── Address.php
+│   │   ├── BankAccount.php
+│   │   ├── BankStatement.php
+│   │   ├── CashShift.php
+│   │   ├── Category.php
+│   │   ├── ChecklistLog.php
+│   │   ├── Checklist.php
+│   │   ├── ChecklistTask.php
+│   │   ├── ComboGroup.php
+│   │   ├── ComboItem.php
+│   │   ├── CompanySetting.php
+│   │   ├── CostHistory.php
+│   │   ├── Coupon.php
+│   │   ├── CreditCard.php
+│   │   ├── Customer.php
+│   │   ├── Device.php
+│   │   ├── DiningTable.php
+│   │   ├── EmployeeLedger.php
+│   │   ├── Employee.php
+│   │   ├── EmployeeVacation.php
+│   │   ├── FailedJob.php
+│   │   ├── FiscalDocument.php
+│   │   ├── InventoryLoss.php
+│   │   ├── Kitchen.php
+│   │   ├── LegacyCustomer.php
+│   │   ├── LegacyDailyRevenue.php
+│   │   ├── LegacyImportLog.php
+│   │   ├── LegacyModifier.php
+│   │   ├── LegacyNeighborhood.php
+│   │   ├── LegacyOrderItemModifier.php
+│   │   ├── LegacyOrderItem.php
+│   │   ├── LegacyOrderPayment.php
+│   │   ├── LegacyOrder.php
+│   │   ├── LegacyPaymentMethod.php
+│   │   ├── LegacyProduct.php
+│   │   ├── ModifierOption.php
+│   │   ├── Neighborhood.php
+│   │   ├── Offer.php
+│   │   ├── OrderItemModifier.php
+│   │   ├── OrderItem.php
+│   │   ├── OrderPayment.php
+│   │   ├── Order.php
+│   │   ├── OrderRating.php
+│   │   ├── PaymentBatch.php
+│   │   ├── PaymentMethod.php
+│   │   ├── Payment.php
+│   │   ├── PersonalPurchase.php
+│   │   ├── PosAudit.php
+│   │   ├── Printer.php
+│   │   ├── PrintJob.php
+│   │   ├── ProductCostHistory.php
+│   │   ├── ProductionOrder.php
+│   │   ├── ProductModifier.php
+│   │   ├── Product.php
+│   │   ├── ProductStorageLocation.php
+│   │   ├── ReceivedInvoice.php
+│   │   ├── RecurringExpense.php
+│   │   ├── ShoppingListItem.php
+│   │   ├── StorageLocation.php
+│   │   ├── Street.php
+│   │   ├── StreetSegment.php
+│   │   ├── Supplier.php
+│   │   ├── TableArea.php
+│   │   ├── TechnicalSheet.php
+│   │   ├── Tenant.php
+│   │   ├── Transaction.php
+│   │   └── User.php
+│   ├── Notifications
+│   │   ├── DeviceWaitingNotification.php
+│   │   ├── NewB2COrderNotification.php
+│   │   ├── NewKitchenOrderNotification.php
+│   │   ├── NewTasksNotification.php
+│   │   ├── OrderDispatchedNotification.php
+│   │   ├── OrderStatusUpdated.php
+│   │   ├── StoreOpenedNotification.php
+│   │   └── SystemPushNotification.php
+│   ├── Observers
+│   │   └── OrderObserver.php
+│   ├── Providers
+│   │   ├── AppServiceProvider.php
+│   │   ├── Filament
+│   │   │   ├── AdminPanelProvider.php
+│   │   │   └── CentralPanelProvider.php
+│   │   └── TenancyServiceProvider.php
+│   ├── Services
+│   │   ├── Accounting
+│   │   │   ├── AccountingService.php
+│   │   │   ├── BankConciliationService.php
+│   │   │   ├── BillingConsolidator.php
+│   │   │   └── ReconciliationService.php
+│   │   ├── Analytics
+│   │   │   ├── BillingService.php
+│   │   │   └── LegacyDataCapabilityService.php
+│   │   ├── Auth
+│   │   │   ├── AuthService.php
+│   │   │   ├── GoogleAuthService.php
+│   │   │   ├── QrAuthService.php
+│   │   │   ├── RemoteUnlockService.php
+│   │   │   ├── TwoFactorService.php
+│   │   │   └── WhatsAppAuthService.php
+│   │   ├── BankDictionaries
+│   │   │   ├── BankDictionaryFactory.php
+│   │   │   ├── BankDictionaryInterface.php
+│   │   │   └── SicrediDictionary.php
+│   │   ├── Catalog
+│   │   │   ├── AvailabilityService.php
+│   │   │   ├── CustomerCatalogService.php
+│   │   │   ├── InventoryService.php
+│   │   │   ├── ProductCostingService.php
+│   │   │   └── TopSellingCombinationsService.php
+│   │   ├── Customers
+│   │   │   ├── CustomerDashboardService.php
+│   │   │   ├── CustomerFavoritesService.php
+│   │   │   ├── CustomerMappingService.php
+│   │   │   ├── CustomerProfileService.php
+│   │   │   ├── CustomerRegistrationService.php
+│   │   │   ├── CustomerValidationService.php
+│   │   │   ├── SerproService.php
+│   │   │   └── StreetService.php
+│   │   ├── Financial
+│   │   │   ├── Gateways
+│   │   │   │   ├── PaymentGatewayInterface.php
+│   │   │   │   └── SicrediPixGateway.php
+│   │   │   └── PaymentGatewayManager.php
+│   │   ├── Fiscal
+│   │   │   ├── LegacyFiscalImportService.php
+│   │   │   └── SpedDocumentService.php
+│   │   ├── Marketing
+│   │   │   ├── CouponService.php
+│   │   │   ├── CrmService.php
+│   │   │   ├── LoyaltyService.php
+│   │   │   └── ServerSideTrackingService.php
+│   │   ├── Operations
+│   │   │   └── ProductionService.php
+│   │   ├── Orders
+│   │   │   ├── CheckoutService.php
+│   │   │   ├── CustomerCheckoutService.php
+│   │   │   ├── CustomerReorderService.php
+│   │   │   ├── OrderAddressResolver.php
+│   │   │   ├── OrderCancellationService.php
+│   │   │   ├── OrderCreationService.php
+│   │   │   ├── OrderItemProcessor.php
+│   │   │   ├── OrderLogisticsService.php
+│   │   │   ├── OrderNotificationDispatcher.php
+│   │   │   ├── OrderPaymentService.php
+│   │   │   ├── OrderStatusService.php
+│   │   │   └── OrderTransferService.php
+│   │   ├── Printing
+│   │   │   ├── BlueprintBuilder.php
+│   │   │   ├── Documents
+│   │   │   │   ├── ConferenceBill.php
+│   │   │   │   ├── CustomerReceipt.php
+│   │   │   │   ├── DeliveryDispatch.php
+│   │   │   │   ├── FiscalReceipt.php
+│   │   │   │   ├── FreelancerReceipt.php
+│   │   │   │   ├── GrowthFlyer.php
+│   │   │   │   ├── KitchenTicket.php
+│   │   │   │   ├── LoyaltyFlyer.php
+│   │   │   │   └── ShiftClosureReport.php
+│   │   │   ├── OrderTableBuilder.php
+│   │   │   ├── PrintDispatcher.php
+│   │   │   ├── PrintQueueService.php
+│   │   │   └── ReceiptFormatter.php
+│   │   ├── Purchases
+│   │   │   ├── InvoiceImportService.php
+│   │   │   └── InvoiceItemProcessor.php
+│   │   ├── RestaurantOps
+│   │   │   ├── BridgeService.php
+│   │   │   ├── ChecklistService.php
+│   │   │   ├── EmployeeWalletService.php
+│   │   │   ├── KdsService.php
+│   │   │   ├── KitchenDispatchService.php
+│   │   │   ├── OperationsDashboardService.php
+│   │   │   ├── ShiftAttendanceService.php
+│   │   │   ├── ShiftCashierService.php
+│   │   │   ├── StoreAvailabilityService.php
+│   │   │   ├── StoreProfileService.php
+│   │   │   ├── TablesService.php
+│   │   │   └── WmsRestockService.php
+│   │   ├── SupplyChain
+│   │   │   ├── ProcurementService.php
+│   │   │   └── ProductionPlanningService.php
+│   │   └── Terminals
+│   │       ├── PosMenuService.php
+│   │       ├── PosPrintService.php
+│   │       ├── PosSecurityService.php
+│   │       └── PosSettingsService.php
+│   └── Support
+│       ├── BankList.php
+│       └── ProductFormatter.php
+├── artisan
+├── arvore_frontend.txt
+├── arvore_js.txt
+├── auditoria_v1_v3.php
+├── backup_banco-nativa.sql
+├── company_settings_snapshot.json
+├── composer.json
+├── composer.lock
+├── config
+│   ├── app.php
+│   ├── auth.php
+│   ├── broadcasting.php
+│   ├── cache.php
+│   ├── database.php
+│   ├── filesystems.php
+│   ├── ide-helper.php
+│   ├── livewire.php
+│   ├── logging.php
+│   ├── mail.php
+│   ├── permission.php
+│   ├── queue.php
+│   ├── reverb.php
+│   ├── services.php
+│   ├── session.php
+│   └── tenancy.php
+├── debug_cost.php
+├── debug_dia_30.php
+├── debug_dia.php
+├── despesas_sem_dre.csv
+├── estrutura_js.txt
+├── estrutura.txt
+├── exportar_settings.php
+├── gerar_mapa.php
+├── historico.json
+├── _ide_helper.php
+├── jsconfig.json
+├── lang
+├── package.json
+├── package-lock.json
+├── phpstan.neon
+├── phpunit.xml
+├── prettier.config.js
+├── Printosa
+│   ├── main.js
+│   ├── package.json
+│   └── src
+│       ├── bridge.js
+│       ├── index.html
+│       ├── printer.js
+│       ├── printosa-background-1000.png
+│       ├──  printosa-logo-512.png
+│       ├──  printosa-logo-white-512.png
+│       ├── renderer.js
+│       └── styles.css
+├── raiox_wp.php
+├── README.md
+├── repomix-backend.xml
+├── repomix.config.json
+├── repomix-dektop-controller-debug.xml
+├── repomix-routes.xml
+├── repomix-services-debug.xml
+├── resources
+│   ├── css
+│   │   ├── app.css
+│   │   ├── customer-theme
+│   │   │   └── customer-theme.css
+│   │   ├── filament
+│   │   │   └── store
+│   │   │       ├── components
+│   │   │       └── theme.css
+│   │   ├── fonts
+│   │   │   └── brasume
+│   │   │       ├── brasume-bold.woff2
+│   │   │       ├── brasume-compact-bold.woff2
+│   │   │       ├── brasume-compact-medium.woff2
+│   │   │       ├── brasume-compact-regular.woff2
+│   │   │       ├── brasume-medium.woff2
+│   │   │       ├── brasume-regular.woff2
+│   │   │       └── StackSansText-VariableFont_wght.ttf
+│   │   └── pos-theme
+│   │       ├── components.css
+│   │       ├── core.css
+│   │       ├── fonts.css
+│   │       ├── globals.css
+│   │       ├── palettes.css
+│   │       ├── surfaces.css
+│   │       └── transitions.css
+│   ├── js
+│   │   ├── app.js
+│   │   ├── Assets
+│   │   │   └── Lotties
+│   │   │       └── confetti.json
+│   │   ├── bootstrap.js
+│   │   ├── Components
+│   │   │   ├── Modals
+│   │   │   │   ├── NewAddressModal.vue
+│   │   │   │   └── NewCustomerModal.vue
+│   │   │   └── UI
+│   │   │       ├── AdaptiveModal.vue
+│   │   │       ├── AvatarBox.vue
+│   │   │       ├── BaseModal.vue
+│   │   │       ├── Breadcrumb.vue
+│   │   │       ├── DesktopNav.vue
+│   │   │       ├── DesktopTopBar.vue
+│   │   │       ├── EmptyState.vue
+│   │   │       ├── EntitySearch.vue
+│   │   │       ├── ExpandableSearch.vue
+│   │   │       ├── FormField.vue
+│   │   │       ├── GuestEmptyState.vue
+│   │   │       ├── IconButton.vue
+│   │   │       ├── NumericKeypad.vue
+│   │   │       ├── PaymentStagingArea.vue
+│   │   │       ├── ProgressBar.vue
+│   │   │       ├── PushNotificationBanner.vue
+│   │   │       ├── QtyStepper.vue
+│   │   │       ├── SearchAutocomplete.vue
+│   │   │       ├── SegmentedControl.vue
+│   │   │       ├── SelectableCard.vue
+│   │   │       ├── SlideToConfirm.vue
+│   │   │       └── StatusBadge.vue
+│   │   ├── Composables
+│   │   │   ├── useAnalytics.js
+│   │   │   ├── useAudioAlert.js
+│   │   │   ├── useChecklists.js
+│   │   │   ├── useClipboard.js
+│   │   │   ├── useDynamicBackground.js
+│   │   │   ├── usePushNotifications.js
+│   │   │   ├── useSecureAction.js
+│   │   │   ├── useStoreStatus.js
+│   │   │   ├── useTenantEcho.js
+│   │   │   ├── useTheme.js
+│   │   │   ├── useViewport.js
+│   │   │   └── useWhatsAppMessages.js
+│   │   ├── Layouts
+│   │   │   ├── BlankLayout.vue
+│   │   │   ├── DesktopLayout.vue
+│   │   │   └── MobileLayout.vue
+│   │   ├── Pages
+│   │   │   ├── CRM
+│   │   │   │   ├── Coupons
+│   │   │   │   ├── CrmGrowthTab.vue
+│   │   │   │   ├── CrmMetricsTab.vue
+│   │   │   │   ├── CrmOpportunitiesTab.vue
+│   │   │   │   └── CRM.vue
+│   │   │   ├── Customer
+│   │   │   │   ├── Banners
+│   │   │   │   ├── Cart
+│   │   │   │   ├── Checkout
+│   │   │   │   ├── Composables
+│   │   │   │   ├── CustomerAccountTab.vue
+│   │   │   │   ├── CustomerApp.vue
+│   │   │   │   ├── CustomerAuthModal.vue
+│   │   │   │   ├── CustomerCartTab.vue
+│   │   │   │   ├── CustomerCheckoutModal.vue
+│   │   │   │   ├── CustomerDynamicIsland.vue
+│   │   │   │   ├── CustomerHeader.vue
+│   │   │   │   ├── CustomerHomeTab.vue
+│   │   │   │   ├── CustomerMenuHeader.vue
+│   │   │   │   ├── CustomerMenuTab.vue
+│   │   │   │   ├── CustomerOrderHistoryTab.vue
+│   │   │   │   ├── CustomerTabContainer.vue
+│   │   │   │   ├── Home
+│   │   │   │   ├── Legal
+│   │   │   │   ├── Menu
+│   │   │   │   ├── Orders
+│   │   │   │   └── Profile
+│   │   │   ├── Gateway
+│   │   │   │   ├── Components
+│   │   │   │   ├── Composables
+│   │   │   │   ├── CustomerAccess.vue
+│   │   │   │   ├── CustomerGateway.vue
+│   │   │   │   ├── DevicePairingBox.vue
+│   │   │   │   ├── PinAuthFlow.vue
+│   │   │   │   ├── QrLoginBox.vue
+│   │   │   │   ├── QrTerminalModal.vue
+│   │   │   │   ├── QuickUnlockSheet.vue
+│   │   │   │   ├── TeamAccess.vue
+│   │   │   │   ├── TeamGateway.vue
+│   │   │   │   ├── TwoFactorChallenge.vue
+│   │   │   │   └── TwoFactorSetup.vue
+│   │   │   ├── Kds
+│   │   │   │   ├── Composables
+│   │   │   │   └── KdsApp.vue
+│   │   │   ├── Operations
+│   │   │   │   ├── Availability.vue
+│   │   │   │   ├── Checklists
+│   │   │   │   ├── Components
+│   │   │   │   ├── ControlPanel.vue
+│   │   │   │   ├── KdsBoard.vue
+│   │   │   │   ├── OrderDetails.vue
+│   │   │   │   └── Printers
+│   │   │   ├── Pos
+│   │   │   │   ├── Cashier.vue
+│   │   │   │   ├── Checkout.vue
+│   │   │   │   ├── Components
+│   │   │   │   ├── Composables
+│   │   │   │   ├── OrderEntry.vue
+│   │   │   │   └── PosApp.vue
+│   │   │   ├── Settings
+│   │   │   │   ├── Components
+│   │   │   │   └── Settings.vue
+│   │   │   ├── Shared
+│   │   │   │   ├── Composables
+│   │   │   │   ├── Configurators
+│   │   │   │   ├── ErrorPage.vue
+│   │   │   │   ├── Order
+│   │   │   │   └── SupplyChain
+│   │   │   ├── Splash
+│   │   │   │   ├── Components
+│   │   │   │   └── Index.vue
+│   │   │   └── Team
+│   │   │       ├── ChecklistIssueCard.vue
+│   │   │       ├── ChecklistOverviewWidget.vue
+│   │   │       ├── Composables
+│   │   │       ├── CorporateProfileTab.vue
+│   │   │       ├── CorporateWalletCard.vue
+│   │   │       ├── DeviceFleetPanel.vue
+│   │   │       ├── DriverBoard.vue
+│   │   │       ├── ManagerShiftDashboard.vue
+│   │   │       ├── QrScannerModal.vue
+│   │   │       ├── RestockTab.vue
+│   │   │       ├── TeamApp.vue
+│   │   │       ├── TeamBarCard.vue
+│   │   │       ├── TeamBarTab.vue
+│   │   │       ├── TeamCart.vue
+│   │   │       ├── TeamChecklists.vue
+│   │   │       ├── TeamCheckoutDrawer.vue
+│   │   │       ├── TeamDynamicIsland.vue
+│   │   │       ├── TeamHeader.vue
+│   │   │       ├── TeamHomeTab.vue
+│   │   │       ├── TeamHome.vue
+│   │   │       ├── TeamMenuTab.vue
+│   │   │       ├── TeamModulesModal.vue
+│   │   │       ├── TeamOrderDetails.vue
+│   │   │       ├── TeamOverlays.vue
+│   │   │       ├── TeamShiftLockOverlay.vue
+│   │   │       └── TeamTabContainer.vue
+│   │   ├── Utils
+│   │   │   └── formatters.js
+│   │   └── ziggy.js
+│   └── views
+│       ├── app.blade.php
+│       ├── components
+│       │   ├── account-payable-card.blade.php
+│       │   ├── bank-statement-row.blade.php
+│       │   ├── bank-transaction-card.blade.php
+│       │   ├── layouts
+│       │   └── payable-candidate-row.blade.php
+│       ├── filament
+│       │   ├── central
+│       │   │   └── pages
+│       │   ├── components
+│       │   │   ├── category-tree-node.blade.php
+│       │   │   ├── dropdown-nav.blade.php
+│       │   │   ├── processed-items-tabs.blade.php
+│       │   │   ├── tabs-render-hook.blade.php
+│       │   │   ├── team-qr-code.blade.php
+│       │   │   ├── tech-sheet-footer.blade.php
+│       │   │   └── teleport-tabs.blade.php
+│       │   ├── forms
+│       │   │   └── components
+│       │   ├── pages
+│       │   │   ├── import-fiscal-history.blade.php
+│       │   │   ├── import-invoice.blade.php
+│       │   │   ├── local-integration.blade.php
+│       │   │   ├── manage-automations.blade.php
+│       │   │   └── manage-company-settings.blade.php
+│       │   └── resources
+│       │       ├── account-payables
+│       │       ├── categories
+│       │       └── products
+│       ├── livewire
+│       │   ├── employee-consumptions.blade.php
+│       │   ├── employee-statement.blade.php
+│       │   ├── processed-personal-table.blade.php
+│       │   ├── processed-stock-table.blade.php
+│       │   ├── product-simulator-widget.blade.php
+│       │   ├── quick-create-menu.blade.php
+│       │   └── system-alerts.blade.php
+│       └── welcome.blade.php
+├── routes
+│   ├── channels.php
+│   ├── console.php
+│   ├── tenant
+│   │   ├── api.php
+│   │   ├── auth_and_base.php
+│   │   ├── cashier.php
+│   │   ├── customer.php
+│   │   ├── kds.php
+│   │   ├── operations.php
+│   │   ├── settings.php
+│   │   └── team.php
+│   ├── tenant.php
+│   └── web.php
+├── sys_tmp
+│   ├── 6a56bedcb5dd03fc23a402c5a0347192.phpaqr59h87arlc6BjHwGP
+│   ├── 6a56bedcb5dd03fc23a402c5a0347192.phpedi51vtio9rmdWIarPq
+│   ├── d83411e9559842870fb444f27880b15f.phpblbde0urbmegbcyG1eD
+│   ├── d83411e9559842870fb444f27880b15f.phppf8g88ponqh97JoMw2o
+│   ├── facade-3ebeldk11i7751tnHoh
+│   ├── facade-42035b728tsu2cXttyX
+│   ├── facade-7qctmk6hmqlc4g589fl
+│   ├── facade-9k7q2it87p1j3Q6Ih1o
+│   ├── facade-a3ld6d8t9jf03sr5LZq
+│   ├── facade-cf4m6078vt953d2dhP6
+│   ├── facade-dqf35tv9s4d50fxB2V4
+│   ├── facade-dqk9caarou46b40jpoP
+│   ├── facade-hpetmivf9g8m4G4IOdE
+│   ├── facade-jh22or464j2j2qVifa7
+│   ├── facade-ld38e061mdbd0EtyvJS
+│   ├── facade-mcloclfi2m8jcF6zpHA
+│   ├── facade-o53j4v9li7q1fRB6Fci
+│   ├── facade-ofk0cgghfg7a19aEHd0
+│   └── sped-1002
+│       └── 26908287000146
+│           └── certs
+├── tests
+│   ├── Feature
+│   │   └── ExampleTest.php
+│   ├── TestCase.php
+│   └── Unit
+│       └── ExampleTest.php
+├── vassoura.php
+└── vite.config.js
+
+336 directories, 550 files

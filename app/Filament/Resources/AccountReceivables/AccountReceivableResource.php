@@ -14,7 +14,9 @@ use App\Filament\Resources\AccountReceivables\Tables\AccountReceivablesTable;
 class AccountReceivableResource extends Resource
 {
     protected static ?string $model = AccountReceivable::class;
-    
+
+    protected static string|\UnitEnum|null $navigationGroup = 'Financeiro';
+
     // USAMOS A PROPRIEDADE EM VEZ DA FUNÇÃO PARA EVITAR ERROS DE ASSINATURA
     protected static ?string $slug = 'contas-a-receber';
 

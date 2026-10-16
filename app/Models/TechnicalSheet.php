@@ -5,18 +5,25 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property-read \App\Models\Product|null $ingredient
+ * @property-read \App\Models\Product|null $parentProduct
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TechnicalSheet newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TechnicalSheet newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|TechnicalSheet query()
+ * @mixin \Illuminate\Database\Eloquent\Builder
+ */
 class TechnicalSheet extends Model
 {
     // 🚀 O Modo Elegante: Aceita tudo que o Filament mandar.
     // O array vazio diz: "Nenhum campo está bloqueado para preenchimento em massa".
     protected $guarded = [];
 
-    // O Cast mágico que transforma o JSON do banco em Array para o PHP
-    // OBS: Ajustei o nome da coluna para 'order_type' pois foi o que usamos no RelationManager.
-    // Se no seu banco a coluna se chama 'scenarios', mantenha 'scenarios' aqui e no seu Form/Table!
     protected $casts = [
         'order_type' => 'array',
+        'is_active' => 'boolean',
     ];
+
 
     // O Produto/Receita que está a ser montado
     public function parentProduct(): BelongsTo

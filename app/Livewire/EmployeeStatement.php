@@ -31,7 +31,7 @@ class EmployeeStatement extends BaseWidget
             ->heading(new HtmlString("
                 <div class='flex w-full items-center justify-between'>
                     <span>Extrato Financeiro</span>
-                    <span class='text-sm font-medium text-gray-500 dark:text-gray-400'>
+                    <span class='text-sm  text-gray-500 dark:text-gray-400'>
                         Saldo Atual: <strong class='text-xl {$colorClass}'>R$ {$formattedBalance}</strong>
                     </span>
                 </div>

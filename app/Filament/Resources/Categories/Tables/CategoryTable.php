@@ -14,11 +14,26 @@ class CategoryTable {
             Tables\Columns\TextColumn::make('sort_order')
                 ->label('Ordem')
                 ->sortable(),
-                
+
             Tables\Columns\TextColumn::make('name')
                 ->label('Nome')
                 ->searchable(),
-                
+
+            // 🚀 NOVA COLUNA: Categoria Pai
+            Tables\Columns\TextColumn::make('parent.name')
+                ->label('Categoria Pai')
+                ->placeholder('Principal')
+                ->searchable()
+                ->sortable(),
+
+            // 🚀 NOVA COLUNA: Contagem automática de produtos vinculados
+            Tables\Columns\TextColumn::make('products_count')
+                ->counts('products')
+                ->label('Qtd. Itens')
+                ->badge()
+                ->color('gray')
+                ->sortable(),
+
             Tables\Columns\TextColumn::make('type')
                 ->label('Classificação')
                 ->badge()
@@ -38,7 +53,7 @@ class CategoryTable {
                 })
                 ->sortable()
                 ->searchable(),
-                
+
             Tables\Columns\ToggleColumn::make('is_active')
                 ->label('Ativa'),
         ])
@@ -53,8 +68,13 @@ class CategoryTable {
                     'both'     => 'Ambos',
                 ])
         ])
-        // Correção das chamadas das ações:
-        ->recordActions([EditAction::make()->iconButton()])
-        ->toolbarActions([BulkActionGroup::make([DeleteBulkAction::make()])]);
+        ->actions([
+            EditAction::make()->iconButton()
+        ])
+        ->bulkActions([
+            BulkActionGroup::make([
+                DeleteBulkAction::make()
+            ])
+        ]);
     }
 }

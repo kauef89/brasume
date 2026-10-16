@@ -1,0 +1,273 @@
+/* src/styles.css */
+
+/* Fundo da Aplicação */
+body {
+    font-family: system-ui;
+    margin: 0;
+    padding: 20px;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-image: url('printosa-background-1000.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    color: #f3f4f6;
+}
+
+/* Ocultar elementos */
+.hidden {
+    display: none !important;
+}
+
+/* Efeito Glassmorphism (Vidro Fosco) */
+.container {
+    width: 100%;
+    max-width: 600px;
+    padding: 40px;
+    border-radius: 60px;
+
+    /* A Mágica do Vidro */
+    background: rgba(20, 10, 20, 0.65); /* Fundo escuro semi-transparente para dar contraste */
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Cabeçalhos e Logo */
+.header-area {
+    text-align: center;
+    margin-bottom: 30px;
+}
+.app-logo {
+    width: 90px;
+    height: auto;
+    margin-bottom: 10px;
+    filter: drop-shadow(0 0 10px rgba(197, 26, 102, 0.5));
+}
+h1 {
+    color: white;
+    font-size: 4rem;
+    margin: 0 0 5px 0;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+p.subtitle {
+    color: #d1d5db;
+    opacity: 0.8;
+    font-size: 2rem;
+    margin: 0;
+}
+
+/* Formulários - Inner Floating Label (Perfeito para Glassmorphism) */
+.form-group {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+/* O Input - Mais alto, com espaço reservado no topo */
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 24px 14px 8px 14px; /* Muito espaço em cima, pouco em baixo */
+    border-radius: 8px;
+    border: 3px solid rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.3);
+    color: #fff;
+    box-sizing: border-box;
+    outline: none;
+    font-size: 15px;
+    transition: all 0.3s ease;
+}
+
+/* A Label Flutuante - Totalmente Transparente */
+.form-group label {
+    position: absolute;
+    top: 50%;
+    left: 14px;
+    transform: translateY(-50%);
+    font-size: 14px;
+    color: white;
+    pointer-events: none; /* Deixa o clique passar para o input */
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    /* ZERO background color! O fundo translúcido reina absoluto. */
+}
+
+/* A MÁGICA: Ao focar ou preencher, a label sobe, mas continua DENTRO do campo */
+.form-group input:focus,
+.form-group input:not(:placeholder-shown) {
+    border-color: white;
+    background: rgba(0, 0, 0, 0.6);
+    box-shadow: 0 0 10px rgba(197, 26, 102, 0.2);
+}
+
+.form-group input:focus + label,
+.form-group input:not(:placeholder-shown) + label {
+    top: 14px; /* Sobe para o topo interno */
+    font-size: 10px;
+    color: white;
+    font-weight: bold;
+}
+
+/* Botões Estilosos */
+button {
+    width: 100%;
+    padding: 24px;
+    background-color: white;
+    opacity: 0.8;
+    color: black;
+    border: none;
+    border-radius: 100px;
+    font-size: 2rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(255, 255, 255, 0.4);
+}
+button:hover {
+    opacity: 1;
+    transform: translateY(-2px);
+}
+
+/* Linhas de Mapeamento de Hardware */
+.printer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 15px 20px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.cloud-info { flex: 1; }
+.cloud-name { font-weight: bold; font-size: 16px; color: #f9a8d4; /* Rosa suave */ }
+.cloud-meta { font-size: 12px; color: #9ca3af; margin-top: 4px; }
+.local-select { flex: 1; margin-left: 15px; }
+
+/* ==========================================
+   TELA 3: DASHBOARD & STATUS
+   ========================================== */
+
+/* Cartão de Status Principal */
+.status-card {
+    background: rgba(0, 0, 0, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+/* O "Heartbeat" Branco Pulsante */
+.status-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.pulse-dot {
+    width: 14px;
+    height: 14px;
+    background-color: white;
+    border-radius: 50%;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+    animation: pulse-white 2s infinite ease-in-out;
+}
+
+@keyframes pulse-white {
+    0% { transform: scale(0.9); opacity: 0.7; box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.5); }
+    70% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+    100% { transform: scale(0.9); opacity: 0.7; box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+
+.status-text {
+    color: white;
+    font-size: 1.5rem;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.printer-summary {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 1.2rem;
+}
+
+/* Terminal de Atividades (Log de Batalha) */
+.log-terminal {
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    height: 180px;
+    padding: 15px 20px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 1.1rem;
+    margin-bottom: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.log-entry {
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.4;
+    word-break: break-all;
+}
+
+.log-entry.system { color: rgba(255, 255, 255, 0.5); font-style: italic; }
+.log-entry.success { color: white; font-weight: bold; }
+.log-entry.error { color: #ff8a8a; } /* Única cor de aviso suave para erros reais */
+
+/* Custom Scrollbar para o Log (Fininha e elegante) */
+.log-terminal::-webkit-scrollbar { width: 6px; }
+.log-terminal::-webkit-scrollbar-track { background: transparent; }
+.log-terminal::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+.log-terminal::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.4); }
+
+/* Hierarquia de Botões de Ação */
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* Substitui a classe base 'button' por algo mais contido para esta tela */
+.action-buttons button {
+    padding: 18px;
+    font-size: 1.4rem;
+    border-radius: 30px;
+}
+
+.btn-secondary {
+    background-color: white;
+    opacity: 0.85;
+    color: black;
+}
+
+/* Botão Vazado (Outlined) - Ação Secundária */
+.btn-outline {
+    background-color: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    color: white;
+}
+.btn-outline:hover {
+    border-color: white;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Botão de Perigo/Sair - Mantendo o vidro, mas com um toque sutil de vermelho/bordo */
+.btn-danger {
+    background-color: rgba(200, 20, 50, 0.15);
+    border: 2px solid rgba(200, 20, 50, 0.3);
+    color: rgba(255, 200, 200, 0.9);
+}
+.btn-danger:hover {
+    background-color: rgba(200, 20, 50, 0.3);
+    border-color: rgba(200, 20, 50, 0.6);
+    color: white;
+}

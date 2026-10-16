@@ -12,6 +12,7 @@ use Stancl\Tenancy\Events;
 use Stancl\Tenancy\Jobs;
 use Stancl\Tenancy\Listeners;
 use Stancl\Tenancy\Middleware;
+use Stancl\Tenancy\Resolvers\DomainTenantResolver;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -99,21 +100,26 @@ class TenancyServiceProvider extends ServiceProvider
 
     public function boot()
     {
-        $this->bootEvents();
-        $this->mapRoutes();
+        // 🚀 CACHE DE RESOLUÇÃO DE DOMÍNIO (Stancl Tenancy)
+        // Elimina a query no banco central em toda requisição HTTP
+        DomainTenantResolver::$shouldCache = true;
+        DomainTenantResolver::$cacheTTL = 86400; // 24 horas (em segundos)
+        DomainTenantResolver::$cacheStore = null; // null usa o driver padrão do cache (file/redis)
+
+        $this->bootEvents();$this->mapRoutes();
 
         $this->makeTenancyMiddlewareHighestPriority();
     }
 
     protected function bootEvents()
     {
-        foreach ($this->events() as $event => $listeners) {
-            foreach ($listeners as $listener) {
+        foreach ($this->events() as $event =>$listeners) {
+            foreach ($listeners as$listener) {
                 if ($listener instanceof JobPipeline) {
-                    $listener = $listener->toListener();
+                    $listener =$listener->toListener();
                 }
 
-                Event::listen($event, $listener);
+                Event::listen($event,$listener);
             }
         }
     }
@@ -141,7 +147,7 @@ class TenancyServiceProvider extends ServiceProvider
             Middleware\InitializeTenancyByRequestData::class,
         ];
 
-        foreach (array_reverse($tenancyMiddleware) as $middleware) {
+        foreach (array_reverse($tenancyMiddleware) as$middleware) {
             $this->app[\Illuminate\Contracts\Http\Kernel::class]->prependToMiddlewarePriority($middleware);
         }
     }

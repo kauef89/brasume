@@ -10,6 +10,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Hidden;
 use Filament\Notifications\Notification;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 
 class BatchResolveProductsAction extends Action
 {
@@ -27,7 +28,7 @@ class BatchResolveProductsAction extends Action
             ->color("primary")
             ->modalHeading("Mapeamento em Lote")
             ->modalDescription(
-                "O sistema agrupou os itens pendentes por similaridade. Desmarque o que não for correspondente. O sistema vai lembrar das suas rejeições no próximo lote.",
+                "O sistema agrupou os itens pendentes por similaridade e está a aprender com as suas associações anteriores. Desmarque o que não for correspondente.",
             )
             ->modalSubmitActionLabel("Vincular Selecionados")
             ->modalWidth("2xl")
@@ -60,7 +61,7 @@ class BatchResolveProductsAction extends Action
                 ->hiddenLabel()
                 ->content(
                     new HtmlString(
-                        "<div class='text-lg font-bold text-primary-600 mb-2'>🔥 Lote de Confiança Atual: ~{$matches["confidence"]}%</div>",
+                        "<div class='text-lg font-medium text-primary-600 mb-2'>🔥 Lote de Confiança Atual: ~{$matches["confidence"]}%</div>",
                     ),
                 ),
 
@@ -90,7 +91,6 @@ class BatchResolveProductsAction extends Action
 
         // 1. SESSÃO: Salvar a "Lista Negra" na sessão atual do usuário
         if (!empty($rejected)) {
-            // Usa session() em vez de Cache, resolvendo o problema do stancl/tenancy
             $cachedRejects = session()->get('rejected_legacy_matches', []);
             $mergedRejects = array_unique(array_merge($cachedRejects, array_values($rejected)));
             session()->put('rejected_legacy_matches', $mergedRejects);
@@ -113,6 +113,18 @@ class BatchResolveProductsAction extends Action
             ->send();
     }
 
+    /**
+     * 🚀 O NORMALIZADOR: Remove acentos, pontuação, espaços duplos e atira para maiúsculas.
+     */
+    private function normalizeText(?string $text): string
+    {
+        if (!$text) return '';
+        $text = Str::ascii($text); // Remove acentos (Á => A)
+        $text = preg_replace('/[^A-Za-z0-9\s]/', ' ', $text); // Troca símbolos por espaço
+        $text = preg_replace('/\s+/', ' ', $text); // Mata espaços duplos
+        return strtoupper(trim($text));
+    }
+
     private function getNextBatchMatches(): array
     {
         $pendingLegacy = LegacyProduct::whereNull("current_product_id")
@@ -133,15 +145,22 @@ class BatchResolveProductsAction extends Action
             return ["confidence" => 0, "items" => []];
         }
 
-        // 🚀 Puxa a lista de rejeitados da Sessão do Usuário
-        $rejectedPairs = session()->get('rejected_legacy_matches', []);
+        // 🚀 A MENTE COLETIVA: Puxa o histórico de resoluções para usar como "Apelidos"
+        $resolvedLegacyNames = LegacyProduct::whereNotNull("current_product_id")
+            ->where("is_ignored", false)
+            ->get()
+            ->groupBy('current_product_id')
+            ->map(function ($items) {
+                return $items->pluck('name')->toArray();
+            });
 
+        $rejectedPairs = session()->get('rejected_legacy_matches', []);
         $allBestMatches = [];
 
         foreach ($pendingLegacy as $legacy) {
             $bestMatch = null;
             $highestSim = 0;
-            $legacyName = strtoupper(trim($legacy->name));
+            $normalizedLegacyName = $this->normalizeText($legacy->name);
 
             foreach ($products as $product) {
                 $pairKey = $legacy->id . "|" . $product->id;
@@ -150,16 +169,27 @@ class BatchResolveProductsAction extends Action
                     continue;
                 }
 
-                similar_text(
-                    $legacyName,
-                    strtoupper(trim($product->name)),
-                    $percent,
-                );
+                // 1. Testa contra o nome oficial do produto novo
+                $normalizedProductName = $this->normalizeText($product->name);
+                similar_text($normalizedLegacyName, $normalizedProductName, $percentOfficial);
+                $localMaxSim = $percentOfficial;
 
-                if ($percent > $highestSim) {
-                    $highestSim = $percent;
+                // 2. 🚀 Testa contra TODOS os apelidos que você já ensinou ao sistema
+                if ($resolvedLegacyNames->has($product->id)) {
+                    foreach ($resolvedLegacyNames->get($product->id) as $pastName) {
+                        similar_text($normalizedLegacyName, $this->normalizeText($pastName), $percentAlias);
+                        if ($percentAlias > $localMaxSim) {
+                            $localMaxSim = $percentAlias;
+                        }
+                    }
+                }
+
+                if ($localMaxSim > $highestSim) {
+                    $highestSim = $localMaxSim;
                     $bestMatch = $product;
                 }
+
+                // Atalho de performance: se bateu 100% com algo, não precisa olhar mais nada para este produto!
                 if ($highestSim == 100) {
                     break;
                 }
@@ -168,7 +198,7 @@ class BatchResolveProductsAction extends Action
             if ($bestMatch && $highestSim >= 60) {
                 $groupSim = floor($highestSim);
                 if ($groupSim % 2 !== 0) {
-                    $groupSim--;
+                    $groupSim--; // Agrupa aos pares
                 }
 
                 $allBestMatches[$groupSim][] = [

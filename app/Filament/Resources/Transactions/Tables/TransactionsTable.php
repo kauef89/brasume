@@ -2,7 +2,8 @@
 
 namespace App\Filament\Resources\Transactions\Tables;
 
-use Filament\Tables\Table;
+
+use App\Enums\TransactionType;use Filament\Tables\Table;
 use Filament\Tables;
 use Filament\Actions; // <- ESTA É A LINHA MÁGICA QUE FALTAVA!
 
@@ -62,10 +63,7 @@ class TransactionsTable
             ->filters([
                 Tables\Filters\SelectFilter::make('type')
                     ->label('Tipo de Movimento')
-                    ->options([
-                        'in' => 'Entradas',
-                        'out' => 'Saídas',
-                    ]),
+                    ->options(TransactionType::class),
 
                 Tables\Filters\SelectFilter::make('bank_account_id')
                     ->relationship('bankAccount', 'name')

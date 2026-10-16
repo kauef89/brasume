@@ -4,6 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property-read \App\Models\Category|null $category
+ * @property-read \App\Models\ComboGroup|null $group
+ * @property-read \App\Models\Product|null $product
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ComboItem newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ComboItem newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ComboItem query()
+ * @mixin \Illuminate\Database\Eloquent\Builder
+ */
 class ComboItem extends Model
 {
     protected $guarded = [];

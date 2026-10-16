@@ -22,7 +22,7 @@ class ViewDanfeAction extends Action
             ->iconButton()
             ->tooltip('Visualizar DANFE (PDF)')
             ->color('gray')
-            ->visible(fn ($record) => !empty($record->xml_content) && !str_contains($record->xml_content, 'resNFe'))
+            ->visible(fn ($record) => $record && $record->has_full_xml)
             ->modalHeading('Documento Auxiliar da Nota Fiscal (DANFE)')
             ->modalWidth('7xl')
             ->modalSubmitAction(false)

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Conexão Brasume</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- TELA 1: LOGIN -->
+    <div id="login-screen" class="container">
+        <div class="header-area">
+            <img src="./printosa-logo-white-512.png" alt="Logo" class="app-logo">
+            <h1>Conexão Brasume</h1>
+            <p class="subtitle">Ligue o seu sistema às impressoras</p>
+        </div>
+
+        <div class="form-group">
+            <input type="text" id="apiUrl" placeholder=" " required>
+            <label>Endereço do Sistema</label>
+        </div>
+
+        <div class="form-group">
+            <input type="text" id="apiToken" placeholder=" " required>
+            <label>Chave de Acesso</label>
+        </div>
+
+        <div id="login-error" class="hidden" style="color: #ff8a8a; font-size: 0.8rem; margin-bottom: 12px; text-align: center; border: 1px solid rgba(255,138,138,0.3); background: rgba(255,138,138,0.1); padding: 8px; border-radius: 8px;"></div>
+
+        <button id="btnConnect">Conectar</button>
+    </div>
+
+    <!-- TELA 2: MAPEAMENTO -->
+    <div id="mapping-screen" class="container hidden">
+        <div class="header-area">
+            <img src="./printosa-logo-white-512.png" alt="Logo" class="app-logo" style="width: 50px;">
+            <h1>Configurar Impressoras</h1>
+            <p class="subtitle">Como as impressoras estão ligadas a este computador?</p>
+        </div>
+
+        <div class="operation-mode-box">
+            <label class="section-title">Tipo de Conexão</label>
+
+            <input type="hidden" id="printModeSelect" value="os">
+            <div class="custom-dropdown-ui" id="modeDropdownUi" style="margin-top: 8px; width: 100%;">
+                <div class="custom-dropdown-trigger" id="modeDropdownTrigger">Padrão (Impressoras instaladas no SO)</div>
+                <div class="custom-dropdown-menu" id="modeDropdownMenu">
+                    <div class="custom-dropdown-option" data-value="os">Padrão (Impressoras instaladas no SO)</div>
+                    <div class="custom-dropdown-option" data-value="raw">Cabo Direto (Portas físicas / USB)</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="printers-list" style="margin-top: 10px;">
+            <!-- Renderizado dinamicamente -->
+        </div>
+
+        <button id="btnSaveMapping" style="margin-top: 15px;">Salvar Configurações</button>
+    </div>
+
+    <!-- TELA 3: DASHBOARD -->
+    <div id="dashboard-screen" class="container hidden">
+        <div class="header-area">
+            <img src="./printosa-logo-white-512.png" alt="Logo" class="app-logo" style="width: 50px;">
+            <h1>Sistema Conectado</h1>
+            <p class="subtitle">Pronto para imprimir novos pedidos</p>
+        </div>
+
+        <div class="status-card">
+            <div class="status-indicator">
+                <span class="pulse-dot"></span>
+                <span class="status-text">Ligado à Nuvem</span>
+            </div>
+            <div class="printer-summary" id="printer-summary-text">
+                <span style="color: white; font-weight: bold;">Pronto</span> para imprimir
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button id="btnTestPrint" class="btn-primary" style="background-color: #10b981; color: white; font-weight: bold;">Imprimir Página de Teste</button>
+            <button id="btnShowLogs" class="btn-secondary">Ver Histórico de Ações</button>
+            <button id="btnRemap" class="btn-outline">Configurar Impressoras</button>
+            <button id="btnStop" class="btn-danger">Sair / Desconectar</button>
+        </div>
+    </div>
+
+    <!-- MODAL DE LOGS -->
+    <div id="log-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Histórico</h2>
+                <button id="btnCloseLogs" class="close-btn">&times;</button>
+            </div>
+            <div class="log-terminal" id="activity-log">
+                <div class="log-entry system">Iniciando aplicativo...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

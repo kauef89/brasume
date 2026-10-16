@@ -51,7 +51,12 @@ class InvoiceSummaryAction extends Action
 
                             Notification::make()->title('Ciência Confirmada!')->success()->send();
                         } catch (\Exception $e) {
-                            Notification::make()->title('Erro Técnico')->body($e->getMessage())->danger()->send();
+                            if (str_contains($e->getMessage(), '596')) {
+                                $record->update(['status' => 'expired_manifestation']);
+                                Notification::make()->title('Prazo Expirado!')->body('A Sefaz bloqueou a ciência por limite de tempo. Use o botão de anexo na linha para subir o XML.')->warning()->send();
+                            } else {
+                                Notification::make()->title('Erro Técnico')->body($e->getMessage())->danger()->send();
+                            }
                         }
                     }),
 
@@ -81,7 +86,7 @@ class InvoiceSummaryAction extends Action
                     ->label(fn($record) => $record->status === 'processed' ? 'Visualizar / Auditar' : 'Processar Entrada')
                     ->icon(fn($record) => $record->status === 'processed' ? 'heroicon-m-eye' : 'heroicon-m-arrow-path')
                     ->color(fn($record) => $record->status === 'processed' ? 'info' : 'success')
-                    ->visible(fn($record) => $record && in_array($record->status, ['ready', 'manifested', 'processed']) && !empty($record->xml_content) && !str_contains($record->xml_content, 'resNFe'))
+                    ->visible(fn($record) => $record && in_array($record->status, ['ready', 'manifested', 'processed']) && $record->has_full_xml)
                     ->action(function ($record) {
                         return redirect()->to(ImportInvoice::getUrl(['invoice' => $record->id]));
                     }),

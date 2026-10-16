@@ -41,7 +41,17 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            'url' => '/storage', // 🚀 Deixe relativo por padrão para o contexto central
+            'visibility' => 'public',
+            'throw' => false,
+            'report' => false,
+        ],
+
+        // 🚀 1. O NOVO DISCO DO TENANT
+        'tenant' => [
+            'driver' => 'local',
+            'root' => storage_path('app/public'), // Não se preocupe, o Tenancy vai mudar isto em tempo real!
+            'url' => env('APP_URL').'/storage',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
@@ -60,6 +70,12 @@ return [
             'report' => false,
         ],
 
+        'livewire_tmp' => [
+            'driver' => 'local',
+            'root'   => storage_path('app/livewire-tmp'),
+            'throw'  => false,
+            'report' => false,
+        ],
     ],
 
     /*

@@ -80,87 +80,15 @@ class MapFiscalDocumentsAction extends Action
 
                 DB::beginTransaction();
                 try {
-                    foreach($docs as $doc) {
-                        // 1. O MATCH: Procura um pedido do mesmo dia, mesmo valor e sem nota
-                        $match = LegacyOrder::whereDate('issue_date', $doc->issue_date->toDateString())
-                            ->where('total_value', $doc->total_value)
-                            ->whereNull('nfe_key')
-                            ->first();
+                                    $service = app(\App\Services\Fiscal\LegacyFiscalImportService::class);
+                                    $result = $service->mapFiscalDocuments($record->import_tag);
 
-                        if ($match) {
-                            $match->update([
-                                'nfe_key' => $doc->access_key,
-                                'series' => $doc->series,
-                                'number' => $doc->number,
-                                'xml_content' => $doc->xml_content
-                            ]);
-                            $doc->update(['status' => 'authorized']);
-                            $matchedCount++;
-                        } else {
-                            // 2. CRIAÇÃO: Nota órfã, cria pedido novo extraindo os itens
-                            $xml = @simplexml_load_string(str_replace("xmlns=", "ns=", $doc->xml_content));
-                            if(!$xml) continue;
-
-                            $infNFe = $xml->NFe->infNFe ?? $xml->infNFe;
-
-                            $newOrder = LegacyOrder::create([
-                                'import_tag' => $doc->import_tag,
-                                'nfe_key' => $doc->access_key,
-                                'series' => $doc->series,
-                                'number' => $doc->number,
-                                'issue_date' => $doc->issue_date,
-                                'total_value' => $doc->total_value,
-                                'discount' => (float) ($infNFe->total->ICMSTot->vDesc ?? 0),
-                                'status' => 'completed',
-                                'xml_content' => $doc->xml_content,
-                            ]);
-
-                            // Traduz Pagamentos
-                            if (isset($infNFe->pag->detPag)) {
-                                foreach ($infNFe->pag->detPag as $detPag) {
-                                    $tPag = (string) $detPag->tPag;
-                                    $vPag = (float) $detPag->vPag;
-                                    $legacyPayment = LegacyPaymentMethod::where('sefaz_code', $tPag)->first();
-
-                                    if ($legacyPayment) {
-                                        LegacyOrderPayment::create([
-                                            'legacy_order_id' => $newOrder->id,
-                                            'legacy_payment_method_id' => $legacyPayment->id,
-                                            'amount' => $vPag,
-                                        ]);
-                                    }
+                                    Notification::make()->title("Mapeamento concluído!")
+                                        ->body("<b>{$result['matched']}</b> notas vinculadas.<br><b>{$result['created']}</b> novos pedidos criados.")
+                                        ->success()->send();
+                                } catch (\Exception $e) {
+                                    Notification::make()->title("Erro no mapeamento")->body($e->getMessage())->danger()->send();
                                 }
-                            }
-
-                            // Traduz Itens
-                            if (isset($infNFe->det)) {
-                                foreach ($infNFe->det as $det) {
-                                    $prod = $det->prod;
-                                    $xProd = trim((string) $prod->xProd);
-                                    $legacyProd = LegacyProduct::where('name', $xProd)->first();
-
-                                    if ($legacyProd && !$legacyProd->is_ignored) {
-                                        LegacyOrderItem::create([
-                                            'legacy_order_id' => $newOrder->id,
-                                            'legacy_product_id' => $legacyProd->id,
-                                            'quantity' => (float) $prod->qCom,
-                                            'unit_price' => (float) $prod->vUnCom,
-                                            'total_price' => (float) $prod->vProd,
-                                        ]);
-                                    }
-                                }
-                            }
-
-                            $doc->update(['status' => 'authorized']);
-                            $createdCount++;
-                        }
-                    }
-                    DB::commit();
-                    Notification::make()->title("Mapeamento concluído!")->body("<b>{$matchedCount}</b> notas vinculadas a pedidos antigos.<br><b>{$createdCount}</b> novos pedidos criados e conciliados.")->success()->send();
-                } catch (\Exception $e) {
-                    DB::rollBack();
-                    Notification::make()->title("Erro no mapeamento")->body($e->getMessage())->danger()->send();
-                }
-            });
+                            });
     }
 }

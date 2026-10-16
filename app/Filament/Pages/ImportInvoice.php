@@ -12,17 +12,19 @@ use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Str;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Facades\Blade;
 use Livewire\Attributes\On;
+
 use App\Models\ReceivedInvoice;
+use App\Models\ProductCostHistory;
+use App\Models\PersonalPurchase;
 use App\Filament\Resources\ReceivedInvoices\ReceivedInvoiceResource;
 use App\Filament\Pages\ImportInvoice\Schemas\ImportInvoiceForm;
-use App\Services\InvoiceImportService;
-use Filament\Support\Facades\FilamentView;
-use Illuminate\Support\Facades\Blade;
-
-// 🚀 IMPORTS CORRIGIDOS (Sempre no topo do arquivo!)
-use App\Filament\Resources\ReceivedInvoices\Actions\ViewDanfeAction;
+use App\Filament\Pages\ImportInvoice\Actions\ApproveSmartMatchesAction;
 use App\Filament\Traits\HasWelcomeModal;
+use App\Services\Purchases\InvoiceImportService;
+use App\Services\Purchases\InvoiceItemProcessor;
+use Filament\Support\Facades\FilamentView;
 
 class ImportInvoice extends Page implements HasForms, HasActions
 {
@@ -37,21 +39,21 @@ class ImportInvoice extends Page implements HasForms, HasActions
     protected string $view = 'filament.pages.import-invoice';
 
     public ?array $data = [];
-    public ?string $xmlContent = null;
-
-    // 🚀 Propriedade para guardarmos a nota
+    public ?int $invoiceId = null;
     public ?ReceivedInvoice $invoiceRecord = null;
 
     public function mount(): void
     {
         $this->checkWelcomeModal();
 
-        $invoiceId = request()->query('invoice') ?? request()->query('nfe') ?? request()->query('record');
+        $rawInvoiceId = request()->query('invoice') ?? request()->query('nfe') ?? request()->query('record');
         $initialData = [];
 
-        if ($invoiceId) {
-            $this->invoiceRecord = ReceivedInvoice::find($invoiceId);
+        if ($rawInvoiceId) {
+            $this->invoiceId = (int) $rawInvoiceId;
+            $this->invoiceRecord = ReceivedInvoice::find($this->invoiceId);
 
+            // Carrega o XML limpo apenas na primeira montagem da página
             if ($this->invoiceRecord && $this->invoiceRecord->xml_content) {
                 $processor = app(InvoiceImportService::class);
                 $initialData = $processor->extractDataFromXml($this->invoiceRecord->xml_content, $this->invoiceRecord->id);
@@ -65,7 +67,6 @@ class ImportInvoice extends Page implements HasForms, HasActions
             'tables::toolbar.search.before',
             function () {
                 $invoiceKey = $this->data['invoice_key'] ?? 'none';
-
                 return Blade::render('@include("filament.components.tabs-render-hook", [
                     "stockCount" => \App\Models\ProductCostHistory::where("nfe_key", $invoiceKey)->count(),
                     "personalCount" => \App\Models\PersonalPurchase::where("nfe_key", $invoiceKey)->count(),
@@ -74,28 +75,55 @@ class ImportInvoice extends Page implements HasForms, HasActions
             scopes: [
                 \App\Livewire\ProcessedStockTable::class,
                 \App\Livewire\ProcessedPersonalTable::class,
-            ],
+            ]
         );
     }
 
-    // 🚀 AQUI ENTRAM OS BOTÕES DO CABEÇALHO
+    public function getInvoiceRecord(): ?ReceivedInvoice
+    {
+        if ($this->invoiceRecord) {
+            return $this->invoiceRecord;
+        }
+
+        $id = $this->invoiceId
+            ?? ($this->data['received_invoice_id'] ?? null)
+            ?? request()->query('invoice')
+            ?? request()->query('nfe')
+            ?? request()->query('record');
+
+        return $this->invoiceRecord = $id ? ReceivedInvoice::find($id) : null;
+    }
+
+    public function getInvoiceProperty(): ?ReceivedInvoice
+    {
+        return $this->getInvoiceRecord();
+    }
+
+    public function getRecordProperty(): ?ReceivedInvoice
+    {
+        return $this->getInvoiceRecord();
+    }
+
+    /**
+     * Processa a confirmação de um item e atualiza estritamente a chave xml_items.
+     */
+    public function confirmItem(array $payload): array
+    {
+        $processor = app(\App\Services\Purchases\InvoiceItemProcessor::class);
+        $currentItems = $this->data['xml_items'] ?? [];
+
+        $result = $processor->processConfirmedItems($payload, (array) $currentItems);
+
+        $this->data['xml_items'] = array_values($result['updated_items'] ?? []);
+        $this->form->fill($this->data);
+
+        return $result;
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            // Botão da DANFE
-            ViewDanfeAction::make()
-                ->record($this->invoiceRecord) // Injeta a nota atual na Action
-                ->button()
-                ->label('Visualizar DANFE')
-                ->outlined()
-                ->color('gray')
-                ->visible(fn () =>
-                    $this->invoiceRecord !== null &&
-                    !empty($this->invoiceRecord->xml_content) &&
-                    !str_contains($this->invoiceRecord->xml_content, 'resNFe')
-                ),
-
-            // Botão de Ajuda gerado pelo Trait
+            ApproveSmartMatchesAction::make('approveSmartMatches'),
             $this->getWelcomeAction(),
         ];
     }
@@ -103,10 +131,9 @@ class ImportInvoice extends Page implements HasForms, HasActions
     protected function getViewData(): array
     {
         $invoiceKey = $this->data['invoice_key'] ?? 'none';
-
         return [
-            'stockCount' => \App\Models\ProductCostHistory::where('nfe_key', $invoiceKey)->count(),
-            'personalCount' => \App\Models\PersonalPurchase::where('nfe_key', $invoiceKey)->count(),
+            'stockCount' => ProductCostHistory::where('nfe_key', $invoiceKey)->count(),
+            'personalCount' => PersonalPurchase::where('nfe_key', $invoiceKey)->count(),
         ];
     }
 
@@ -117,34 +144,42 @@ class ImportInvoice extends Page implements HasForms, HasActions
             ->components(ImportInvoiceForm::schema());
     }
 
-    public function submit(): void
+    /**
+     * Ação Nativa de Finalização (Lê diretamente do estado fresco do Livewire)
+     */
+    public function finishImportAction(): Action
     {
-        $items = $this->data['xml_items'] ?? [];
+        return Action::make('finishImport')
+            ->label('Finalizar Importação')
+            ->color('primary')
+            // Removemos o requiresConfirmation condicional daqui para forçar a execução direta
+            ->action(function () {
+                $state = $this->form->getState();
+                $items = $state['xml_items'] ?? [];
 
-        if (count($items) > 0) {
-            $this->mountAction('warningModal');
-            return;
-        }
+                $pendingItems = collect($items)->where('confirmation_step', 0);
 
-        app(InvoiceImportService::class)->finalizeInvoice($this->form->getState());
+                // 🚀 SONDA: Se o sistema encontrar pendentes, trava tudo e cospe os dados!
+                if ($pendingItems->isNotEmpty()) {
+                    dd([
+                        'ALERTA' => 'O SISTEMA ENCONTROU ITENS FANTASMAS!',
+                        'QTD_PENDENTES' => $pendingItems->count(),
+                        'QTD_TOTAL_NO_FORM' => count($items),
+                        'ITENS_PENDENTES' => $pendingItems->toArray(),
+                        'ESTADO_CRU_DO_LIVEWIRE' => $this->data['xml_items'] ?? []
+                    ]);
+                }
 
-        Notification::make()->title('Nota Fiscal Finalizada!')->success()->send();
-        $this->redirect(ReceivedInvoiceResource::getUrl('index'));
-    }
+                // Se passar da sonda, é porque realmente estava vazio e deve finalizar
+                app(\App\Services\Purchases\InvoiceImportService::class)->finalizeInvoice($state);
 
-    public function warningModalAction(): Action
-    {
-        return Action::make('warningModal')
-            ->requiresConfirmation()
-            ->modalIcon('heroicon-o-exclamation-triangle')
-            ->modalHeading('Atenção: Itens Pendentes')
-            ->modalDescription(new HtmlString(
-                'Ainda existem itens na nota aguardando processamento.<br><br>Você deve processar <strong>todos os itens</strong> para poder finalizar a importação de vez.'
-            ))
-            ->modalSubmitActionLabel('Sair e Voltar Para a Lista')
-            ->modalCancelActionLabel('Continuar Processando')
-            ->color('warning')
-            ->action(fn() => redirect()->to(ReceivedInvoiceResource::getUrl('index')));
+                \Filament\Notifications\Notification::make()
+                    ->title('Nota Fiscal Finalizada!')
+                    ->success()
+                    ->send();
+
+                return redirect()->to(\App\Filament\Resources\ReceivedInvoices\ReceivedInvoiceResource::getUrl('index'));
+            });
     }
 
     public function restoreToPendingQueue(array $itemData, bool $isPersonal): void
@@ -180,56 +215,20 @@ class ImportInvoice extends Page implements HasForms, HasActions
     {
         return new HtmlString('
             <div class="wm-container">
-                <p>
-                    Você está na mesa de operação! Aqui transformamos o XML do fornecedor em <strong>atualização de Estoque</strong> e <strong>Contas a Pagar</strong>.
-                </p>
-
+                <p>Você está na mesa de operação! Aqui transformamos o XML do fornecedor em <strong>atualização de Estoque</strong> e <strong>Contas a Pagar</strong>.</p>
                 <div class="wm-step-list">
                     <div class="wm-step-item">
-                        <div class="wm-step-icon">
-                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"></path></svg>
-                        </div>
-                        <div>
-                            <p class="wm-step-title">1. Amarração de Insumos</p>
-                            <p class="wm-step-description">Vincule os produtos da nota aos insumos do seu estoque. O sistema aprenderá essas relações e as preencherá automaticamente nas próximas compras!</p>
-                        </div>
+                        <div class="wm-step-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
+                        <div><p class="wm-step-title">1. Aprovação Inteligente</p><p class="wm-step-description">Se o sistema encontrar produtos que você já vinculou antes, um botão aparecerá no topo para aprová-los em lote.</p></div>
                     </div>
-
                     <div class="wm-step-item">
-                        <div class="wm-step-icon">
-                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                        </div>
-                        <div>
-                            <p class="wm-step-title">2. Fator de Conversão</p>
-                            <p class="wm-step-description">Se o fornecedor vende em CAIXA e você controla em UNIDADE, use a engrenagem para configurar a conversão (ex: 1 CX = 12 UN) e manter seu estoque correto.</p>
-                        </div>
+                        <div class="wm-step-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"></path></svg></div>
+                        <div><p class="wm-step-title">2. Amarração de Insumos</p><p class="wm-step-description">Vincule os produtos desconhecidos aos insumos do estoque. O sistema memorizará essas relações para as próximas notas.</p></div>
                     </div>
-
                     <div class="wm-step-item">
-                        <div class="wm-step-icon">
-                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                        </div>
-                        <div>
-                            <p class="wm-step-title">3. Uso Pessoal ou Consumo</p>
-                            <p class="wm-step-description">Itens que não pertencem ao estoque da loja devem ser marcados como "Uso Pessoal". Isso separa esses custos das suas fichas técnicas automaticamente.</p>
-                        </div>
+                        <div class="wm-step-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg></div>
+                        <div><p class="wm-step-title">3. Uso Pessoal ou Consumo</p><p class="wm-step-description">Itens fora da operação comercial devem ser marcados como "Uso Pessoal", preservando as fichas técnicas de CMV.</p></div>
                     </div>
-                </div>
-
-                <div class="wm-alert-box">
-                    <h4 class="wm-alert-title">
-                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                        Errou alguma coisa? Não se preocupe!
-                    </h4>
-                    <p class="wm-alert-text">
-                        Nas tabelas inferiores de <strong>Itens Processados</strong>, você pode clicar em "Desfazer". O item retornará para a lista de pendências acima para você corrigir amarrações ou fatores.
-                    </p>
-                </div>
-
-                <div class="wm-tip-box">
-                    <p class="wm-tip-text">
-                        <strong>Dica:</strong> A nota só pode ser finalizada após todos os itens serem processados ou movidos para Uso Pessoal.
-                    </p>
                 </div>
             </div>
         ');

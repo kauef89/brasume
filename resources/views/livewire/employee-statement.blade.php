@@ -8,8 +8,8 @@
         <x-slot name="heading">
             Saldo Atual (Conta Corrente)
         </x-slot>
-        
-        <p class="text-4xl font-bold tracking-tight {{ $currentBalance >= 0 ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400' }}">
+
+        <p class="text-4xl font-medium tracking-tight {{ $currentBalance >= 0 ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400' }}">
             R$ {{ number_format($currentBalance, 2, ',', '.') }}
         </p>
     </x-filament::section>
@@ -42,13 +42,13 @@
                                     {{ \Carbon\Carbon::parse($item['date'])->format('d/m/Y \à\s H:i') }}
                                 </div>
                             </td>
-                            
+
                             <td class="fi-ta-cell p-0">
                                 <div class="px-3 py-4 text-sm text-gray-950 dark:text-white sm:first-of-type:ps-6 sm:last-of-type:pe-6">
                                     {{ $item['description'] }}
                                 </div>
                             </td>
-                            
+
                             <td class="fi-ta-cell p-0 text-right">
                                 <div class="px-3 py-4 sm:first-of-type:ps-6 sm:last-of-type:pe-6">
                                     <x-filament::badge :color="$item['type'] === 'credit' ? 'success' : 'danger'">
@@ -56,7 +56,7 @@
                                     </x-filament::badge>
                                 </div>
                             </td>
-                            
+
                             <td class="fi-ta-cell p-0 text-right">
                                 <div class="px-3 py-4 text-sm font-medium {{ $item['balance'] >= 0 ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400' }} sm:first-of-type:ps-6 sm:last-of-type:pe-6">
                                     R$ {{ number_format($item['balance'], 2, ',', '.') }}

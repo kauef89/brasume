@@ -1,0 +1,83 @@
+@layer components {
+    /* ==========================================
+       🧊 SUPERFÍCIES & GLASS (Sem Bordas)
+       ========================================== */
+
+    /* Painel base para modais, gavetas e menus suspensos */
+    .c-glass-panel {
+        @apply bg-black/65 backdrop-blur-2xl border-none shadow-2xl;
+    }
+
+    /* Cards gerais e cards interativos (compartilham a mesma base visual) */
+    .c-glass-card,
+    .c-glass-card-interactive {
+        @apply bg-black/60 saturate-120 backdrop-blur-md border-none rounded-[1.75rem] shadow-lg overflow-hidden;
+    }
+
+    /* Comportamento específico de toque para os cards interativos */
+    .c-glass-card-interactive {
+        @apply cursor-pointer outline-none transition-all duration-150 active:scale-[0.98] active:bg-black/60 select-none;
+    }
+
+    /* ==========================================
+       🔤 TIPOGRAFIA
+       ========================================== */
+
+    .c-title {
+        @apply text-xl md:text-2xl font-black text-white leading-tight tracking-tight;
+    }
+
+    .c-text-main {
+        @apply text-sm md:text-base font-bold text-white/95 leading-snug;
+    }
+
+    .c-text-muted {
+        @apply text-xs font-medium text-white/60 leading-normal;
+    }
+
+    /* ==========================================
+       🖲️ BOTÕES & AÇÕES (Touch-First)
+       ========================================== */
+
+    /* Botão Principal: Cor primária translúcida com texto branco */
+    .c-btn-primary {
+        @apply w-full h-14 rounded-full bg-primary-500/90 text-white font-black text-xs md:text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-transform active:scale-95 active:bg-primary-500 border-none outline-none cursor-pointer shadow-lg shadow-black/40 select-none;
+    }
+
+    /* Botão Ghost: Fundo branco translúcido com contraste */
+    .c-btn-ghost {
+        @apply h-11 px-5 rounded-full bg-white/10 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-transform active:scale-95 active:bg-white/20 border-none outline-none cursor-pointer backdrop-blur-md select-none;
+    }
+
+    /* Botão de Ação Circular / Ícone */
+    .c-btn-icon {
+        @apply w-9 h-9 rounded-full bg-white/10 text-white/90 flex items-center justify-center transition-transform active:scale-90 active:bg-white/25 border-none outline-none cursor-pointer backdrop-blur-md select-none;
+    }
+
+    .c-btn-icon-danger {
+        @apply w-9 h-9 rounded-full bg-red-300/10 text-red-400 flex items-center justify-center transition-transform active:scale-90 active:bg-red-500/30 border-none outline-none cursor-pointer backdrop-blur-md select-none;
+    }
+
+    /* Badges de Destaque / Promo / Status */
+    .c-badge {
+        @apply px-2.5 py-1 rounded-lg bg-white/20 text-white text-[10px] font-black uppercase tracking-widest backdrop-blur-md shadow-sm;
+    }
+
+    /* ==========================================
+        🏝️ ILHA DINÂMICA
+        ========================================== */
+
+    .c-island-btn {
+        @apply text-2xl w-14 h-12 rounded-full flex items-center justify-center transition-all duration-150 outline-none cursor-pointer border-none bg-transparent select-none;
+    }
+
+    /* Estado Ativo: Fundo branco translúcido e ícone branco */
+    .c-island-btn-active {
+        @apply bg-white/10 text-white shadow-sm;
+    }
+
+    /* Estado Inativo: Ícone suave com feedback rápido no toque */
+    .c-island-btn-inactive {
+        @apply text-white/50 active:bg-white/10 active:text-white/80;
+    }
+}

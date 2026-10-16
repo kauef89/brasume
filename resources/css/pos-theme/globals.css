@@ -1,0 +1,97 @@
+/* COMPORTAMENTOS GLOBAIS DE UX */
+[x-cloak] { display: none !important; }
+
+@layer base {
+    /* 🚀 Removemos a borda obrigatória de todos os elementos! */
+    * {
+        @apply outline-primary-500/50;
+    }
+
+    body {
+        /* 🚀 CORREÇÃO 2: Usando nosso sistema de superfícies no body! */
+        @apply bg-surface-1 text-surface-text font-sans antialiased;
+        overscroll-behavior-y: none;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+        background: var(--surface-muted);
+        border-radius: 9999px;
+    }
+
+    /* Fix PrimeVue */
+    i.pi, .p-button .pi, .p-button-icon {
+            color: currentColor !important;
+            font-size: inherit !important;
+        }
+    }
+
+/* 🚀 NOSSOS UTILITÁRIOS GLOBAIS DRY */
+@layer utilities {
+    .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+    .hide-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    /* A animação que se repetia nos modais */
+    .animate-fade-in {
+        animation: fade-in 0.2s ease-out forwards;
+    }
+
+    @keyframes fade-in {
+        from { opacity: 0; transform: translateY(-5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+}
+
+/* =========================================================
+   SCROLLBAR TRANSLÚCIDA E AUTO-HIDE (MacOS Style)
+   ========================================================= */
+
+/* Comportamento padrão para Firefox */
+.scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent; /* Escondida por padrão */
+    transition: scrollbar-color 0.3s ease;
+}
+
+/* Mostra no Firefox ao passar o mouse */
+.scroll-container:hover {
+    /* Cinza translúcido e fundo transparente */
+    scrollbar-color: rgba(156, 163, 175, 0.2) transparent;
+}
+
+/* =========================================================
+   Webkit (Chrome, Edge, Safari, Opera)
+   ========================================================= */
+
+/* Largura da barra */
+.scroll-container::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+/* O trilho (fundo) da barra - 100% transparente */
+.scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* A "pegada" da barra - Invisível por padrão */
+.scroll-container::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 10px;
+}
+
+/* A MÁGICA: Revela a barra (translúcida) quando o mouse entra no contêiner */
+.scroll-container:hover::-webkit-scrollbar-thumb {
+    background-color: rgba(156, 163, 175, 0.2); /* Cor cinza do Tailwind com 40% de opacidade */
+}
+
+/* Fica mais escura/visível se o usuário passar o mouse na PRÓPRIA barra para arrastar */
+.scroll-container::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(156, 163, 175, 0.4);
+}

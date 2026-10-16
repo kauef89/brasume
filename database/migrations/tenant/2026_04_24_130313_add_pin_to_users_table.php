@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             // Criamos a coluna PIN como string para aceitar "0000" ou "Mezz"
-            $table->string('pin', 10)->nullable()->after('password');
+            $table->text('pin')->nullable();
         });
     }
 

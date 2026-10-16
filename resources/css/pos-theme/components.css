@@ -1,0 +1,248 @@
+/* COMPONENTES CUSTOMIZADOS (BRASUME) */
+
+@layer utilities {
+    /* 🚀 Estas classes estão liberadas para usar direto nos arquivos .vue! */
+    .text-primary-smart { @apply text-primary-600 dark:text-primary-400; }
+    .text-success-smart { @apply text-success-600 dark:text-success-400; }
+    .text-danger-smart  { @apply text-danger-600 dark:text-danger-400; }
+    .text-warning-smart { @apply text-warning-600 dark:text-warning-400; }
+    .text-info-smart    { @apply text-info-600 dark:text-info-400; }
+
+    /* Utilitários antigos do PrimeVue refatorados (Usando classes nativas) */
+    .p-hover { @apply transition-colors cursor-pointer hover:bg-primary-500/40; }
+    .p-option { @apply transition-colors cursor-pointer text-primary-800 dark:text-primary-200 bg-primary-500/10 hover:bg-primary-500/40; }
+    .p-active { @apply bg-primary-500 text-white; dark:text-black; }
+
+    .drag-ghost {
+            @apply opacity-30 scale-95;
+        }
+}
+
+@layer components {
+    /* =======================================
+       1. BOTÕES DE ÍCONE (HEADER / AÇÕES)
+       ======================================= */
+    .btn-icon {
+        @apply w-9 h-9 rounded-xl flex items-center justify-center transition-all outline-none select-none cursor-pointer;
+    }
+
+    /* 🔵 BOTÃO PRIMÁRIO (Ex: Trocar Tipo de Pedido) */
+    .btn-icon-primary {
+        @apply bg-primary-500/10 text-primary-600;
+    }
+    .btn-icon-primary:hover {
+        @apply bg-primary-500/20 text-primary-700;
+    }
+    .dark .btn-icon-primary {
+        @apply text-primary-400;
+    }
+    .dark .btn-icon-primary:hover {
+        @apply text-primary-300;
+    }
+    .btn-icon-primary:active,
+    .btn-icon-primary.active {
+        @apply bg-primary-500 text-white shadow-md;
+    }
+
+    /* 🔴 BOTÃO DE PERIGO (Ex: Limpar Carrinho) */
+    .btn-icon-danger {
+        @apply bg-danger-500/10 text-danger-600;
+    }
+    .btn-icon-danger:hover {
+        @apply bg-danger-500/20 text-danger-700;
+    }
+    .dark .btn-icon-danger {
+        @apply text-danger-400;
+    }
+    .dark .btn-icon-danger:hover {
+        @apply text-danger-300;
+    }
+    .btn-icon-danger:active {
+        @apply bg-danger-600 text-white shadow-md;
+    }
+
+    /* 🟢 BOTÃO DE SUCESSO (Ex: WhatsApp) */
+    .btn-icon-success {
+        @apply bg-success-500/10 text-success-600;
+    }
+    .btn-icon-success:hover {
+        @apply bg-success-500/20 text-success-700;
+    }
+    .dark .btn-icon-success {
+        @apply text-success-400;
+    }
+    .dark .btn-icon-success:hover {
+        @apply text-success-300;
+    }
+    .btn-icon-success:active,
+    .btn-icon-success.active {
+        @apply bg-success-500 text-white shadow-md;
+    }
+
+    /* =======================================
+           2. CARDS E SUPERFÍCIES (DRY LÓGICA)
+           ======================================= */
+        /* 🚀 SEM BORDAS, ELEVAÇÃO POR SOMBRA E FUNDO */
+        .surface-card {
+            @apply rounded-2xl p-3 transition-colors cursor-pointer bg-surface-2 hover:bg-surface-3 shadow-sm;
+        }
+
+        .surface-card-interactive {
+            @apply cursor-pointer select-none outline-none;
+        }
+        .surface-card-interactive:hover {
+            @apply bg-surface-3 shadow;
+        }
+        .surface-card-interactive:active {
+            @apply scale-[0.98] shadow-sm;
+        }
+
+        .surface-card-selected {
+            @apply bg-primary-500 text-white shadow-md;
+        }
+
+        .surface-card-ghost {
+            @apply rounded-xl p-3 transition-colors cursor-pointer select-none;
+        }
+        .surface-card-ghost:hover {
+            @apply bg-surface-2;
+        }
+        .surface-card-ghost.is-expanded {
+            @apply bg-surface-3;
+        }
+
+    /* =======================================
+       3. BOTÕES DE AÇÃO PEQUENOS (TEXTO + ÍCONE)
+       ======================================= */
+    .btn-action {
+        @apply px-2.5 py-1.5 rounded-lg text-xs font-black uppercase transition-colors flex items-center gap-1.5 outline-none select-none cursor-pointer;
+    }
+
+    /* Ação Primária (Editar, Embalar) */
+    .btn-action-primary {
+        @apply bg-primary-500/10 text-primary-600;
+    }
+    .btn-action-primary:hover {
+        @apply bg-primary-500/20 text-primary-700;
+    }
+    .dark .btn-action-primary {
+        @apply text-primary-400;
+    }
+    .dark .btn-action-primary:hover {
+        @apply text-primary-300;
+    }
+    .btn-action-primary:active {
+        @apply bg-primary-500 text-white;
+    }
+
+    /* Ação de Atenção (Viagem / Selecionado) */
+    .btn-action-warning {
+        @apply bg-warning-500/10 text-warning-600;
+    }
+    .btn-action-warning:hover {
+        @apply bg-warning-500/20 text-warning-700;
+    }
+    .dark .btn-action-warning {
+        @apply text-warning-400;
+    }
+    .dark .btn-action-warning:hover {
+        @apply text-warning-300;
+    }
+    .btn-action-warning:active {
+        @apply bg-warning-500 text-white;
+    }
+
+    /* =======================================
+           4. BADGES SEMÂNTICAS (TAGS E STATUS)
+           ======================================= */
+        .badge {
+            /* Inline-flex para alinhar com o texto, padding bem pequeno e fonte minúscula */
+            @apply inline-flex items-center justify-center px-1.5 py-0.75 rounded-md text-[9px] font-black uppercase tracking-widest gap-1 select-none;
+        }
+
+        /* Variação Icon-Only (Para ficar quadradinha quando não tem texto) */
+        .badge-icon-only {
+            @apply w-5 h-5 p-0 rounded-md;
+        }
+
+        /* 🔵 Primária */
+        .badge-primary {
+            @apply bg-primary-500/10 text-primary-600;
+        }
+        .dark .badge-primary { @apply text-primary-400; }
+
+        /* 🟠 Warning (Atenção / Viagem) */
+        .badge-warning {
+            @apply bg-warning-500/10 text-warning-600;
+        }
+        .dark .badge-warning { @apply text-warning-400; }
+
+        /* 🔴 Danger (Erros / Cancelado) */
+        .badge-danger {
+            @apply bg-danger-500/10 text-danger-600;
+        }
+        .dark .badge-danger { @apply text-danger-400; }
+
+        /* 🟢 Success (Pronto / Confirmado) */
+        .badge-success {
+            @apply bg-success-500/10 text-success-600;
+        }
+        .dark .badge-success { @apply text-success-400; }
+
+        /* =======================================
+               5. CONTROLES SEGMENTADOS (Toggles/Tabs)
+               ======================================= */
+            /* Container Pílula (Para opções em linha) */
+            .segment-group {
+                @apply flex flex-wrap bg-surface-2 p-1.5 rounded-full gap-1;
+            }
+
+            /* Container Retangular (Para opções em grade, ex: Maior R$ / Menor R$) */
+            .segment-group-box {
+                @apply flex flex-wrap bg-surface-2 p-1.5 rounded-2xl gap-1;
+            }
+
+            /* Botão Base */
+            .segment-btn {
+                @apply flex-1 px-4 py-2 text-sm font-medium text-surface-muted hover:bg-surface-3 transition-colors flex items-center justify-center gap-2 outline-none cursor-pointer select-none;
+            }
+
+            /* O arredondamento do botão se adapta automaticamente ao pai */
+            .segment-group .segment-btn { @apply rounded-full; }
+            .segment-group-box .segment-btn { @apply rounded-xl; }
+
+            /* Estado Ativo (O visual lindo que você criou!) */
+            .segment-btn.active,
+            .segment-btn-active {
+                @apply bg-primary-500/10 text-primary-600 dark:text-primary-400;
+            }
+
+            /* =======================================
+                   6. CARDS DE CONFIGURAÇÃO (Settings)
+                   ======================================= */
+                /* 🚀 SEM BORDAS */
+                .setting-card {
+                    @apply flex flex-col md:flex-row items-start md:items-center justify-between p-6 bg-surface-2 shadow-sm rounded-[1.5rem] gap-4;
+                }
+                .setting-card-title {
+                    @apply font-medium text-lg text-surface-text;
+                }
+                .setting-card-desc {
+                    @apply text-surface-muted text-sm mt-1;
+                }
+
+                /* =======================================
+                   7. UTILITÁRIOS GLOBAIS DE INTERFACE (DRY)
+                   ======================================= */
+                .heading-h1 { @apply text-2xl font-black text-surface-text leading-tight; }
+                .heading-h2 { @apply text-xl font-black text-surface-text leading-tight; }
+                .micro-label { @apply text-[10px] font-black uppercase tracking-widest text-surface-muted; }
+
+                /* 🚀 INPUTS SEM BORDAS, DESTACADOS POR FUNDO DIFERENTE */
+                .form-input { @apply w-full h-12 px-4 rounded-xl bg-surface-3 text-surface-text font-medium text-sm outline-none focus:ring-2 focus:ring-primary-500/30 transition-all; }
+
+                /* 🚀 PAINÉIS SÓLIDOS (O Monolito) */
+                .panel-card { @apply bg-surface-2 p-6 rounded-[2rem] shadow-sm; }
+                }
+
+                .no-shadow { box-shadow: 0 !important;}

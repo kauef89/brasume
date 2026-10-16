@@ -14,6 +14,8 @@ use App\Filament\Resources\CashShifts\Tables\CashShiftTable;
 class CashShiftResource extends Resource
 {
     protected static ?string $model = CashShift::class;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'Vendas & Atendimento';
     protected static ?string $slug = 'turnos-de-caixa';
 
     public static function getNavigationIcon(): string | \BackedEnum | null { return 'heroicon-o-inbox-stack'; }

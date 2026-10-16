@@ -10,7 +10,7 @@
 }
 
 .wm-alert-title {
-    @apply font-bold text-primary-700 mb-2 flex items-center gap-2 text-base;
+    @apply font-medium text-primary-700 mb-2 flex items-center gap-2 text-base;
 }
 
 .wm-alert-text {
@@ -34,7 +34,7 @@
 }
 
 .wm-step-title {
-    @apply font-bold text-primary-600;
+    @apply font-medium text-primary-600;
 }
 
 .wm-step-description {

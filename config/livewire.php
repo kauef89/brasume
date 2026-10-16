@@ -63,7 +63,7 @@ return [
     */
 
     "temporary_file_upload" => [
-        "disk" => null,
+        "disk" => "livewire_tmp",
         "rules" => "file|max:131072",
         "directory" => null,
 
@@ -91,6 +91,7 @@ return [
             "mpga",
             "webp",
             "wma",
+            "svg"
         ],
         "max_upload_time" => 5,
     ],

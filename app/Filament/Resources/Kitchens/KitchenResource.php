@@ -15,8 +15,8 @@ class KitchenResource extends Resource
 {
     use HasGlobalSearch;
     protected static ?string $model = Kitchen::class;
-    // protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-fire';
-    protected static string | \UnitEnum | null $navigationGroup = 'Logística';
+    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-fire';
+    protected static string | \UnitEnum | null $navigationGroup = 'Produção & Cozinha';
     protected static ?string $modelLabel = 'Cozinha';
     protected static ?string $pluralModelLabel = 'Cozinhas';
 

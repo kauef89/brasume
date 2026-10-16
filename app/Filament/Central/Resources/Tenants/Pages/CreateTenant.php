@@ -11,18 +11,17 @@ class CreateTenant extends CreateRecord
 
     protected static string $resource = TenantResource::class;
 
-    // A MÁGICA ACONTECE AQUI! Quando a lanchonete é criada:
     protected function afterCreate(): void
     {
-        // O registo recém-criado
         $tenant = $this->record;
 
-        // O domínio base do seu SaaS
-        $baseDomain = 'brasume.com.br';
+        // 🚀 RECUPERA O CAMPO FANTASMA DO FORMULÁRIO (E não o hardcode do brasume)
+        $customDomain = $this->data['custom_domain'] ?? null;
 
-        // Anexamos o subdomínio à loja (para o middleware de rotas funcionar depois!)
-        $tenant->domains()->create([
-            'domain' => $tenant->id . '.' . $baseDomain,
-        ]);
+        if ($customDomain) {
+            $tenant->domains()->create([
+                'domain' => strtolower(trim($customDomain))
+            ]);
+        }
     }
 }

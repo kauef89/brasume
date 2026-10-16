@@ -2,135 +2,97 @@
 
 namespace App\Filament\Widgets;
 
-use App\Services\BillingConsolidator;
 use Filament\Widgets\ChartWidget;
 use Filament\Widgets\Concerns\InteractsWithPageFilters;
+use App\Services\Analytics\BillingService;
+use App\Services\Analytics\LegacyDataCapabilityService;
 use Carbon\Carbon;
-use Carbon\CarbonPeriod;
 
 class BillingChartWidget extends ChartWidget
 {
     use InteractsWithPageFilters;
 
-    protected static bool $isDiscovered = false;
-    protected ?string $heading = "Evolução do Faturamento";
+    protected ?string $heading = 'Evolução de Receita';
     protected static ?int $sort = 2;
     protected int | string | array $columnSpan = 'full';
 
-    // 🚀 AJUSTE 2: Reduzindo a altura do gráfico (o padrão do Filament costuma ser 400px)
-    protected ?string $maxHeight = '300px';
+    // 🚀 REDUZINDO A ALTURA PARA UM VISUAL PANORÂMICO
+    protected ?string $maxHeight = '220px';
 
     protected function getData(): array
     {
-        $startDateStr = $this->filters['startDate'] ?? now()->subDays(30)->toDateString();
-        $endDateStr = $this->filters['endDate'] ?? now()->toDateString();
-        $compareWith = $this->filters['compare_with'] ?? 'none';
-        $groupBy = $this->filters['group_by'] ?? 'day';
-        $stratifyBy = $this->filters['stratify_by'] ?? 'none';
+        // 🚀 Trata $this->filters nulo no ciclo inicial do Livewire
+        $filters = $this->filters ?? [];
 
-        $filterType = $this->filters['order_type'] ?? null;
-        $filterPayment = $this->filters['payment_method'] ?? null;
+        $data = BillingService::getConsolidatedDailyRevenue($filters);
 
-        $data = BillingConsolidator::getDashboardData($startDateStr, $endDateStr, $compareWith, $groupBy, $stratifyBy, $filterType, $filterPayment);
+        $timeGrouping = $filters['time_grouping'] ?? 'day';
 
-        $currentSeries = is_array($data['current_series']) ? $data['current_series'] : collect($data['current_series'])->toArray();
-        $previousSeries = is_array($data['previous_series']) ? $data['previous_series'] : collect($data['previous_series'])->toArray();
+        // 🚀 AGRUPAMENTO INTELIGENTE (INCLUINDO ANO)
+        $groupedData = collect($data)->groupBy(function ($row) use ($timeGrouping) {
+            $date = Carbon::parse($row->report_date);
+            return match ($timeGrouping) {
+                'year' => $date->format('Y'),
+                'week' => 'Sem. ' . $date->format('W / Y'),
+                'month' => ucfirst($date->translatedFormat('M / Y')),
+                default => $date->format('d/m/Y'),
+            };
+        });
 
         $labels = [];
-        $datasets = [];
+        $revenueData = [];
 
-        // 1. MONTAR AS DATAS (Eixo X)
-        if ($groupBy === 'day') {
-            $period = CarbonPeriod::create($startDateStr, $endDateStr);
-            foreach ($period as $date) {
-                $labels[] = $date->format("d/m");
-            }
-        } else {
-            $labels = array_keys($currentSeries);
-        }
-
-        // 2. MONTAR OS DATASETS
-        if ($stratifyBy === 'none') {
-            // COMPORTAMENTO NORMAL
-            $currentData = [];
-            $previousData = [];
-
-            foreach ($currentSeries as $key => $values) {
-                $currentData[] = $values['revenue'] ?? 0;
-            }
-            foreach ($previousSeries as $key => $values) {
-                $previousData[] = $values['revenue'] ?? 0;
-            }
-
-            $datasets[] = [
-                'label' => 'Faturamento Atual (R$)',
-                'data' => $currentData,
-                'backgroundColor' => '#10b981', // Verde sólido
-                'borderRadius' => 4,
-            ];
-
-            // 🚀 AJUSTE 1: Barras Lado a Lado para Comparação
-            if ($data['is_comparing'] && !empty($previousData)) {
-                $datasets[] = [
-                    'label' => 'Período Anterior (R$)',
-                    'data' => $previousData,
-                    'backgroundColor' => '#d1d5db', // Cinza claro para não "roubar" a atenção da barra verde
-                    'borderRadius' => 4,
-                    // Removemos o 'type' => 'line' e as configurações de borda tracejada!
-                ];
-            }
-        } else {
-            // COMPORTAMENTO ESTRATIFICADO (Barras Empilhadas)
-            $colors = [
-                '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#64748b'
-            ];
-            $colorIndex = 0;
-
-            $stratifiedSeries = is_array($data['stratified_series']) ? $data['stratified_series'] : collect($data['stratified_series'])->toArray();
-
-            foreach ($stratifiedSeries as $groupName => $valuesArray) {
-                $datasets[] = [
-                    'label' => ucfirst($groupName),
-                    'data' => array_values($valuesArray),
-                    'backgroundColor' => $colors[$colorIndex % count($colors)],
-                    'borderRadius' => 0,
-                ];
-                $colorIndex++;
-            }
+        foreach ($groupedData as $label => $group) {
+            $labels[] = $label;
+            $revenueData[] = round($group->sum('total_revenue'), 2);
         }
 
         return [
-            'datasets' => $datasets,
+            'datasets' => [
+                [
+                    'label' => 'Faturamento Consolidado (R$)',
+                    'data' => $revenueData,
+                    'fill' => 'start',
+                    'backgroundColor' => 'rgba(16, 185, 129, 0.1)',
+                    'borderColor' => '#10b981',
+                    'tension' => 0.4,
+                ],
+            ],
             'labels' => $labels,
         ];
     }
 
     protected function getType(): string
     {
-        return 'bar';
+        return 'line';
     }
 
+    // 🚀 MÁGICA DO EIXO X: Esconde as datas espremidas
     protected function getOptions(): array
     {
-        $stratifyBy = $this->filters['stratify_by'] ?? 'none';
-
         return [
             'scales' => [
                 'x' => [
-                    'stacked' => $stratifyBy !== 'none',
-                ],
-                'y' => [
-                    'stacked' => $stratifyBy !== 'none',
-                ],
-            ],
-            'plugins' => [
-                'tooltip' => [
-                    'mode' => 'index',
-                    'intersect' => false,
+                    'ticks' => [
+                        'autoSkip' => true,
+                        'maxTicksLimit' => 12,
+                        'maxRotation' => 0,
+                    ],
                 ],
             ],
-            // 🚀 Garante que o Chart.js respeite a nossa altura de 250px em vez de tentar ficar quadrado
-            'maintainAspectRatio' => false,
         ];
+    }
+
+    protected function getEmptyStateDescription(): ?string
+    {
+        $startDate = $this->filters['startDate'] ?? null;
+
+        $cutoffMessage = LegacyDataCapabilityService::getDetailedCutoffMessage($startDate);
+
+        if ($cutoffMessage) {
+            return $cutoffMessage;
+        }
+
+        return 'Não existem dados de faturamento (nem legados, nem atuais) registados para os filtros selecionados.';
     }
 }

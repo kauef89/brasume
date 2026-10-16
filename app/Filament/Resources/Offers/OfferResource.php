@@ -12,7 +12,7 @@ use Filament\Tables\Table;
 class OfferResource extends Resource {
     protected static ?string $model = Offer::class;
     // protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-megaphone';
-    protected static string | \UnitEnum | null $navigationGroup = 'CRM';
+    protected static string | \UnitEnum | null $navigationGroup = 'CRM & Marketing';
     protected static ?string $modelLabel = 'Oferta';
     protected static ?string $pluralModelLabel = 'Ofertas';
 

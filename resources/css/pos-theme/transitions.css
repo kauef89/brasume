@@ -1,0 +1,44 @@
+/* ==========================================
+   TRANSIÇÕES GLOBAIS DE MODAIS E BOTTOM SHEETS
+   ========================================== */
+
+/* 1. Transição do Fundo Desfocado (Overlay) */
+.fade-enter-active,
+.fade-leave-active,
+.fade-backdrop-enter-active,
+.fade-backdrop-leave-active {
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fade-enter-from,
+.fade-leave-to,
+.fade-backdrop-enter-from,
+.fade-backdrop-leave-to {
+    opacity: 0;
+}
+
+/* 2. Transição Metamorfa do Painel (Bottom Sheet Mobile / Modal Desktop) */
+.slide-up-enter-active,
+.slide-up-leave-active {
+    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.1), opacity 0.3s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+    transform: translateY(100%);
+    opacity: 0;
+}
+
+/* 3. Comportamento Adaptativo no Desktop (Aparece no centro da tela) */
+@media (min-width: 768px) {
+    .slide-up-enter-from,
+    .slide-up-leave-to {
+        transform: scale(0.95) translateY(10px);
+        opacity: 0;
+    }
+
+    .slide-up-enter-active,
+    .slide-up-leave-active {
+        transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+    }
+}

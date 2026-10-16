@@ -4,6 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LegacyDailyRevenue newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LegacyDailyRevenue newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|LegacyDailyRevenue query()
+ * @mixin \Illuminate\Database\Eloquent\Builder
+ */
 class LegacyDailyRevenue extends Model
 {
     protected $guarded = [];

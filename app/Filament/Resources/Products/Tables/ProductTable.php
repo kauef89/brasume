@@ -2,15 +2,23 @@
 
 namespace App\Filament\Resources\Products\Tables;
 
+
+use App\Enums\ProductStatus;use App\Filament\Resources\Products\Actions\MergeProductsBulkAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Tables\Table;
 use Filament\Tables;
 use Filament\Actions;
+use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
 use App\Models\Category;
 use App\Models\Product;
 use App\Filament\Resources\Products\ProductResource;
 use Illuminate\Database\Eloquent\Collection;
 use Filament\Forms\Components as FormComponents;
-use App\Services\ProductCostingService;
+use App\Services\Catalog\ProductCostingService;
+use App\Services\Catalog\AvailabilityService;
+use Filament\Notifications\Notification;
+use Illuminate\Validation\ValidationException;
 
 class ProductTable
 {
@@ -22,31 +30,53 @@ class ProductTable
                 Tables\Columns\TextColumn::make('name')
                     ->label('Nome do Produto')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->grow(true)
+                    ->wrap(),
 
                 Tables\Columns\TextColumn::make('type')
                     ->label('Tipo')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => match (strtolower($state)) {
-                        'dish' => 'Prato',
-                        'combo' => 'Combo',
-                        'resale' => 'Revenda',
-                        'ingredient' => 'Insumo',
+                        'dish'         => 'Prato',
+                        'combo'        => 'Combo',
+                        'resale'       => 'Revenda',
+                        'ingredient'   => 'Insumo',
                         'manufactured' => 'Preparado',
-                        default => ucfirst($state),
+                        default        => ucfirst($state),
                     })
-                    ->color('gray'),
+                    ->color('gray')
+                    ->grow(false),
 
-                Tables\Columns\TextColumn::make('category.name')
+                Tables\Columns\SelectColumn::make('category_id')
                     ->label('Categoria')
-                    ->default('Sem Categoria')
-                    ->sortable()
-                    ->searchable(),
+                    ->options(function () {
+                        return Category::query()
+                            ->with('parent')
+                            ->get()
+                            ->sortBy(fn ($cat) => ($cat->parent?->name ?? $cat->name) . ' ' . $cat->name)
+                            ->mapWithKeys(function (Category $category) {
+                                $label = $category->parent
+                                    ? "{$category->parent->name} ➔ {$category->name}"
+                                    : "📁 {$category->name}";
 
-                Tables\Columns\TextColumn::make('dine_in_price')
+                                return [$category->id => $label];
+                            })
+                            ->toArray();
+                    })
+                    ->placeholder('Sem Categoria')
+                    ->sortable()
+                    ->selectablePlaceholder(false)
+                    ->grow(true),
+
+                Tables\Columns\TextInputColumn::make('dine_in_price')
                     ->label('Preço Salão')
-                    ->money('BRL')
-                    ->sortable(),
+                    ->type('number')
+                    ->step('0.01')
+                    ->rules(['required', 'numeric', 'min:0'])
+                    ->sortable()
+                    ->grow(false)
+                    ->width('1%'),
 
                 Tables\Columns\TextColumn::make('lucratividade')
                     ->label('Margem')
@@ -64,68 +94,75 @@ class ProductTable
                         if ($pct >= 30) return 'success';
                         if ($pct >= 15) return 'warning';
                         return 'danger';
-                    }),
+                    })
+                    ->grow(false),
 
-                Tables\Columns\TextColumn::make('status')
+                Tables\Columns\SelectColumn::make('status')
                     ->label('Status')
-                    ->badge()
-                    ->colors([
-                        'gray' => 'available',
-                        'warning' => 'out_of_stock',
-                        'danger' => 'archived'
-                    ])
-                    ->formatStateUsing(fn (string $state): string => match (strtolower($state)) {
-                        'available' => 'Disponível',
-                        'out_of_stock' => 'Esgotado',
-                        'archived' => 'Arquivado',
-                        default => ucfirst($state),
+                    ->options(ProductStatus::class)
+                    ->selectablePlaceholder(false)
+                    ->sortable()
+                    ->rules(['required'])
+                    ->grow(false)
+                    ->width('155px')
+                    ->updateStateUsing(function ($record, $state, $livewire) {
+                        // 1. Barreira estrita: Disponível exige saldo físico positivo
+                        if ($state === 'available' && $record->track_inventory && (float) $record->current_stock <= 0) {
+                            Notification::make()
+                                ->warning()
+                                ->title('Estoque Zerado')
+                                ->body("Você não pode colocar '{$record->name}' como disponível sem dar entrada no saldo.")
+                                ->send();
+
+                            $livewire->dispatch('$refresh');
+                            return;
+                        }
+
+                        // 2. Dispara a máquina de estados completa do AvailabilityService
+                        try {
+                            app(AvailabilityService::class)->updateAvailability($record->id, $state);
+
+                            Notification::make()
+                                ->success()
+                                ->title('Disponibilidade Atualizada')
+                                ->body("Status de '{$record->name}' atualizado com cascata e propagação em tempo real.")
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Erro ao Atualizar')
+                                ->body($e->getMessage())
+                                ->send();
+                        }
+
+                        $livewire->dispatch('$refresh');
                     }),
 
                 Tables\Columns\TextColumn::make('connection_status')
                     ->label('Cadeia de custos')
                     ->state(function (Product $record) {
-                        // Verifica validação para Pratos
                         if ($record->type === 'dish') {
                             return $record->technicalSheets()->exists() ? 'Conectado' : 'Desconectado';
                         }
 
-                        // Verifica validação para Revendas
                         if ($record->type === 'resale') {
                             return $record->costHistories()->exists() ? 'Conectado' : 'Desconectado';
                         }
 
-                        // Para Insumos e Preparados, podemos assumir que estão conectados
-                        // ou retornar `null` se você quiser esconder a badge para eles.
                         return 'Conectado';
                     })
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'Conectado' => 'gray',
+                        'Conectado'    => 'gray',
                         'Desconectado' => 'danger',
-                        default => 'gray',
+                        default        => 'gray',
                     })
                     ->icon(fn (string $state): string => match ($state) {
-                        'Conectado' => 'heroicon-m-link',
+                        'Conectado'    => 'heroicon-m-link',
                         'Desconectado' => 'heroicon-m-link-slash',
-                        default => 'heroicon-m-link',
+                        default        => 'heroicon-m-link',
                     })
-                    ->tooltip(function (Product $record, $state) {
-                        if ($state === 'Desconectado') {
-                            if ($record->type === 'dish') {
-                                return 'Este prato precisa estar associado a uma Ficha Técnica para o cálculo de custo e baixa automática de estoque.';
-                            }
-                            if ($record->type === 'resale') {
-                                return 'Este produto precisa estar associado a uma Nota de Compra para o cálculo do custo médio.';
-                            }
-                        }
-
-                        // Tooltip extra para os que estão corretos!
-                        if ($state === 'Conectado') {
-                            return 'Cadeia de custos validada e configurada corretamente.';
-                        }
-
-                        return null;
-                    }),
+                    ->grow(false),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('category_id')
@@ -138,26 +175,22 @@ class ProductTable
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Status')
                     ->multiple()
-                    ->options([
-                        'available' => 'Disponível',
-                        'out_of_stock' => 'Esgotado',
-                        'archived' => 'Arquivado'
-                    ]),
+                    ->options(ProductStatus::class),
             ])
             ->actions([])
             ->bulkActions([
-                // 🚀 Bulk Actions usando o namespace correto de Tables
-                Actions\BulkActionGroup::make([
-                    Actions\DeleteBulkAction::make(),
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                    MergeProductsBulkAction::make(),
 
-                    Actions\BulkAction::make('alterarCategoria')
+                    BulkAction::make('alterarCategoria')
                         ->label('Alterar Categoria')
                         ->icon('heroicon-o-tag')
                         ->form([
                             FormComponents\Select::make('category_id')
                                 ->label('Nova Categoria')
                                 ->options(fn () => Category::pluck('name', 'id'))
-                                ->required()
+                                ->required(),
                         ])
                         ->action(fn(Collection $records, array $data) => $records->each->update(['category_id' => $data['category_id']])),
 
@@ -167,14 +200,42 @@ class ProductTable
                         ->form([
                             FormComponents\Select::make('status')
                                 ->label('Novo Status')
-                                ->options([
-                                    'available' => 'Disponível',
-                                    'out_of_stock' => 'Esgotado',
-                                    'archived' => 'Arquivado'
-                                ])
-                                ->required()
+                                ->options(ProductStatus::class)
+                                ->required(),
                         ])
-                        ->action(fn(Collection $records, array $data) => $records->each->update(['status' => $data['status']])),
+                        ->action(function(Collection $records, array $data) {
+                            $successCount = 0;
+                            $skippedCount = 0;
+                            $availabilityService = app(AvailabilityService::class);
+
+                            foreach ($records as $record) {
+                                if ($data['status'] === 'available' && $record->track_inventory && (float) $record->current_stock <= 0) {
+                                    $skippedCount++;
+                                    continue;
+                                }
+
+                                try {
+                                    $availabilityService->updateAvailability($record->id, $data['status']);
+                                    $successCount++;
+                                } catch (\Throwable $e) {
+                                    $skippedCount++;
+                                }
+                            }
+
+                            if ($skippedCount > 0) {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Atenção ao Estoque')
+                                    ->body("{$successCount} produtos atualizados. {$skippedCount} foram ignorados por estarem sem estoque ou com pendências.")
+                                    ->send();
+                            } else {
+                                Notification::make()
+                                    ->success()
+                                    ->title('Sucesso!')
+                                    ->body("{$successCount} produtos atualizados com propagação em tempo real.")
+                                    ->send();
+                            }
+                        }),
                 ]),
             ]);
     }

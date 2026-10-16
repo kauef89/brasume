@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Filament\Resources\LegacyDailyRevenueResource\Pages;
+namespace App\Filament\Resources\LegacyDailyRevenue\Pages;
 
-use App\Filament\Resources\LegacyDailyRevenueResource\LegacyDailyRevenueResource;
+use App\Filament\Resources\LegacyDailyRevenue\LegacyDailyRevenueResource;
 use App\Models\LegacyDailyRevenue;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ManageRecords;
-use Filament\Forms\Components\Wizard\Step;
+use Filament\Schemas\Components\Wizard\Step;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;

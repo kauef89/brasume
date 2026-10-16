@@ -1,0 +1,10 @@
+@font-face {
+    font-family: 'Stack Sans Text';
+    /* 🚀 Ajuste o caminho abaixo dependendo de onde você salvou o arquivo .ttf */
+    src: url('../fonts/brasume/StackSansText-VariableFont_wght.ttf') format('truetype');
+
+    /* 🚀 O segredo da fonte variável: declaramos o intervalo de pesos! */
+    font-weight: 200 700;
+    font-style: normal;
+    font-display: swap; /* Evita que o texto suma enquanto a fonte carrega */
+}

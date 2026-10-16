@@ -11,9 +11,16 @@ class ListCategories extends ListRecords
     protected static string $resource = CategoryResource::class;
 
     protected function getHeaderActions(): array
-    {
-        return [
-            Actions\CreateAction::make(),
-        ];
-    }
+        {
+            return [
+                // 🚀 O BOTÃO DE ACESSO À ÁRVORE
+                Actions\Action::make('reorganize')
+                    ->label('Reorganizar Hierarquia')
+                    ->icon('heroicon-o-queue-list')
+                    ->color('info')
+                    ->url(fn () => static::getResource()::getUrl('tree')),
+
+                Actions\CreateAction::make(),
+            ];
+        }
 }

@@ -10,7 +10,7 @@
                     <div class="flex items-center justify-center w-12 h-12 mb-4 rounded-full bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400">
                         <x-filament::icon icon="heroicon-o-presentation-chart-line" class="w-6 h-6" />
                     </div>
-                    <h3 class="text-lg font-bold text-gray-900 dark:text-white">Faturamento Diário Consolidado</h3>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">Faturamento Diário Consolidado</h3>
                     <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">
                         Indicado para empresas sem dados fiscais ou registros detalhados. Importa apenas a data e o faturamento bruto diário.
                     </p>
@@ -31,7 +31,7 @@
                     <div class="flex items-center justify-center w-12 h-12 mb-4 rounded-full bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400">
                         <x-filament::icon icon="heroicon-o-shopping-cart" class="w-6 h-6" />
                     </div>
-                    <h3 class="text-lg font-bold text-gray-900 dark:text-white">Histórico de Pedidos Detalhados</h3>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">Histórico de Pedidos Detalhados</h3>
                     <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">
                         Lê relatórios de PDV antigos via CSV. Agrupa itens por pedido/comanda, vincula clientes e mapeia taxas de entrega.
                     </p>
@@ -52,7 +52,7 @@
                     <div class="flex items-center justify-center w-12 h-12 mb-4 rounded-full bg-primary-100 text-primary-600 dark:bg-primary-900/50 dark:text-primary-400">
                         <x-filament::icon icon="heroicon-o-document-check" class="w-6 h-6" />
                     </div>
-                    <h3 class="text-lg font-bold text-gray-900 dark:text-white">Documentos Fiscais Oficiais</h3>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">Documentos Fiscais Oficiais</h3>
                     <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">
                         Processa lotes compactados de notas fiscais oficiais (XML) e constrói a sua base de dados histórica a partir da Sefaz.
                     </p>
@@ -73,7 +73,7 @@
         {{-- HISTÓRICO DE IMPORTAÇÕES (TABELA) --}}
         <div class="pt-8">
             <div class="p-4 bg-gray-50 rounded-t-xl border-t border-x border-gray-200 dark:bg-gray-800/50 dark:border-gray-700">
-                <h2 class="text-base font-bold text-gray-900 dark:text-white">Histórico de Lotes Processados</h2>
+                <h2 class="text-base font-medium text-gray-900 dark:text-white">Histórico de Lotes Processados</h2>
                 <p class="text-xs text-gray-500 dark:text-gray-400">Visualize todas as cargas injetadas no tenant e desfaça operações se necessário.</p>
             </div>
             {{ $this->table }}

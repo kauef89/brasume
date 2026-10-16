@@ -21,7 +21,7 @@ class CashShiftTable
                 Tables\Columns\TextColumn::make('opener.name')->label('Operador'),
                 Tables\Columns\TextColumn::make('opened_at')->label('Abertura')->dateTime('d/m/Y H:i')->sortable(),
                 Tables\Columns\TextColumn::make('opening_balance')->label('Fundo de Troco')->money('BRL'),
-                
+
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
                     ->badge()
@@ -34,7 +34,7 @@ class CashShiftTable
                         'success' => 'open',
                         'gray' => 'closed',
                     ]),
-                    
+
                 Tables\Columns\TextColumn::make('difference')
                     ->label('Diferença')
                     ->money('BRL')
@@ -43,7 +43,7 @@ class CashShiftTable
             ])
             ->defaultSort('opened_at', 'desc')
             ->actions([
-                
+
                 // ==========================================
                 // 1. SUPRIMENTO (Entrada de Dinheiro)
                 // ==========================================
@@ -57,14 +57,12 @@ class CashShiftTable
                         TextInput::make('description')->label('Motivo')->default('Troco extra / Suprimento')->required(),
                     ])
                     ->action(function (CashShift $record, array $data) {
-                        Transaction::create([
+                        app(\App\Services\RestaurantOps\ShiftCashierService::class)->recordTransaction([
                             'type' => 'in',
                             'amount' => $data['amount'],
                             'description' => $data['description'],
-                            'bank_account_id' => $record->bank_account_id,
-                            'transaction_date' => now(),
-                            'operator_name' => auth()->user()->name ?? 'Sistema',
-                        ]);
+                        ], auth()->user()->name ?? 'Sistema', $record->bank_account_id);
+
                         Notification::make()->title('Suprimento Registrado!')->success()->send();
                     }),
 
@@ -81,14 +79,12 @@ class CashShiftTable
                         TextInput::make('description')->label('Motivo')->default('Retirada de excesso / Sangria')->required(),
                     ])
                     ->action(function (CashShift $record, array $data) {
-                        Transaction::create([
+                        app(\App\Services\RestaurantOps\ShiftCashierService::class)->recordTransaction([
                             'type' => 'out',
                             'amount' => $data['amount'],
                             'description' => $data['description'],
-                            'bank_account_id' => $record->bank_account_id,
-                            'transaction_date' => now(),
-                            'operator_name' => auth()->user()->name ?? 'Sistema',
-                        ]);
+                        ], auth()->user()->name ?? 'Sistema', $record->bank_account_id);
+
                         Notification::make()->title('Sangria Registrada!')->success()->send();
                     }),
 
@@ -101,14 +97,14 @@ class CashShiftTable
                     ->color('danger')
                     ->visible(fn (CashShift $record) => $record->status === 'open')
                     ->form(function (CashShift $record) {
-                        
+
                         // MATEMÁTICA REAL DO CAIXA!
                         // Pega todas as entradas (Vendas em Dinheiro e Suprimentos) desde que o caixa abriu
                         $entradas = Transaction::where('bank_account_id', $record->bank_account_id)
                             ->where('transaction_date', '>=', $record->opened_at)
                             ->where('type', 'in')
                             ->sum('amount');
-                            
+
                         // Pega todas as saídas (Sangrias e Despesas) desde que o caixa abriu
                         $saidas = Transaction::where('bank_account_id', $record->bank_account_id)
                             ->where('transaction_date', '>=', $record->opened_at)
@@ -117,7 +113,7 @@ class CashShiftTable
 
                         // O que o sistema espera que esteja na gaveta de dinheiro:
                         $expected = $record->opening_balance + $entradas - $saidas;
-                        
+
                         return [
                             TextInput::make('closing_balance_expected')
                                 ->label('Valor Esperado (Fundo + Vendas + Suprimentos - Sangrias)')
@@ -126,28 +122,26 @@ class CashShiftTable
                                 ->default($expected)
                                 ->readOnly()
                                 ->extraInputAttributes(['style' => 'font-weight: bold; background-color: #f3f4f6;']),
-                                
+
                             TextInput::make('closing_balance_actual')
                                 ->label('Valor Físico Contado na Gaveta')
                                 ->numeric()
                                 ->prefix('R$')
                                 ->required()
                                 ->autofocus(),
-                                
+
                             Textarea::make('notes')
                                 ->label('Justificativa (Obrigatório se houver diferença)'),
                         ];
                     })
                     ->action(function (CashShift $record, array $data): void {
-                        $record->update([
-                            'status' => 'closed',
-                            'closed_at' => now(),
-                            'closed_by' => auth()->id(),
-                            'closing_balance_expected' => $data['closing_balance_expected'],
-                            'closing_balance_actual' => $data['closing_balance_actual'],
-                            'notes' => $data['notes'],
-                        ]);
-                        
+                        app(\App\Services\RestaurantOps\ShiftCashierService::class)->closeShift([
+                            'amount' => $data['closing_balance_actual'],
+                            'retained_amount' => 0, // Admin retém zero por padrão nesta tela
+                            'observation' => $data['notes'],
+                            'details' => null
+                        ], auth()->id(), $record); // 🚀 Injeta o turno exato da linha!
+
                         Notification::make()->title('Caixa Fechado com sucesso!')->success()->send();
                     }),
 

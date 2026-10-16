@@ -1,0 +1,25 @@
+<?php
+
+namespace App\Filament\Resources\RecurringExpenses\Pages;
+
+use App\Filament\Resources\RecurringExpenses\RecurringExpenseResource;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\RestoreAction;
+use Filament\Resources\Pages\EditRecord;
+
+class EditRecurringExpense extends EditRecord
+{
+    use \App\Filament\Traits\RedirectsToIndex;
+
+    protected static string $resource = RecurringExpenseResource::class;
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            DeleteAction::make(),
+            ForceDeleteAction::make(),
+            RestoreAction::make(),
+        ];
+    }
+}

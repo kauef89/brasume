@@ -17,7 +17,7 @@ class LegacyOrderResource extends Resource
 {
     protected static ?string $model = LegacyOrder::class;
     protected static string|\BackedEnum|null $navigationIcon = "heroicon-o-receipt-refund";
-    protected static string|\UnitEnum|null $navigationGroup = "Legado Fiscal";
+    protected static string|\UnitEnum|null $navigationGroup = 'Sistema Legado';
     protected static ?string $navigationLabel = "Pedidos Antigos";
     protected static ?int $navigationSort = 1;
 

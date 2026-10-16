@@ -1,0 +1,277 @@
+resources/js
+├── app.js
+├── Assets
+│   └── Lotties
+│       └── confetti.json
+├── bootstrap.js
+├── Components
+│   ├── Modals
+│   │   ├── ManagerAuthModal.vue
+│   │   ├── NewAddressModal.vue
+│   │   └── NewCustomerModal.vue
+│   └── UI
+│       ├── AdaptiveModal.vue
+│       ├── AvatarBox.vue
+│       ├── BaseModal.vue
+│       ├── Breadcrumb.vue
+│       ├── DesktopNav.vue
+│       ├── DesktopTopBar.vue
+│       ├── EmptyState.vue
+│       ├── ExpandableSearch.vue
+│       ├── FormField.vue
+│       ├── GlobalTopbar.vue
+│       ├── IconButton.vue
+│       ├── NumericKeypad.vue
+│       ├── PaymentStagingArea.vue
+│       ├── QtyStepper.vue
+│       ├── SegmentedControl.vue
+│       ├── SelectableCard.vue
+│       ├── SlideToConfirm.vue
+│       ├── SnakeProgress.vue
+│       └── StatusBadge.vue
+├── Composables
+│   ├── useActiveOrderWidget.js
+│   ├── useAddressLookup.js
+│   ├── useAnalytics.js
+│   ├── useAudioAlert.js
+│   ├── useAvailability.js
+│   ├── useCart.js
+│   ├── useCashback.js
+│   ├── useCashier.js
+│   ├── useCategoryManager.js
+│   ├── useChecklists.js
+│   ├── useCheckoutMath.js
+│   ├── useCheckoutStaging.js
+│   ├── useClipboard.js
+│   ├── useComboWizard.js
+│   ├── useControlPanel.js
+│   ├── useCoupons.js
+│   ├── useCustomerCheckoutFlow.js
+│   ├── useCustomerFavorites.js
+│   ├── useCustomerMenu.js
+│   ├── useCustomerRegistration.js
+│   ├── useCustomerSearch.js
+│   ├── useCustomerSync.js
+│   ├── useItemActions.js
+│   ├── useKdsItemTimer.js
+│   ├── useKds.js
+│   ├── useLoginGateway.js
+│   ├── useMenuNavigation.js
+│   ├── useModifiers.js
+│   ├── useOrderDetailsOrchestrator.js
+│   ├── useOrderExport.js
+│   ├── useOrderFinancials.js
+│   ├── useOrderFlow.js
+│   ├── useOrderFormatting.js
+│   ├── useOrderRouting.js
+│   ├── useOrderSubmission.js
+│   ├── useOrderWorkspace.js
+│   ├── usePaymentFormatting.js
+│   ├── usePosSecurity.js
+│   ├── usePosSettings.js
+│   ├── usePredictiveModifiers.js
+│   ├── usePushNotifications.js
+│   ├── useRemoteUnlock.js
+│   ├── useReorder.js
+│   ├── useRestock.js
+│   ├── useSecureAction.js
+│   ├── useShiftAttendance.js
+│   ├── useStoreStatus.js
+│   ├── useTeamApp.js
+│   ├── useTeamSubmit.js
+│   ├── useTenantEcho.js
+│   ├── useTheme.js
+│   ├── useTopSellingWidget.js
+│   ├── useViewport.js
+│   ├── useWhatsAppMessages.js
+│   └── useWhatsAppSupport.js
+├── Layouts
+│   ├── BlankLayout.vue
+│   ├── DesktopLayout.vue
+│   └── MobileLayout.vue
+├── Pages
+│   ├── Apps
+│   │   ├── CustomerApp.vue
+│   │   ├── KdsApp.vue
+│   │   ├── PosApp.vue
+│   │   └── TeamApp.vue
+│   ├── CRM
+│   │   ├── Coupons
+│   │   │   ├── AutomationToggle.vue
+│   │   │   ├── CouponManager.vue
+│   │   │   └── CouponQuickForm.vue
+│   │   ├── CrmGrowthTab.vue
+│   │   ├── CrmMetricsTab.vue
+│   │   ├── CrmOpportunitiesTab.vue
+│   │   └── CRM.vue
+│   ├── Customer
+│   │   ├── ActiveOrderWidget.vue
+│   │   ├── CategoryCarousel.vue
+│   │   ├── CrmFeaturedBanner.vue
+│   │   ├── CustomerAccountTab.vue
+│   │   ├── CustomerCartTab.vue
+│   │   ├── CustomerCheckoutModal.vue
+│   │   ├── CustomerDynamicIsland.vue
+│   │   ├── CustomerHomeTab.vue
+│   │   ├── CustomerMenuTab.vue
+│   │   ├── CustomerOrderHistoryCard.vue
+│   │   ├── CustomerOrderHistoryItemRow.vue
+│   │   ├── CustomerOrderHistory.vue
+│   │   ├── CustomerTabContainer.vue
+│   │   ├── GuestConversionBanner.vue
+│   │   ├── HomeStatusBlock.vue
+│   │   ├── LoyaltyRewardCard.vue
+│   │   ├── LoyaltyRewardsCarousel.vue
+│   │   ├── OrderRatingWidget.vue
+│   │   ├── PushNotificationBanner.vue
+│   │   ├── StoreAvailabilityBanner.vue
+│   │   ├── TopSellingWidget.vue
+│   │   └── UpgradeAccountModal.vue
+│   ├── Gateway
+│   │   ├── CustomerAccess.vue
+│   │   ├── CustomerGateway.vue
+│   │   ├── DevicePairingBox.vue
+│   │   ├── PinAuthFlow.vue
+│   │   ├── QrLoginBox.vue
+│   │   ├── QrTerminalModal.vue
+│   │   ├── QuickUnlockSheet.vue
+│   │   ├── TeamAccess.vue
+│   │   ├── TeamGateway.vue
+│   │   ├── TwoFactorChallenge.vue
+│   │   └── TwoFactorSetup.vue
+│   ├── Operations
+│   │   ├── Availability.vue
+│   │   ├── Components
+│   │   │   ├── Catalog
+│   │   │   │   ├── AvailabilityCard.vue
+│   │   │   │   ├── CustomerFavoriteCard.vue
+│   │   │   │   └── CustomerFavoritesGrid.vue
+│   │   │   ├── Dashboard
+│   │   │   │   ├── DeliveryKanban.vue
+│   │   │   │   └── OpenTabs.vue
+│   │   │   └── Kds
+│   │   │       ├── KdsBarCard.vue
+│   │   │       ├── KdsCancelModal.vue
+│   │   │       ├── KdsColumnSettingsModal.vue
+│   │   │       ├── KdsItemCard.vue
+│   │   │       ├── KdsLossModal.vue
+│   │   │       └── KdsStatus.vue
+│   │   ├── ControlPanel.vue
+│   │   ├── KdsBoard.vue
+│   │   ├── OrderDetails.vue
+│   │   ├── Printers
+│   │   │   ├── FallbackModal.vue
+│   │   │   ├── PrinterCard.vue
+│   │   │   ├── Printers.vue
+│   │   │   └── PrintJobRow.vue
+│   │   ├── SupplyChain
+│   │   │   ├── ProductionBoard.vue
+│   │   │   ├── ProductionOrderCard.vue
+│   │   │   ├── ShoppingList.vue
+│   │   │   └── ShoppingSupplierCard.vue
+│   │   └── Team
+│   ├── Pos
+│   │   ├── Cashier.vue
+│   │   ├── Checkout.vue
+│   │   ├── Components
+│   │   │   ├── Cart
+│   │   │   │   ├── AddressCard.vue
+│   │   │   │   ├── CartHeader.vue
+│   │   │   │   ├── CartSummary.vue
+│   │   │   │   ├── Cart.vue
+│   │   │   │   ├── CustomerSearch.vue
+│   │   │   │   ├── GuestRegistrationForm.vue
+│   │   │   │   ├── LoyaltyCashbackWidget.vue
+│   │   │   │   ├── OrderRouting.vue
+│   │   │   │   ├── ParkedOrdersPopover.vue
+│   │   │   │   ├── RoutingCounter.vue
+│   │   │   │   ├── RoutingDelivery.vue
+│   │   │   │   ├── RoutingTable.vue
+│   │   │   │   └── WhatsAppEstimator.vue
+│   │   │   ├── Cashier
+│   │   │   │   ├── CashierFilterPanel.vue
+│   │   │   │   ├── CashierTableRow.vue
+│   │   │   │   ├── CashierTable.vue
+│   │   │   │   ├── FreelancerPayment.vue
+│   │   │   │   ├── ShiftAttendanceCard.vue
+│   │   │   │   ├── ShiftAttendance.vue
+│   │   │   │   ├── ShiftCloser.vue
+│   │   │   │   ├── ShiftDashboard.vue
+│   │   │   │   ├── ShiftManagementModal.vue
+│   │   │   │   ├── ShiftOpener.vue
+│   │   │   │   ├── ShiftSidebar.vue
+│   │   │   │   └── TransactionForm.vue
+│   │   │   ├── Checkout
+│   │   │   │   ├── ChangeAddressModal.vue
+│   │   │   │   ├── CheckoutHeader.vue
+│   │   │   │   ├── CheckoutItemsList.vue
+│   │   │   │   ├── CheckoutItem.vue
+│   │   │   │   ├── CheckoutPaymentPanel.vue
+│   │   │   │   ├── CheckoutPostPaymentPanel.vue
+│   │   │   │   ├── DeliveryPaymentIntentModal.vue
+│   │   │   │   ├── OperationReasonModal.vue
+│   │   │   │   └── PixWaitingArea.vue
+│   │   │   ├── Configurators
+│   │   │   │   ├── ComboItemCard.vue
+│   │   │   │   ├── ComboSidebar.vue
+│   │   │   │   ├── ComboStepGrid.vue
+│   │   │   │   ├── ComboWizard.vue
+│   │   │   │   ├── ModifierOptionsGroup.vue
+│   │   │   │   ├── ModifierTabs.vue
+│   │   │   │   ├── ProductHeader.vue
+│   │   │   │   └── ProductModifiers.vue
+│   │   │   ├── Menu
+│   │   │   │   ├── CategoryCard.vue
+│   │   │   │   ├── CategoryCloudNode.vue
+│   │   │   │   ├── CategoryGrid.vue
+│   │   │   │   ├── CategoryMenu.vue
+│   │   │   │   ├── ProductCard.vue
+│   │   │   │   └── ProductGrid.vue
+│   │   │   └── Order
+│   │   │       ├── AssignCourierModal.vue
+│   │   │       ├── OrderActionsGrid.vue
+│   │   │       ├── OrderCard.vue
+│   │   │       ├── OrderContextAction.vue
+│   │   │       ├── OrderContextItem.vue
+│   │   │       ├── OrderContextMenu.vue
+│   │   │       ├── OrderLineItem.vue
+│   │   │       ├── OrderTransformer.vue
+│   │   │       └── TransferItemsModal.vue
+│   │   └── OrderEntry.vue
+│   ├── Settings
+│   │   ├── Components
+│   │   │   ├── AppearanceSettings.vue
+│   │   │   ├── EstimateSettings.vue
+│   │   │   ├── SettingCard.vue
+│   │   │   └── SortingSettings.vue
+│   │   └── Settings.vue
+│   ├── Splash
+│   │   ├── Components
+│   │   │   ├── HoursSheet.vue
+│   │   │   └── LocationSheet.vue
+│   │   └── Index.vue
+│   └── Team
+│       ├── ChecklistIssueCard.vue
+│       ├── ChecklistOverviewWidget.vue
+│       ├── CorporateProfileTab.vue
+│       ├── CorporateWalletCard.vue
+│       ├── DeviceFleetPanel.vue
+│       ├── DriverBoard.vue
+│       ├── QrScannerModal.vue
+│       ├── RestockTab.vue
+│       ├── ShiftDashboard.vue
+│       ├── TeamChecklists.vue
+│       ├── TeamCheckoutDrawer.vue
+│       ├── TeamDynamicIsland.vue
+│       ├── TeamHomeTab.vue
+│       ├── TeamHome.vue
+│       ├── TeamMenuTab.vue
+│       ├── TeamModulesModal.vue
+│       ├── TeamOverlays.vue
+│       ├── TeamShiftLockOverlay.vue
+│       └── TeamTabContainer.vue
+├── Utils
+│   └── formatters.js
+└── ziggy.js
+
+36 directories, 239 files

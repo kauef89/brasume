@@ -1,0 +1,282 @@
+import { useAnalytics } from '@/Composables/useAnalytics';
+import { useStorage } from "@vueuse/core";
+import { computed, watch } from "vue";
+
+export const createDefaultRouting = (type = 'table') => ({
+    order_id: null,
+    existing_order_id: null,
+    type: type,
+    dining_table_id: null,
+    table_id: null,
+    table: null,
+    identifier: '',
+    customer: null,
+    customer_phone: null,
+    address_id: null,
+    address: null
+});
+
+export function generateModifiersHash(modifiers = []) {
+    if (!modifiers || !Array.isArray(modifiers) || modifiers.length === 0) {
+        return "none";
+    }
+    const normalized = [...modifiers]
+        .map(m => ({
+            id: Number(m.id || m.modifier_option_id || 0),
+            group_id: Number(m.group_id || m.modifier_group_id || 0),
+            qty: Number(m.qty || m.quantity || 1),
+            price: Number(m.price || 0),
+            name: String(m.name || '').trim()
+        }))
+        .sort((a, b) => (a.group_id - b.group_id) || (a.id - b.id) || a.name.localeCompare(b.name));
+
+    return JSON.stringify(normalized);
+}
+
+export function generateComboHash(comboItems = []) {
+    if (!comboItems || !Array.isArray(comboItems) || comboItems.length === 0) {
+        return "none";
+    }
+    const normalized = [...comboItems].map(c => ({
+        product_id: Number(c.product_id || c.id || 0),
+        group_id: Number(c.group_id || 0),
+        qty: Number(c.qty || c.quantity || 1),
+        modHash: generateModifiersHash(c.structuredModifiers || c.modifiers || [])
+    })).sort((a, b) => (a.group_id - b.group_id) || (a.product_id - b.product_id));
+
+    return JSON.stringify(normalized);
+}
+
+const cart = useStorage("pos_draft_cart", []);
+const parkedOrders = useStorage("pos_parked_orders", []);
+const globalOrderType = useStorage("pos_draft_type", 'table');
+const globalDraftRouting = useStorage("pos_draft_routing", createDefaultRouting('table'));
+
+watch(globalOrderType, (newType) => {
+    if (globalDraftRouting.value) {
+        globalDraftRouting.value.type = newType;
+        if (newType !== 'delivery') {
+            globalDraftRouting.value.address = null;
+            globalDraftRouting.value.address_id = null;
+        }
+    }
+}, { immediate: true });
+
+export function validateProductModifiers(prod, structuredModifiers = []) {
+    if (!prod) return { valid: true };
+
+    const groups = prod.modifier_groups || prod.modifierGroups || [];
+    for (const group of groups) {
+        const min = Number(group.min_choices ?? group.min_quantity ?? (group.is_required ? 1 : 0));
+        if (min > 0) {
+            const selectedInGroup = (structuredModifiers || []).filter(m =>
+                String(m.group_id || m.modifier_group_id) === String(group.id)
+            );
+            const totalQty = selectedInGroup.reduce((sum, m) => sum + Number(m.qty || 1), 0);
+
+            if (totalQty < min) {
+                return {
+                    valid: false,
+                    productName: prod.name || 'Produto',
+                    groupName: group.name || group.title || 'Modificador Obrigatório',
+                    missing: min - totalQty
+                };
+            }
+        }
+    }
+    return { valid: true };
+}
+
+export function useCart() {
+    const { trackAddToCart } = useAnalytics();
+
+    const setOrderType = (newType) => {
+        globalOrderType.value = newType;
+        if (globalDraftRouting.value) {
+            globalDraftRouting.value.type = newType;
+            if (newType !== 'delivery') {
+                globalDraftRouting.value.address = null;
+                globalDraftRouting.value.address_id = null;
+            }
+        }
+    };
+
+    const addToCart = ({
+        product, extraPrice = 0, isTakeaway = false,
+        comboItems = null, structuredModifiers = [], qty = 1,
+        replaces_item_id = null, parent_item_id = null, is_combo_child = false,
+        auth_reason = null, is_loss = null, isSubItemOfCombo = false, basePriceOverride = null
+    }) => {
+        const mainCheck = validateProductModifiers(product, structuredModifiers);
+        if (!mainCheck.valid) {
+            console.error(`[useCart] Inserção bloqueada: "${mainCheck.productName}" requer seleção no grupo "${mainCheck.groupName}".`);
+            return false;
+        }
+
+        if (comboItems && Array.isArray(comboItems)) {
+            for (const sub of comboItems) {
+                const subProd = sub.product || sub;
+                const subCheck = validateProductModifiers(subProd, sub.structuredModifiers);
+                if (!subCheck.valid) {
+                    console.error(`[useCart] Combo bloqueado: O item "${subCheck.productName}" requer "${subCheck.groupName}".`);
+                    return false;
+                }
+            }
+        }
+
+        // Subitem de combo tem preço base 0
+        let basePrice = 0;
+        if (!isSubItemOfCombo && basePriceOverride === null) {
+            basePrice = globalOrderType.value === "delivery" && product.delivery_price > 0
+                ? Number(product.delivery_price)
+                : Number(product.price ?? product.dine_in_price ?? 0);
+        }
+
+        const finalPrice = basePrice + Number(extraPrice || 0);
+        const isCombo = comboItems !== null;
+        const comboHash = isCombo ? generateComboHash(comboItems) : null;
+        const modHash = generateModifiersHash(structuredModifiers);
+
+        const existingItem = cart.value.find(
+            (item) => item.id === product.id && item.modHash === modHash && item.isTakeaway === isTakeaway && item.comboHash === comboHash
+        );
+
+        if (existingItem && !replaces_item_id) {
+            existingItem.qty += qty;
+        } else {
+            cart.value.push({
+                cartId: Date.now() + Math.random(),
+                id: product.id,
+                name: isSubItemOfCombo ? `${product.name} (Adicional Combo)` : product.name,
+                price: finalPrice,
+                extra_price: Number(extraPrice || 0),
+                qty: qty,
+                structuredModifiers: structuredModifiers,
+                isTakeaway: isTakeaway,
+                productOriginal: product,
+                isCombo: isCombo,
+                comboItems: comboItems,
+                comboHash: comboHash,
+                modHash: modHash,
+                replaces_item_id: replaces_item_id,
+                parent_item_id: parent_item_id || product.combo_parent_id || null,
+                is_combo_child: is_combo_child || isSubItemOfCombo,
+                auth_reason: auth_reason,
+                is_loss: is_loss
+            });
+        }
+        trackAddToCart(product, extraPrice + (product.promo_price || product.price || 0));
+        return true;
+    };
+
+    const updateQty = (index, delta) => {
+        if (cart.value[index]) {
+            const current = Number(cart.value[index].qty ?? cart.value[index].quantity ?? 1);
+            const next = current + Number(delta);
+            cart.value[index].qty = next;
+            if (cart.value[index].qty <= 0) cart.value.splice(index, 1);
+        }
+    };
+
+    const updateItemModifiers = (index, { extraPrice, isTakeaway, structuredModifiers = [] }) => {
+        const item = cart.value[index];
+        if (!item) return;
+
+        const check = validateProductModifiers(item.productOriginal, structuredModifiers);
+        if (!check.valid) {
+            console.error(`[useCart] Edição bloqueada: "${check.productName}" requer "${check.groupName}".`);
+            return false;
+        }
+
+        item.isTakeaway = isTakeaway;
+        item.structuredModifiers = structuredModifiers;
+        item.modHash = generateModifiersHash(structuredModifiers);
+
+        if (item.is_combo_child) {
+            item.price = Number(extraPrice || 0);
+            item.extra_price = Number(extraPrice || 0);
+        } else {
+            const basePrice = globalOrderType.value === "delivery" && item.productOriginal.delivery_price > 0
+                ? Number(item.productOriginal.delivery_price)
+                : Number(item.productOriginal.price ?? item.productOriginal.dine_in_price ?? 0);
+            item.price = basePrice + extraPrice;
+        }
+        return true;
+    };
+
+    const resetDraftState = (type = 'table') => {
+        cart.value = [];
+        globalOrderType.value = type;
+        globalDraftRouting.value = createDefaultRouting(type);
+    };
+
+    const clearCart = () => {
+        resetDraftState('table');
+    };
+
+    const cartSubtotal = computed(() => cart.value.reduce((total, item) => total + item.price * item.qty, 0));
+
+    const parkCurrentOrder = (orderMetadata, orderType) => {
+        if (cart.value.length === 0) return;
+        parkedOrders.value.push({
+            id: Date.now(),
+            date: new Date().toISOString(),
+            cart: JSON.parse(JSON.stringify(cart.value)),
+            type: orderType,
+            meta: JSON.parse(JSON.stringify(orderMetadata || {})),
+            total: cartSubtotal.value
+        });
+        clearCart();
+    };
+
+    const autoParkCurrent = (incomingOrderId = null) => {
+        if (cart.value.length === 0) return;
+        const meta = globalDraftRouting.value || {};
+        const type = globalOrderType.value || "table";
+        if (incomingOrderId && meta.order_id === incomingOrderId) return;
+        parkCurrentOrder(meta, type);
+    };
+
+    const resumeOrder = (parkedId) => {
+        const targetOrder = parkedOrders.value.find(p => p.id === parkedId);
+        if (!targetOrder) return;
+
+        if (cart.value && cart.value.length > 0) {
+            autoParkCurrent();
+        }
+
+        const index = parkedOrders.value.findIndex(p => p.id === parkedId);
+        if (index === -1) return;
+
+        const parked = parkedOrders.value[index];
+        cart.value = JSON.parse(JSON.stringify(parked.cart || []));
+        globalOrderType.value = parked.type || 'table';
+        globalDraftRouting.value = JSON.parse(JSON.stringify(parked.meta || createDefaultRouting(parked.type || 'table')));
+        parkedOrders.value.splice(index, 1);
+    };
+
+    const discardParkedOrder = (parkedId) => {
+        const index = parkedOrders.value.findIndex(p => p.id === parkedId);
+        if (index > -1) parkedOrders.value.splice(index, 1);
+    };
+
+    const loadEditOrder = (orderData) => {
+        autoParkCurrent(orderData.id);
+        clearCart();
+    };
+
+    const startNewOrder = () => {
+        autoParkCurrent();
+        clearCart();
+    };
+
+    return {
+        cart,
+        orderType: globalOrderType,
+        draftRouting: globalDraftRouting,
+        setOrderType,
+        addToCart, updateQty, updateItemModifiers, clearCart, cartSubtotal,
+        parkedOrders, parkCurrentOrder, resumeOrder, discardParkedOrder,
+        loadEditOrder, startNewOrder, autoParkCurrent, resetDraftState
+    };
+}

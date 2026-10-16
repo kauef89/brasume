@@ -3,7 +3,7 @@
    ========================================== */
 
 body {
-    font-family: "SF Pro Rounded", ui-rounded, system-ui, sans-serif;
+    font-family: "Stack Sans Text", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 .justify-self-end {
@@ -47,4 +47,13 @@ body {
 
 .fi-main-ctn {
     @apply bg-gray-100 dark:bg-gray-900;
+}
+
+/* ==========================================
+   BOTÕES: MODO ESCURO (TEXTO E ÍCONES)
+   ========================================== */
+/* 1. Texto branco sólido para os rótulos */
+.dark .fi-btn,
+.dark .fi-btn-label {
+    @apply !text-white/95;
 }

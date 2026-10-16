@@ -22,3 +22,22 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Backups e Dumps
+*.sql
+*.sql.gz
+*.sqlite
+
+# Arquivos do Repomix
+repomix*.xml
+repomix*.txt
+repomix.config.json
+
+# Instaladores e Binarios Pesados
+public/downloads/
+*.exe
+*.app/
+*.zip
+
+# Uploads e Dados de Tenants
+storage/tenants/

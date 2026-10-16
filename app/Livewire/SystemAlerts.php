@@ -25,7 +25,7 @@ class SystemAlerts extends Component
                 'title' => 'Conciliações Pendentes',
                 'message' => "Você tem {$pendingConciliations} extratos para conciliar.",
                 'icon' => 'heroicon-o-building-library',
-                'color' => 'text-primary-600 dark:text-primary-400',
+                'color' => 'text-primary-smart',
                 'bg' => 'bg-primary-50 dark:bg-primary-900/20',
                 'url' => BankStatementResource::getUrl('index'),
             ]);

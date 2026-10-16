@@ -21,7 +21,7 @@ class EmployeeResource extends Resource
     use HasGlobalSearch;
 
     protected static ?string $model = Employee::class;
-    protected static string|\UnitEnum|null $navigationGroup = "Recursos Humanos";
+    protected static string|\UnitEnum|null $navigationGroup = 'Gestão & RH';
     protected static ?string $modelLabel = "Colaborador";
     protected static ?string $pluralModelLabel = "Colaboradores";
     protected static ?int $navigationSort = 1;

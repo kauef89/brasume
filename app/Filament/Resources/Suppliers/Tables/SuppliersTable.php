@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Suppliers\Tables;
 use Filament\Tables\Table;
 use Filament\Tables;
 use App\Models\Supplier;
+use App\Filament\Resources\Suppliers\Actions\MergeSuppliersBulkAction;
 
 class SuppliersTable
 {
@@ -15,7 +16,9 @@ class SuppliersTable
                 Tables\Columns\TextColumn::make("name")
                     ->label("Fornecedor (Nome/Fantasia)")
                     ->searchable()
-                    ->weight("bold"),
+                    ->weight("bold")
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make("document_name")
                     ->label("Razão Social (Fiscal)")
                     ->searchable()
@@ -43,11 +46,7 @@ class SuppliersTable
                 Tables\Columns\TextColumn::make("accounting_category")
                     ->label("Categoria Contábil")
                     ->formatStateUsing(
-                        fn(
-                            ?string $state,
-                        ): ?string => \App\Services\AccountingService::getCategories()[
-                            $state
-                        ] ?? $state,
+                        fn(?string $state): ?string => \App\Services\Accounting\AccountingService::getCategories()[$state] ?? $state,
                     )
                     ->searchable()
                     ->sortable(),
@@ -66,14 +65,14 @@ class SuppliersTable
 
                 Tables\Filters\SelectFilter::make("accounting_category")
                     ->label("Filtrar por Categoria")
-                    ->options(\App\Services\AccountingService::getCategories()),
+                    ->options(\App\Services\Accounting\AccountingService::getCategories()),
             ])
             ->actions([
-                // Importação absoluta anti-bugs
                 \Filament\Actions\EditAction::make(),
             ])
             ->bulkActions([
                 \Filament\Actions\BulkActionGroup::make([
+                    MergeSuppliersBulkAction::make(),
                     \Filament\Actions\DeleteBulkAction::make(),
                 ]),
             ]);

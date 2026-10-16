@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources\Products\Widgets;
 
-use App\Services\ProductCostingService;
+use App\Services\Catalog\ProductCostingService;
 use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Attributes\On;

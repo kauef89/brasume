@@ -14,7 +14,7 @@ class OrderResource extends Resource {
     
     // O ícone do carrinho e o novo grupo no menu!
     // protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-shopping-cart';
-    protected static string | \UnitEnum | null $navigationGroup = 'Vendas';
+    protected static string | \UnitEnum | null $navigationGroup = 'Vendas & Atendimento';
     
     protected static ?string $modelLabel = 'Pedido';
     protected static ?string $pluralModelLabel = 'Pedidos';

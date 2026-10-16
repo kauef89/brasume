@@ -14,6 +14,8 @@ class BankStatementResource extends Resource
 {
     protected static ?string $model = BankStatement::class;
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Financeiro';
+
     public static function getNavigationIcon(): string|\BackedEnum|null
     {
         return "heroicon-o-arrows-right-left";

@@ -65,7 +65,7 @@
             labelContainer.appendChild(faceIcon);
             const spanText = document.createElement('span');
             spanText.textContent = text;
-            spanText.className = `truncate ${isPrimary ? 'text-primary-600 dark:text-primary-400' : ''}`;
+            spanText.className = `truncate ${isPrimary ? 'text-primary-smart' : ''}`;
             labelContainer.appendChild(spanText);
         }
 
@@ -117,7 +117,7 @@
                     item.appendChild(span);
 
                     if (tabNode === activeTab) {
-                        item.classList.add('bg-gray-50', 'dark:bg-white/5', 'font-bold');
+                        item.classList.add('bg-gray-50', 'dark:bg-white/5', 'font-medium');
                         span.classList.add('text-primary-600', 'dark:text-primary-400');
                         itemIcon.classList.add('text-primary-600', 'dark:text-primary-400');
                     }

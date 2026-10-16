@@ -81,7 +81,7 @@
                 <div class="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm">
                     <div class="flex items-center gap-4 min-w-0">
                         <div class="flex items-center justify-center p-3 rounded-full bg-primary-500/10 dark:bg-primary-500/20 shrink-0">
-                            <x-heroicon-o-beaker class="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                            <x-heroicon-o-beaker class="w-5 h-5 text-primary-smart" />
                         </div>
                         <div class="min-w-0">
                             <p class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Custo Médio (CMV)</p>
@@ -90,12 +90,12 @@
                     </div>
                     <div class="flex flex-col justify-center text-right gap-1 ml-2 pl-4 border-l border-gray-100 dark:border-gray-800 shrink-0">
                         <div class="leading-none">
-                            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400">Mesa</span><br>
-                            <span class="text-[11px] font-bold text-gray-700 dark:text-gray-300">{{ $fmt($marginData['cost_table']) }}</span>
+                            <span class="text-[9px] font-medium uppercase tracking-wider text-gray-400">Mesa</span><br>
+                            <span class="text-[11px] font-medium text-gray-700 dark:text-gray-300">{{ $fmt($marginData['cost_table']) }}</span>
                         </div>
                         <div class="leading-none mt-1">
-                            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400">Delivery</span><br>
-                            <span class="text-[11px] font-bold text-gray-700 dark:text-gray-300">{{ $fmt($marginData['cost_delivery']) }}</span>
+                            <span class="text-[9px] font-medium uppercase tracking-wider text-gray-400">Delivery</span><br>
+                            <span class="text-[11px] font-medium text-gray-700 dark:text-gray-300">{{ $fmt($marginData['cost_delivery']) }}</span>
                         </div>
                     </div>
                 </div>
@@ -104,7 +104,7 @@
                 <div class="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm">
                     <div class="flex items-center gap-4 min-w-0">
                         <div class="flex items-center justify-center p-3 rounded-full bg-primary-500/10 dark:bg-primary-500/20 shrink-0">
-                            <x-heroicon-o-receipt-percent class="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                            <x-heroicon-o-receipt-percent class="w-5 h-5 text-primary-smart" />
                         </div>
                         <div class="min-w-0">
                             <p class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Custos Variáveis</p>
@@ -113,12 +113,12 @@
                     </div>
                     <div class="flex flex-col justify-center text-right gap-1 ml-2 pl-4 border-l border-gray-100 dark:border-gray-800 shrink-0">
                         <div class="leading-none">
-                            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400">Impostos</span><br>
-                            <span class="text-[11px] font-bold text-gray-700 dark:text-gray-300">{{ $fmt($marginData['simples_amount'] + $marginData['icms_amount']) }}</span>
+                            <span class="text-[9px] font-medium uppercase tracking-wider text-gray-400">Impostos</span><br>
+                            <span class="text-[11px] font-medium text-gray-700 dark:text-gray-300">{{ $fmt($marginData['simples_amount'] + $marginData['icms_amount']) }}</span>
                         </div>
                         <div class="leading-none mt-1">
-                            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400">Cartão</span><br>
-                            <span class="text-[11px] font-bold text-gray-700 dark:text-gray-300">{{ $fmt($marginData['card_fee_amount']) }}</span>
+                            <span class="text-[9px] font-medium uppercase tracking-wider text-gray-400">Cartão</span><br>
+                            <span class="text-[11px] font-medium text-gray-700 dark:text-gray-300">{{ $fmt($marginData['card_fee_amount']) }}</span>
                         </div>
                     </div>
                 </div>
@@ -136,12 +136,12 @@
                     </div>
                     <div class="flex flex-col justify-center text-right gap-1 ml-2 pl-4 border-l shrink-0 {{ $c['border'] }}">
                         <div class="leading-none">
-                            <span class="text-[9px] font-bold uppercase tracking-wider {{ $c['text_muted'] }}">M. Contribuição</span><br>
-                            <span class="text-[11px] font-bold {{ $c['text_bold'] }}">{{ $fmt($marginData['contribution_margin']) }}</span>
+                            <span class="text-[9px] font-medium uppercase tracking-wider {{ $c['text_muted'] }}">M. Contribuição</span><br>
+                            <span class="text-[11px] font-medium {{ $c['text_bold'] }}">{{ $fmt($marginData['contribution_margin']) }}</span>
                         </div>
                         <div class="leading-none mt-1">
-                            <span class="text-[9px] font-bold uppercase tracking-wider {{ $c['text_muted'] }}">Preço Venda</span><br>
-                            <span class="text-[11px] font-bold {{ $c['text_bold'] }}">{{ $fmt($marginData['sell_price']) }}</span>
+                            <span class="text-[9px] font-medium uppercase tracking-wider {{ $c['text_muted'] }}">Preço Venda</span><br>
+                            <span class="text-[11px] font-medium {{ $c['text_bold'] }}">{{ $fmt($marginData['sell_price']) }}</span>
                         </div>
                     </div>
                 </div>
@@ -150,7 +150,7 @@
                 {{-- LAYOUT INSUMO/PREPARADO --}}
                 <div class="flex items-center gap-4 p-4 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm">
                     <div class="flex items-center justify-center p-3 rounded-full bg-primary-500/10 dark:bg-primary-500/20 shrink-0">
-                        <x-heroicon-o-shopping-cart class="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                        <x-heroicon-o-shopping-cart class="w-5 h-5 text-primary-smart" />
                     </div>
                     <div class="min-w-0">
                         <p class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Custo Total Receita</p>
@@ -160,7 +160,7 @@
 
                 <div class="flex items-center gap-4 p-4 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm">
                     <div class="flex items-center justify-center p-3 rounded-full bg-primary-500/10 dark:bg-primary-500/20 shrink-0">
-                        <x-heroicon-o-scale class="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                        <x-heroicon-o-scale class="w-5 h-5 text-primary-smart" />
                     </div>
                     <div class="min-w-0">
                         <p class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Rendimento</p>
@@ -170,7 +170,7 @@
 
                 <div class="flex items-center gap-4 p-4 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm">
                     <div class="flex items-center justify-center p-3 rounded-full bg-primary-500/10 dark:bg-primary-500/20 shrink-0">
-                        <x-heroicon-o-calculator class="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                        <x-heroicon-o-calculator class="w-5 h-5 text-primary-smart" />
                     </div>
                     <div class="min-w-0">
                         <p class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Custo Unitário</p>

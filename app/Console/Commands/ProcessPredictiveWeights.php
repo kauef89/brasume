@@ -72,7 +72,14 @@ class ProcessPredictiveWeights extends Command
             }
         }
 
-        $this->info("Concluído! {$updatedCount} modificadores tiveram seu BI atualizado.");
+        // 🚀 AVISA O FRONTEND QUE O RANKING DE INGREDIENTES MUDOU!
+        if ($updatedCount > 0) {
+            broadcast(new \App\Events\CatalogUpdated());
+            $this->info("Concluído! {$updatedCount} modificadores tiveram seu BI atualizado e os apps foram notificados.");
+        } else {
+            $this->info("Concluído! Nenhum peso foi alterado, frontend não precisou ser recarregado.");
+        }
+
         return Command::SUCCESS;
     }
 }

@@ -69,7 +69,7 @@ class CustomerForm
                         ]),
 
                     // ==========================================
-                    // ABA 2: ENDEREÇOS
+                    // ABA 2: ENDEREÇOS (is_active injetado!)
                     // ==========================================
                     Tabs\Tab::make("Endereços")
                         ->icon("heroicon-o-map-pin")
@@ -100,7 +100,7 @@ class CustomerForm
                                         ->live()
                                         ->createOptionForm(
                                             \App\Filament\Resources\Streets\Schemas\StreetForm::getFormSchema(),
-                                        ) // <-- QUICK CREATE DA RUA INJETADO AQUI
+                                        )
                                         ->afterStateUpdated(function (
                                             Set $set,
                                             $state,
@@ -135,7 +135,7 @@ class CustomerForm
                                         ->required()
                                         ->createOptionForm(
                                             \App\Filament\Resources\Neighborhoods\Schemas\NeighborhoodForm::getFormSchema(),
-                                        ) // <-- QUICK CREATE DO BAIRRO INJETADO AQUI
+                                        )
                                         ->columnSpan(3),
 
                                     FormComponents\Toggle::make("no_number")
@@ -169,9 +169,17 @@ class CustomerForm
                                             fn(Get $get) => $get("no_number"),
                                         )
                                         ->columnSpan(3),
+
                                     FormComponents\TextInput::make("reference")
                                         ->label("Ponto de Referência")
-                                        ->columnSpan(3),
+                                        ->columnSpan(2), // 🚀 Reduzido de 3 para 2
+
+                                    // 🚀 O NOVO TOGGLE CONTROLADOR AQUI:
+                                    FormComponents\Toggle::make("is_active")
+                                        ->label("Ativo?")
+                                        ->default(true)
+                                        ->columnSpan(1), // 🚀 Ocupa a 1 coluna restante para fechar as 6!
+
                                     FormComponents\TextInput::make(
                                         "location_link",
                                     )

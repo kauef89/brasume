@@ -21,7 +21,7 @@ class LegacyProductResource extends Resource
 
     // 🚀 A TIPAGEM ESTRITA DO FILAMENT 4/5
     protected static string|\BackedEnum|null $navigationIcon = "heroicon-o-archive-box";
-    protected static string|\UnitEnum|null $navigationGroup = "Legado Fiscal";
+    protected static string|\UnitEnum|null $navigationGroup = 'Sistema Legado';
     protected static ?string $navigationLabel = "Produtos Antigos";
     protected static ?int $navigationSort = 2;
     protected static ?string $modelLabel = "Produto Legado";

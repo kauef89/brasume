@@ -6,6 +6,9 @@ use App\Filament\Traits\HasGlobalSearch;
 use App\Filament\Resources\Ingredients\Pages;
 use App\Filament\Resources\Ingredients\Schemas\IngredientForm;
 use App\Filament\Resources\Ingredients\Tables\IngredientTable;
+use App\Filament\Resources\Products\RelationManagers\CostHistoriesRelationManager;
+use App\Filament\Resources\Products\RelationManagers\InventoryMovementsRelationManager;
+use App\Filament\Resources\Products\RelationManagers\TechnicalSheetsRelationManager;
 use App\Models\Product;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
@@ -24,10 +27,11 @@ class IngredientResource extends Resource
     protected static ?string $pluralModelLabel = 'Insumos';
 
     public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->whereHas('category', fn($query) => $query->where('type', 'internal'));
-    }
+{
+    return parent::getEloquentQuery()
+        ->whereIn('type', ['ingredient', 'manufactured', 'internal'])
+        ->whereHas('category', fn($query) => $query->where('type', 'internal'));
+}
 
     public static function form(Schema $schema): Schema
     {
@@ -42,9 +46,9 @@ class IngredientResource extends Resource
     public static function getRelations(): array
     {
         return [
-            // 🚀 Agora os Insumos Preparados também têm Ficha Técnica!
-            \App\Filament\Resources\Products\RelationManagers\TechnicalSheetsRelationManager::class,
-            \App\Filament\Resources\Products\RelationManagers\CostHistoriesRelationManager::class,
+            TechnicalSheetsRelationManager::class,
+            CostHistoriesRelationManager::class,
+            InventoryMovementsRelationManager::class, // 🚀 Extrato Kardex
         ];
     }
 

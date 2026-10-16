@@ -10,8 +10,7 @@ use App\Models\BankStatement;
 use App\Models\AccountPayable;
 use App\Models\Supplier;
 use App\Services\BankDictionaries\BankDictionaryFactory;
-use App\Services\ReconciliationService;
-use Illuminate\Support\Facades\Storage;
+use App\Services\Accounting\BankMatchScoringService;
 use Filament\Notifications\Notification;
 use Carbon\Carbon;
 
@@ -38,182 +37,137 @@ class ImportOfxAction extends Action
                     ->preload(),
 
                 FileUpload::make("ofx_file")
-                    ->label("Arquivo OFX")
-                    ->disk("public")
-                    ->directory("temp_ofx_imports")
+                    ->label("Arquivo(s) OFX")
+                    ->multiple() // 🚀 A MÁGICA AQUI: Agora aceita dezenas de arquivos de uma vez!
+                    ->storeFiles(false)
                     ->required(),
             ])
             ->action(function (array $data) {
-                $filePath = $data["ofx_file"];
                 $accountId = $data["bank_account_id"];
+                $uploadedFiles = $data["ofx_file"];
+
+                // Garante que é sempre um array para podermos fazer o loop
+                if (!is_array($uploadedFiles)) {
+                    $uploadedFiles = [$uploadedFiles];
+                }
 
                 $account = BankAccount::find($accountId);
                 $dictionary = BankDictionaryFactory::make($account?->bank_code);
-                $reconciliationService = new ReconciliationService();
-
-                $content = Storage::disk("public")->get($filePath);
-                $blocks = explode("<STMTTRN>", $content);
-                array_shift($blocks);
+                $BankMatchScoringService = new BankMatchScoringService();
 
                 $importedCount = 0;
                 $autoFeesCount = 0;
                 $autoMatchesCount = 0;
-                $autoPersonalCount = 0; // Contador de sócios
+                $autoPersonalCount = 0;
 
-                foreach ($blocks as $txn) {
-                    preg_match("/<DTPOSTED>([^<]+)/i", $txn, $dRaw);
-                    preg_match("/<TRNAMT>([^<]+)/i", $txn, $amt);
-                    preg_match("/<FITID>([^<]+)/i", $txn, $fid);
-                    preg_match('/<MEMO>([^<\r\n]+)/i', $txn, $mem);
+                // 🚀 NOVO LOOP: Passa por todos os arquivos arrastados para a caixa!
+                foreach ($uploadedFiles as $uploadedFile) {
+                    $content = file_get_contents($uploadedFile->getRealPath());
 
-                    if (!empty($fid[1])) {
-                        $dateStr = substr(trim($dRaw[1]), 0, 8);
-                        $date = Carbon::createFromFormat(
-                            "Ymd",
-                            $dateStr,
-                        )->format("Y-m-d");
-                        $val = (float) trim($amt[1]);
-                        $rawMemo = trim($mem[1] ?? "S/D");
+                    $blocks = explode("<STMTTRN>", $content);
+                    array_shift($blocks);
 
-                        $parsedData = $dictionary->parseMemo($rawMemo);
-                        $counterparty = empty($parsedData["name"])
-                            ? $account->name ?? "Desconhecido"
-                            : $parsedData["name"];
+                    foreach ($blocks as $txn) {
+                        preg_match("/<DTPOSTED>([^<]+)/i", $txn, $dRaw);
+                        preg_match("/<TRNAMT>([^<]+)/i", $txn, $amt);
+                        preg_match("/<FITID>([^<]+)/i", $txn, $fid);
+                        preg_match('/<MEMO>([^<\r\n]+)/i', $txn, $mem);
 
-                        $stmt = BankStatement::firstOrCreate(
-                            ["fitid" => trim($fid[1])],
-                            [
-                                "bank_account_id" => $accountId,
-                                "bank_date" => $date,
-                                "description" =>
-                                    $parsedData["clean_description"],
-                                "document" => $parsedData["document"],
-                                "statement_identifier" =>
-                                    $parsedData["statement_identifier"] ?? null,
-                                "movement_type" =>
-                                    $parsedData["movement_type"] ?? "other",
-                                "counterparty_name" => $counterparty,
-                                "amount" => $val,
-                                "type" => $val >= 0 ? "credit" : "debit",
-                                "status" => "pending",
-                            ],
-                        );
+                        if (!empty($fid[1])) {
+                            $dateStr = substr(trim($dRaw[1]), 0, 8);
+                            $date = Carbon::createFromFormat("Ymd", $dateStr)->format("Y-m-d");
+                            $val = (float) trim($amt[1]);
+                            $rawMemo = trim($mem[1] ?? "S/D");
 
-                        if ($stmt->wasRecentlyCreated) {
-                            $importedCount++;
+                            $parsedData = $dictionary->parseMemo($rawMemo);
+                            $counterparty = empty($parsedData["name"])
+                                ? $account->name ?? "Desconhecido"
+                                : $parsedData["name"];
 
-                            // Busca no banco de dados se esse nome do extrato bate com um Fornecedor de USO PESSOAL
-                            $matchedSupplier = null;
-                            if ($stmt->document) {
-                                $matchedSupplier = Supplier::where(
-                                    "document",
-                                    $stmt->document,
-                                )->first();
-                            }
-                            // Tenta bater pelo nome
-                            if (!$matchedSupplier) {
-                                $matchedSupplier = Supplier::where(
-                                    "name",
-                                    $stmt->counterparty_name,
-                                )
-                                    ->orWhere(
-                                        "document_name",
-                                        $stmt->counterparty_name,
-                                    )
-                                    ->first();
-                            }
+                            // 🛡️ A BARREIRA ANTIDUPLICAÇÃO: O firstOrCreate trava repetições baseadas no FITID!
+                            $stmt = BankStatement::firstOrCreate(
+                                ["fitid" => trim($fid[1])],
+                                [
+                                    "bank_account_id" => $accountId,
+                                    "bank_date" => $date,
+                                    "description" => $parsedData["clean_description"],
+                                    "document" => $parsedData["document"],
+                                    "statement_identifier" => $parsedData["statement_identifier"] ?? null,
+                                    "movement_type" => $parsedData["movement_type"] ?? "other",
+                                    "counterparty_name" => $counterparty,
+                                    "amount" => $val,
+                                    "type" => $val >= 0 ? "credit" : "debit",
+                                    "status" => "pending",
+                                ],
+                            );
 
-                            // ==========================================
-                            // 🚀 ZERO-TOUCH 1: USO PESSOAL (SÓCIOS)
-                            // ==========================================
-                            if (
-                                $matchedSupplier &&
-                                $matchedSupplier->is_personal &&
-                                $stmt->amount < 0
-                            ) {
-                                $payable = AccountPayable::create([
-                                    "description" =>
-                                        "Uso Pessoal: " .
-                                        ($stmt->description ?:
-                                            $stmt->counterparty_name),
-                                    "supplier_id" => $matchedSupplier->id,
-                                    "amount" => abs((float) $stmt->amount),
-                                    "due_date" => $stmt->bank_date,
-                                    "payment_date" => $stmt->bank_date,
-                                    "status" => "paid",
-                                    "accounting_category" => "socios", // 🚀 DRE Perfeito
-                                    "accounting_subcategory" => "pessoal",
-                                ]);
+                            // O sistema só incrementa contadores e faz conciliação se a linha for efetivamente NOVA
+                            if ($stmt->wasRecentlyCreated) {
+                                $importedCount++;
 
-                                $stmt->update([
-                                    "status" => "reconciled",
-                                    "conciliable_id" => $payable->id,
-                                    "conciliable_type" => AccountPayable::class,
-                                ]);
-                                $autoPersonalCount++;
-                            }
-                            // ==========================================
-                            // 🚀 ZERO-TOUCH 2: TAXAS BANCÁRIAS
-                            // ==========================================
-                            elseif (
-                                $stmt->movement_type === "bank_fee" &&
-                                $stmt->amount < 0
-                            ) {
-                                $payable = AccountPayable::create([
-                                    "description" =>
-                                        $stmt->description ?: "Tarifa Bancária",
-                                    "amount" => abs((float) $stmt->amount),
-                                    "due_date" => $stmt->bank_date,
-                                    "payment_date" => $stmt->bank_date,
-                                    "status" => "paid",
-                                    "accounting_category" => "adm", // 🚀 DRE Perfeito
-                                    "accounting_subcategory" => "taxas",
-                                ]);
+                                $matchedSupplier = null;
+                                if ($stmt->document) {
+                                    $matchedSupplier = Supplier::where("document", $stmt->document)->first();
+                                }
+                                if (!$matchedSupplier) {
+                                    $matchedSupplier = Supplier::where("name", $stmt->counterparty_name)
+                                        ->orWhere("document_name", $stmt->counterparty_name)
+                                        ->first();
+                                }
 
-                                $stmt->update([
-                                    "status" => "reconciled",
-                                    "conciliable_id" => $payable->id,
-                                    "conciliable_type" => AccountPayable::class,
-                                ]);
-                                $autoFeesCount++;
-                            }
-                            // ==========================================
-                            // 🚀 ZERO-TOUCH 3: MATCHES PERFEITOS (>= 95%)
-                            // ==========================================
-                            elseif ($stmt->amount < 0) {
-                                $matches = $reconciliationService->findMatchesFor(
-                                    $stmt,
-                                );
-                                if (
-                                    $matches->isNotEmpty() &&
-                                    $matches->first()["score"] >= 95
-                                ) {
-                                    $payable = $matches->first()["candidate"];
-                                    $stmt->update([
-                                        "status" => "reconciled",
-                                        "conciliable_id" => $payable->id,
-                                        "conciliable_type" =>
-                                            AccountPayable::class,
+                                if ($matchedSupplier && $matchedSupplier->is_personal && $stmt->amount < 0) {
+                                    $desc = "Uso Pessoal: " . ($stmt->description ?: $stmt->counterparty_name);
+                                    $payable = AccountPayable::create([
+                                        "description" => $desc,
+                                        "supplier_id" => $matchedSupplier->id,
+                                        "amount" => abs((float) $stmt->amount),
+                                        "due_date" => $stmt->bank_date,
+                                        "is_personal" => true,
+                                        "accounting_category" => "socios",
+                                        "accounting_subcategory" => "pessoal",
                                     ]);
-                                    $payable->update([
-                                        "status" => "paid",
-                                        "payment_date" => $stmt->bank_date,
+
+                                    \App\Services\Accounting\BankReconciliationService::finalize($stmt, $payable, $matchedSupplier->id, $desc);
+                                    $autoPersonalCount++;
+                                }
+                                elseif ($stmt->movement_type === "bank_fee" && $stmt->amount < 0) {
+                                    $desc = $stmt->description ?: "Tarifa Bancária";
+                                    $payable = AccountPayable::create([
+                                        "description" => $desc,
+                                        "amount" => abs((float) $stmt->amount),
+                                        "due_date" => $stmt->bank_date,
+                                        "accounting_category" => "adm",
+                                        "accounting_subcategory" => "taxas",
                                     ]);
-                                    $autoMatchesCount++;
+
+                                    \App\Services\Accounting\BankReconciliationService::finalize($stmt, $payable, null, $desc);
+                                    $autoFeesCount++;
+                                }
+                                elseif ($stmt->amount < 0) {
+                                    $matches = $BankMatchScoringService->findMatchesFor($stmt);
+                                    if ($matches->isNotEmpty() && $matches->first()["score"] >= 95) {
+                                        $payable = $matches->first()["candidate"];
+
+                                        \App\Services\Accounting\BankReconciliationService::finalize($stmt, $payable, $payable->supplier_id);
+                                        $autoMatchesCount++;
+                                    }
                                 }
                             }
                         }
                     }
+                } // Fim do loop de arquivos
+
+                if ($importedCount === 0) {
+                    Notification::make()
+                        ->title("Nenhuma transação nova!")
+                        ->body("O sistema processou os ficheiros e todas as transações já existiam na base de dados.")
+                        ->info()
+                        ->send();
+                    return;
                 }
 
-                Storage::disk("public")->delete($filePath);
-
                 $message = "Foram adicionadas {$importedCount} transações.";
-                if (
-                    $autoFeesCount > 0 ||
-                    $autoMatchesCount > 0 ||
-                    $autoPersonalCount > 0
-                ) {
+                if ($autoFeesCount > 0 || $autoMatchesCount > 0 || $autoPersonalCount > 0) {
                     $message .= " O sistema auto-conciliou ";
                     if ($autoMatchesCount > 0) {
                         $message .= "{$autoMatchesCount} pagamentos exatos, ";

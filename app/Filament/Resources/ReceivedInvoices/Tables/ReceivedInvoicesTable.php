@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ReceivedInvoices\Tables;
 use App\Filament\Resources\ReceivedInvoices\ReceivedInvoiceResource;
 use App\Filament\Resources\ReceivedInvoices\Actions\InvoiceSummaryAction;
 use App\Filament\Resources\ReceivedInvoices\Actions\ViewDanfeAction;
+use App\Filament\Resources\ReceivedInvoices\Actions\ProcessReturnAction;
 use App\Filament\Pages\ImportInvoice;
 use App\Models\Supplier;
 use App\Models\CompanySetting; // 🚀 Importado para checar o certificado
@@ -26,7 +27,7 @@ class ReceivedInvoicesTable
     {
         // 🚀 CHECAGEM DO CERTIFICADO:
         // Busca as configurações e avalia se o certificado digital está preenchido
-        $setting = CompanySetting::first();
+        $setting = CompanySetting::getCached();
 
         // Ajuste 'certificate_path' abaixo para o nome real da coluna no seu banco (ex: certificate, certificado_file...)
         $hasCertificate = $setting && !empty($setting->certificate_path);
@@ -88,36 +89,43 @@ class ReceivedInvoicesTable
                     ->searchable()
                     ->hidden(),
 
-                Tables\Columns\TextColumn::make("status")
-                    ->label("Status")
-                    ->badge()
-                    ->formatStateUsing(
-                        fn(string $state): string => match ($state) {
-                            "pending" => "Pendente",
-                            "ready" => "Pronta p/ Processar",
-                            "processed" => "Processada",
-                            "rejected" => "Rejeitada",
-                            default => $state,
-                        },
-                    )
-                    ->colors([
-                        "gray" => "pending",
-                        "success" => "ready",
-                        "primary" => "processed",
-                        "danger" => "rejected",
-                    ]),
+                    Tables\Columns\TextColumn::make("status")
+                        ->label("Status")
+                        ->badge()
+                        ->formatStateUsing(
+                                                    fn(string $state): string => match ($state) {
+                                                        "pending" => "Pendente",
+                                                        "manifested" => "Aguard. XML",
+                                                        "ready" => "Confirmada",
+                                                        "processed" => "Processada",
+                                                        "rejected" => "Rejeitada",
+                                                        "canceled_by_supplier" => "Cancelada",
+                                                        "returned" => "Devolvida (Anulada)", // 🚀 A nota de Venda original
+                                                        "return_receipt" => "Recibo de Devolução",
+                                                        "expired_manifestation" => "Expirada",// 🚀 A nota que o fornecedor emitiu anulando
+                                                        default => $state,
+                                                    },
+                                                )
+                                                ->colors([
+                                                    "gray" => ["pending", "return_receipt"],
+                                                    "warning" => "manifested",
+                                                    "success" => "processed",
+                                                    "primary" => "ready",
+                                                    "danger" => ["rejected", "canceled_by_supplier", "returned", "expired_manifestation"],
+                                                ]),
             ])
             ->defaultSort("issue_date", "desc")
             ->recordAction("resumo_nota")
             ->filters([
-                SelectFilter::make("status")
-                    ->label("Filtrar Status")
-                    ->options([
-                        "pending" => "Pendente",
-                        "ready" => "Pronta p/ Processar",
-                        "processed" => "Processada",
-                        "rejected" => "Rejeitada",
-                    ]),
+            SelectFilter::make("status")
+                ->label("Filtrar Status")
+                ->options([
+                    "pending" => "Pendente",
+                    "ready" => "Manifestada",
+                    "processed" => "Processada",
+                    "rejected" => "Rejeitada",
+                    "canceled_by_supplier" => "Cancelada", // 🚀 Novo Filtro
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -142,11 +150,15 @@ class ReceivedInvoicesTable
                                     ReceivedInvoiceResource::transmitirEventoSefaz(
                                         $record->nfe_key,
                                         210210,
-                                        "Ciencia da operacao",
+                                        "Ciencia da operacao"
                                     );
-                                    $record->update(["status" => "ready"]);
+                                    $record->update(["status" => "manifested"]);
                                     $sucesso++;
                                 } catch (\Exception $e) {
+                                    // 🚀 SEFAZ GRITOU 596? MARCA COMO EXPIRADO SILENCIOSAMENTE!
+                                    if (str_contains($e->getMessage(), '596')) {
+                                        $record->update(["status" => "expired_manifestation"]);
+                                    }
                                     $falha++;
                                 }
                             }
@@ -186,9 +198,17 @@ class ReceivedInvoicesTable
                                         $history->delete();
                                     }
 
-                                    \App\Models\PersonalPurchase::where("nfe_key", $invoice->nfe_key)->delete();
-                                    \App\Models\AccountPayable::where("nfe_key", $invoice->nfe_key)->delete();
-                                    $invoice->update(["status" => "ready"]);
+                                \App\Models\PersonalPurchase::where("nfe_key", $invoice->nfe_key)->delete();
+
+                                $payables = \App\Models\AccountPayable::where("nfe_key", $invoice->nfe_key)->get();
+                                foreach ($payables as $payable) {
+                                    if ($payable->status === 'paid') {
+                                        throw new \Exception("A nota {$invoice->nfe_key} possui faturas já pagas. Desfaça a conciliação no Extrato Bancário primeiro.");
+                                    }
+                                    $payable->delete();
+                                }
+
+                                $invoice->update(["status" => "ready"]);
                                 });
                             }
                             Notification::make()->title("Lote estornado com sucesso!")->body("As notas voltaram para a fila de pendências.") ->success()->send();
@@ -198,21 +218,79 @@ class ReceivedInvoicesTable
             ])
             ->actions([
                 InvoiceSummaryAction::make(),
+                Action::make('upload_xml_row')
+                    ->label('Anexar XML')
+                    ->icon('heroicon-m-document-arrow-up')
+                    ->iconButton() // Botão limpo na tabela
+                    ->tooltip('Prazo expirado. Anexe o XML manualmente.')
+                    ->color('warning')
+                    ->visible(fn($record) => $record->status === 'expired_manifestation') // Só aparece quando der o erro 596
+                    ->form([
+                        \Filament\Forms\Components\FileUpload::make('xml_file')
+                            ->label('Ficheiro XML da Nota Completo')
+                            ->acceptedFileTypes(['text/xml', 'application/xml'])
+                            ->directory('temp_xmls')
+                            ->required(),
+                    ])
+                    ->action(function ($record, array $data) {
+                        try {
+                            // 1. Lê o ficheiro temporário que o Filament subiu
+                            $xmlContent = \Illuminate\Support\Facades\Storage::get($data['xml_file']);
+
+                            // 2. Apaga o ficheiro do disco, já o temos na memória!
+                            \Illuminate\Support\Facades\Storage::delete($data['xml_file']);
+
+                            $xml = simplexml_load_string($xmlContent);
+                            if (!$xml || $xml->getName() !== 'nfeProc') {
+                                throw new \Exception("Ficheiro inválido. Tem de subir o XML completo (nfeProc).");
+                            }
+
+                            // 3. O Escudo de Segurança: Confirma se o XML é o dono desta linha
+                            $chaveRecebida = str_replace('NFe', '', (string) $xml->NFe->infNFe['Id']);
+                            if ($chaveRecebida !== $record->nfe_key) {
+                                throw new \Exception("Atenção: O XML enviado pertence a outra nota fiscal (Chave diferente)!");
+                            }
+
+                            // 4. Injeta na linha existente e acorda o processo
+                            $record->update([
+                                'xml_content' => $xmlContent,
+                                'status' => 'ready'
+                            ]);
+
+                            // 5. Tenta aprovar automaticamente os itens no histórico
+                            app(\App\Services\Purchases\InvoiceImportService::class)->attemptAutoApproval($record);
+
+                            Notification::make()->title('XML anexado com sucesso!')->body('A nota está pronta para ser importada.')->success()->send();
+                        } catch (\Exception $e) {
+                            Notification::make()->title('Erro na Leitura')->body($e->getMessage())->danger()->send();
+                        }
+                    }),
+                ProcessReturnAction::make(),
                 Action::make("manifestar")
                     ->label("Dar Ciência")
                     ->icon("heroicon-m-check-badge")
                     ->iconButton()
                     ->tooltip('Manifestar conhecimento')
                     ->color("info")
-                    ->visible(fn($record) => $record->status === "pending")
+                    ->visible(fn($record) => $record->status === "pending" && $record->status !== "canceled_by_supplier")
                     ->requiresConfirmation()
                     ->action(function ($record) {
                         try {
                             ReceivedInvoiceResource::transmitirEventoSefaz($record->nfe_key, 210210, "Ciencia da operacao");
-                            $record->update(["status" => "ready"]);
-                            Notification::make()->title("Nota Pronta para Processar!")->success()->send();
+                            $record->update(["status" => "manifested"]);
+                            Notification::make()->title("Ciência enviada! O XML será baixado em breve.")->success()->send();
                         } catch (\Exception $e) {
-                            Notification::make()->title("Erro Técnico")->body($e->getMessage())->danger()->send();
+                            // 🚀 O INTERCEPTADOR DO ERRO 596
+                            if (str_contains($e->getMessage(), '596')) {
+                                $record->update(['status' => 'expired_manifestation']);
+                                Notification::make()
+                                    ->title('Prazo Expirado!')
+                                    ->body('A Sefaz bloqueou a ciência por limite de tempo. Use o botão de anexo na linha para subir o XML.')
+                                    ->warning()
+                                    ->send();
+                            } else {
+                                Notification::make()->title("Erro Técnico")->body($e->getMessage())->danger()->send();
+                            }
                         }
                     }),
 
@@ -234,14 +312,15 @@ class ReceivedInvoicesTable
                         }
                     }),
 
-                Action::make("processar")
-                    ->label("Importar")
-                    ->icon("heroicon-m-arrow-path")
-                    ->iconButton()
-                    ->tooltip('Processar nota')
-                    ->color("success")
-                    ->visible(fn($record) => $record->status === "ready" && !empty($record->xml_content) && !str_contains($record->xml_content, "resNFe"))
-                    ->action(fn($record) => redirect()->to(ImportInvoice::getUrl(["invoice" => $record->id]))),
+                    Action::make("processar")
+                                        ->label("Importar")
+                                        ->icon("heroicon-o-arrow-down-on-square-stack")
+                                        ->iconButton()
+                                        ->tooltip('Processar nota')
+                                        ->color("success")
+                                        // 🚀 Só mostra se for 'ready'. Ignora 'returned', 'return_receipt', etc.
+                                        ->visible(fn($record) => $record->status === "ready" && $record->has_full_xml)
+                                        ->action(fn($record) => redirect()->to(ImportInvoice::getUrl(["invoice" => $record->id]))),
 
                 ViewDanfeAction::make(),
                 Action::make("download_xml")

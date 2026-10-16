@@ -2,7 +2,8 @@
 
 namespace App\Filament\Resources\Ingredients\Schemas;
 
-use Filament\Forms;
+
+use App\Enums\UnitOfMeasure;use Filament\Forms;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
@@ -64,21 +65,22 @@ class IngredientForm
     private static function getCategoryField(): Forms\Components\Select
     {
         return Forms\Components\Select::make("category_id")
-            ->label("Categoria")
+            ->label("Categoria de Insumo")
             ->options(
-                fn() => Category::where("type", "internal")->pluck(
-                    "name",
-                    "id",
-                ),
-            )
+                // 🚀 Lista APENAS categorias internas de insumo/produção
+                fn() => Category::where("type", "internal")->pluck("name", "id"),
+        )
             ->required()
             ->searchable()
+            ->preload()
             ->live()
             ->afterStateUpdated(function ($state, Set $set) {
-                $type = self::isManufacturedCategory($state)
-                    ? "manufactured"
-                    : "ingredient";
-                $set("type", $type);
+                $category = Category::find($state);
+                if ($category && str_contains(strtolower($category->name), "preparo interno")) {
+                    $set("type", "manufactured");
+                } else {
+                    $set("type", "ingredient");
+                }
             })
             ->columnSpan(1);
     }
@@ -88,27 +90,12 @@ class IngredientForm
         return Forms\Components\Select::make("type")
             ->label("Tipo de Item")
             ->options([
-                "ingredient" => "Insumo (Comprado)",
+                "ingredient"   => "Insumo (Comprado)",
                 "manufactured" => "Preparado (Receita Interna)",
             ])
+            ->default("ingredient")
             ->required()
-            ->disabled()
-            ->dehydrated()
-            ->mutateDehydratedStateUsing(
-                fn($state, Get $get) => self::isManufacturedCategory(
-                    $get("category_id"),
-                )
-                    ? "manufactured"
-                    : "ingredient",
-            )
-            ->afterStateHydrated(
-                fn(Set $set, Get $get) => $set(
-                    "type",
-                    self::isManufacturedCategory($get("category_id"))
-                        ? "manufactured"
-                        : "ingredient",
-                ),
-            )
+            ->live()
             ->columnSpan(1);
     }
 
@@ -116,13 +103,7 @@ class IngredientForm
     {
         return Forms\Components\Select::make("unit_of_measure")
             ->label("Unidade de Medida")
-            ->options([
-                "UN" => "Unidade",
-                "KG" => "Quilograma",
-                "LT" => "Litro",
-                "GR" => "Grama",
-                "ML" => "Mililitro",
-            ])
+            ->options(UnitOfMeasure::class)
             ->required()
             ->live()
             ->columnSpan(1);
@@ -152,7 +133,7 @@ class IngredientForm
             ->prefix('R$')
             ->formatStateUsing(function ($state, ?Product $record) {
                 if ($record) {
-                    $realCost = \App\Services\ProductCostingService::calculateBaseCost(
+                    $realCost = \App\Services\Catalog\ProductCostingService::calculateBaseCost(
                         $record,
                     );
                     $formatted = rtrim(

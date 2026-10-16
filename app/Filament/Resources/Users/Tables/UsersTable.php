@@ -7,7 +7,7 @@ use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Actions;
 
-class UserTable
+class UsersTable
 {
     public static function configure(Table $table): Table
     {

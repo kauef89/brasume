@@ -39,7 +39,7 @@ class ProcessedPersonalTable extends Component implements HasForms, HasTable, Ha
                 PersonalPurchase::query()
                     ->where('nfe_key', $this->invoiceKey ?? 'none')
             )
-            ->heading('Itens processados')
+            ->heading('Uso Pessoal')
             ->description('Selecione os itens que deseja estornar e devolver para a fila acima para correção.')
             ->columns([
                 TextColumn::make('xml_name')

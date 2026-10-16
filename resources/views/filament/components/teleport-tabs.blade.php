@@ -1,3 +1,14 @@
+<style>
+    /* 🚀 AJUSTE FINO: Remove o buraco (gap) deixado pelas abas quando a Trait está ativa */
+    :not(.fi-modal-window) > .fi-has-gap {
+        gap: 0 !important;
+    }
+
+    .fi-modal-content.fi-sc.fi-has-gap {
+        gap: calc(var(--spacing) * 6) !important;
+    }
+</style>
+
 <script>
     /* --- C) TELETRANSPORTE PARA O CABEÇALHO DA TABELA (.fi-ta-header-toolbar) --- */
     function teleportTabsToTable() {

@@ -14,7 +14,7 @@ class LegacyCustomerResource extends Resource
 {
     protected static ?string $model = LegacyCustomer::class;
     protected static string|\BackedEnum|null $navigationIcon = "heroicon-o-users";
-    protected static string|\UnitEnum|null $navigationGroup = "Legado Fiscal";
+    protected static string|\UnitEnum|null $navigationGroup = 'Sistema Legado';
     protected static ?string $modelLabel = "Cliente Antigo";
     protected static ?string $pluralModelLabel = "Clientes Antigos";
 

@@ -26,7 +26,7 @@
 
     {{-- 🚀 FIELDSET: ENGENHARIA DE PREÇO & MARGEM (Ajustado e Centralizado com Space-Between) --}}
     <fieldset class="fi-fo-fieldset rounded-xl border border-gray-200 p-6 dark:border-gray-800">
-        <legend class="px-2 text-sm font-bold select-none flex items-center gap-2">
+        <legend class="px-2 text-sm font-medium select-none flex items-center gap-2">
             Precificação
         </legend>
 
@@ -47,7 +47,7 @@
                         x-on:keydown.enter="$el.blur()"
                         x-on:input="$el.value = $el.value.replace(/\./g, ',').replace(/[^0-9,]/g, '')"
                         placeholder="Ex: 29,90"
-                        class="block w-full border-0 bg-transparent py-2 pl-2 text-gray-900 dark:text-white placeholder:text-gray-400 text-sm font-bold focus:outline-none focus:ring-0">
+                        class="block w-full border-0 bg-transparent py-2 pl-2 text-gray-900 dark:text-white placeholder:text-gray-400 text-sm font-medium focus:outline-none focus:ring-0">
                 </div>
                 <p class="text-[10px] text-gray-400 mt-1">Limpe o campo (Backspace) para voltar ao padrão.</p>
             </div>
@@ -65,7 +65,7 @@
                         x-on:keydown.enter="$el.blur()"
                         x-on:input="$el.value = $el.value.replace(/\./g, ',').replace(/[^0-9,]/g, '')"
                         placeholder="Ex: 45"
-                        class="block w-full border-0 bg-transparent py-2 pl-3 text-gray-900 dark:text-white placeholder:text-gray-400 text-sm font-bold text-right focus:outline-none focus:ring-0">
+                        class="block w-full border-0 bg-transparent py-2 pl-3 text-gray-900 dark:text-white placeholder:text-gray-400 text-sm font-medium text-right focus:outline-none focus:ring-0">
                     <span class="flex select-none items-center pr-3 text-gray-400 text-sm font-medium pl-2">%</span>
                 </div>
                 <p class="text-[10px] text-gray-400 mt-1">O preço se ajustará automaticamente para garantir esta margem.</p>
@@ -106,13 +106,13 @@
                     }
                 }"
             >
-                <legend class="flex items-center gap-3 px-2 text-sm font-bold text-gray-950 dark:text-white select-none">
+                <legend class="flex items-center gap-3 px-2 text-sm font-medium text-gray-950 dark:text-white select-none">
                     <span>{{ $group->name }}</span>
 
                     @if($group->type === 'ingredient')
-                        <span class="fi-badge flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase bg-gray-50 text-gray-600 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">ingrediente</span>
+                        <span class="fi-badge flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase bg-gray-50 text-gray-600 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">ingrediente</span>
                     @else
-                        <span class="fi-badge flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase bg-amber-50 text-amber-600 border border-amber-200 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-400">adicional</span>
+                        <span class="fi-badge flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase bg-amber-50 text-amber-600 border border-amber-200 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-400">adicional</span>
                     @endif
 
                     @if($maxSelections !== 'null')

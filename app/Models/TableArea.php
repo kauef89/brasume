@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TableArea extends Model
 {
-    protected $fillable = ['name'];
+    protected $guarded = [];
 
     public function diningTables(): HasMany
     {

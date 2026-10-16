@@ -54,8 +54,7 @@ class LegacyProductForm
 
                     Toggle::make("is_ignored")
                         ->label("Ignorar este item")
-                        ->helperText(
-                            "Marque se virou adicional ou não importa mais.",
+                        ->helperText("Marque se virou adicional ou não importa mais.",
                         )
                         ->inline(false),
 

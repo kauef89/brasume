@@ -3,27 +3,40 @@
     "name": "laravel/laravel",
     "type": "project",
     "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "keywords": [
+        "laravel",
+        "framework"
+    ],
     "license": "MIT",
     "require": {
         "php": "^8.2",
         "filament/filament": "^4.0",
         "inertiajs/inertia-laravel": "^3.0",
+        "intervention/image": "^3.0",
+        "laravel-notification-channels/webpush": "^11.0",
         "laravel/framework": "^12.0",
+        "laravel/reverb": "^1.0",
         "laravel/socialite": "^5.26",
         "laravel/tinker": "^2.10.1",
+        "lucascudo/laravel-pt-br-localization": "^3.0",
+        "mobiledetect/mobiledetectlib": "^4.11",
         "nfephp-org/sped-da": "^1.1",
         "nfephp-org/sped-nfe": "^5.2",
+        "openplain/filament-tree-view": "^0.5.6",
+        "pragmarx/google2fa": "^9.0",
+        "pusher/pusher-php-server": "^7.2",
         "saade/filament-fullcalendar": "^4.0@beta",
+        "simplesoftwareio/simple-qrcode": "^4.2",
         "spatie/laravel-permission": "^7.3",
-        "stancl/tenancy": "^3.9"
+        "stancl/tenancy": "^3.9",
+        "tightenco/ziggy": "^2.6"
     },
     "require-dev": {
+        "barryvdh/laravel-ide-helper": "^3.7",
         "fakerphp/faker": "^1.23",
+        "itsgoingd/clockwork": "^5.3",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.24",
-        "laravel/sail": "^1.41",
-        "lucascudo/laravel-pt-br-localization": "^3.0",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
         "phpunit/phpunit": "^11.5.50"
@@ -47,7 +60,9 @@
             "@php artisan key:generate",
             "@php artisan migrate --force",
             "npm install",
-            "npm run build"
+            "npm run build",
+            "@php artisan ide-helper:generate",
+            "@php artisan ide-helper:meta"
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
@@ -63,7 +78,9 @@
             "@php artisan filament:upgrade"
         ],
         "post-update-cmd": [
-            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
+            "@php artisan vendor:publish --tag=laravel-assets --ansi --force",
+            "@php artisan ide-helper:generate",
+            "@php artisan ide-helper:meta"
         ],
         "post-root-package-install": [
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""

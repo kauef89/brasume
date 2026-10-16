@@ -1,0 +1,441 @@
+<?php
+
+namespace App\Services\Catalog;
+
+use App\Models\Product;
+use App\Models\TechnicalSheet;
+use App\Models\InventoryLoss;
+use App\Models\OrderItem;
+use App\Models\ModifierOption;
+use App\Models\StorageLocation;
+use App\Events\StockLowDetected;
+use App\Events\CatalogUpdated;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+
+class InventoryService
+{
+    /**
+     * Auxiliar interno: Rateia a dedução de saldo pelos Locais de Armazenamento.
+     * Prioridade: 1) Display (Exibição), 2) Intermediate, 3) Storage (Estoque Geral)
+     */
+    private function deductFromStorageLocations(Product $product, float $qtyToDeduct): void
+    {
+        $locations = $product->storageLocations()
+            ->orderByRaw("FIELD(type, 'display', 'intermediate', 'storage')")
+            ->get();
+
+        if ($locations->isEmpty()) {
+            return; // Se não tem controle por local, não faz rateio interno.
+        }
+
+        $remainingToDeduct = $qtyToDeduct;
+
+        // Tenta deduzir dos locais que possuem saldo positivo
+        foreach ($locations as $loc) {
+            if ($remainingToDeduct <= 0) break;
+
+            $localStock = (float) $loc->pivot->current_stock;
+            if ($localStock > 0) {
+                $deductHere = min($localStock, $remainingToDeduct);
+                $product->storageLocations()->updateExistingPivot($loc->id, [
+                    'current_stock' => $localStock - $deductHere
+                ]);
+                $remainingToDeduct -= $deductHere;
+            }
+        }
+
+        // Se após varrer os saldos positivos ainda faltar deduzir (estoque ficou negativo geral),
+        // joga o saldo negativo no local de maior prioridade (Exibição).
+        if ($remainingToDeduct > 0) {
+            $firstLoc = $locations->first();
+            $currentLocal = (float) $firstLoc->pivot->current_stock;
+            $product->storageLocations()->updateExistingPivot($firstLoc->id, [
+                'current_stock' => $currentLocal - $remainingToDeduct
+            ]);
+        }
+    }
+
+    /**
+     * Auxiliar interno: Adiciona saldo rateando de volta (joga direto no Estoque primário/Storage se houver)
+     */
+    private function addToStorageLocations(Product $product, float $qtyToAdd): void
+    {
+        $locations = $product->storageLocations()
+            ->orderByRaw("FIELD(type, 'storage', 'intermediate', 'display')")
+            ->get();
+
+        if ($locations->isEmpty()) return;
+
+        // Devolve tudo para o primeiro local da fila reversa (Estoque/Retaguarda)
+        $targetLoc = $locations->first();
+        $currentLocal = (float) $targetLoc->pivot->current_stock;
+        $product->storageLocations()->updateExistingPivot($targetLoc->id, [
+            'current_stock' => $currentLocal + $qtyToAdd
+        ]);
+    }
+
+    /**
+     * Entrada oficial de estoque (via NFe, Compra Manual ou Reposição)
+     */
+    public function addStock(Product $product, float $quantity, string $origin = 'compra'): void
+    {
+        if ($quantity <= 0) return;
+
+        DB::transaction(function () use ($product, $quantity) {
+            $wasOutOfStock = $product->status === 'out_of_stock' || (float) $product->current_stock <= 0;
+            $newStock = (float) $product->current_stock + $quantity;
+
+            $product->update(['current_stock' => $newStock]);
+            $this->addToStorageLocations($product, $quantity); // Sincroniza local
+
+            if ($wasOutOfStock && $newStock > 0 && $product->status !== 'paused' && $product->status !== 'archived') {
+                $this->triggerStockRestored($product);
+            } else {
+                $tenantId = tenant('id') ?? 'central';
+                broadcast(new CatalogUpdated($tenantId));
+            }
+        });
+    }
+
+    public function deductStock(Product $product, float $qtySold): void
+    {
+        if ($product->track_inventory) {
+            $newStock = (float) $product->current_stock - $qtySold;
+
+            $product->update(['current_stock' => $newStock]);
+            $this->deductFromStorageLocations($product, $qtySold); // Sincroniza em cascata
+
+            if ($qtySold > 0) {
+                $this->checkThresholds($product->fresh());
+            }
+
+            if ($newStock <= 0 && $product->status === 'available') {
+                $this->triggerStockRupture($product);
+            }
+        }
+
+        $sheets = TechnicalSheet::where('parent_product_id', $product->id)->where('is_active', true)->get();
+        foreach ($sheets as $sheet) {
+            $ingredient = Product::find($sheet->ingredient_product_id);
+            if ($ingredient && $ingredient->track_inventory) {
+                $ingQty = (float) $sheet->quantity * $qtySold;
+                $newIngStock = (float) $ingredient->current_stock - $ingQty;
+
+                $ingredient->update(['current_stock' => $newIngStock]);
+                $this->deductFromStorageLocations($ingredient, $ingQty); // Baixa em cascata do ingrediente
+
+                if ($qtySold > 0) {
+                    $this->checkThresholds($ingredient->fresh());
+                }
+
+                if ($newIngStock <= 0 && $ingredient->status === 'available') {
+                    $this->triggerStockRupture($ingredient);
+                }
+            }
+        }
+    }
+
+    public function restoreStock(Product $product, float $qtyReturned): void
+    {
+        if ($product->track_inventory) {
+            $newStock = (float) $product->current_stock + $qtyReturned;
+            $product->update(['current_stock' => $newStock]);
+            $this->addToStorageLocations($product, $qtyReturned);
+
+            $fresh = $product->fresh();
+            if ($fresh->current_stock > 0 && $fresh->status === 'out_of_stock') {
+                $this->triggerStockRestored($fresh);
+            }
+        }
+
+        // Restaura Ficha Técnica
+        $sheets = TechnicalSheet::where('parent_product_id', $product->id)->where('is_active', true)->get();
+        foreach ($sheets as $sheet) {
+            $ingredient = Product::find($sheet->ingredient_product_id);
+            if ($ingredient && $ingredient->track_inventory) {
+                $ingQty = (float) $sheet->quantity * $qtyReturned;
+                $newIngStock = (float) $ingredient->current_stock + $ingQty;
+
+                $ingredient->update(['current_stock' => $newIngStock]);
+                $this->addToStorageLocations($ingredient, $ingQty);
+
+                $freshIng = $ingredient->fresh();
+                if ($freshIng->current_stock > 0 && $freshIng->status === 'out_of_stock') {
+                    $this->triggerStockRestored($freshIng);
+                }
+            }
+        }
+    }
+
+    public function processOrderItemStock(OrderItem $item, string $action = 'deduct'): void
+    {
+        $multiplier = $action === 'restore' ? -1 : 1;
+
+        if ($item->product_id) {
+            $product = Product::find($item->product_id);
+            if ($product) {
+                if ($multiplier === 1) {
+                    $this->deductStock($product, $item->quantity);
+                } else {
+                    $this->restoreStock($product, $item->quantity);
+                }
+            }
+        }
+
+        foreach ($item->modifiers as $mod) {
+            if ($mod->modifier_option_id) {
+                $opt = ModifierOption::find($mod->modifier_option_id);
+                if ($opt && $opt->linked_product_id) {
+                    $linked = Product::find($opt->linked_product_id);
+                    $qtyToProcess = $opt->linked_qty * $mod->quantity;
+                    if ($linked) {
+                        if ($multiplier === 1) $this->deductStock($linked, $qtyToProcess);
+                        else $this->restoreStock($linked, $qtyToProcess);
+                    }
+                }
+            }
+        }
+
+        foreach ($item->subItems as $sub) {
+            if ($sub->product_id) {
+                $subProd = Product::find($sub->product_id);
+                if ($subProd) {
+                    if ($multiplier === 1) $this->deductStock($subProd, $sub->quantity);
+                    else $this->restoreStock($subProd, $sub->quantity);
+                }
+            }
+            foreach ($sub->modifiers as $mod) {
+                if ($mod->modifier_option_id) {
+                    $opt = ModifierOption::find($mod->modifier_option_id);
+                    if ($opt && $opt->linked_product_id) {
+                        $linked = Product::find($opt->linked_product_id);
+                        $qtyToProcess = $opt->linked_qty * $mod->quantity;
+                        if ($linked) {
+                            if ($multiplier === 1) $this->deductStock($linked, $qtyToProcess);
+                            else $this->restoreStock($linked, $qtyToProcess);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public function adjustStock(Product $product, float $newStock, string $reason, ?int $userId = null): void
+    {
+        DB::transaction(function () use ($product, $newStock, $reason, $userId) {
+            $oldStock = (float) $product->current_stock;
+            $diff = $newStock - $oldStock;
+
+            $product->update(['current_stock' => $newStock]);
+
+            // Se for ajuste direto global pelo painel, joga a diferença inteira no local primário.
+            if ($diff < 0) {
+                $this->deductFromStorageLocations($product, abs($diff));
+                $this->registerLoss(
+                    $product,
+                    abs($diff),
+                    'Ajuste Manual: ' . $reason,
+                    "Estoque alterado de {$oldStock} para {$newStock}",
+                    $userId,
+                    null,
+                    InventoryLoss::TYPE_INVENTORY_AUDIT
+                );
+            } elseif ($diff > 0) {
+                $this->addToStorageLocations($product, $diff);
+            }
+
+            if ($newStock <= 0) {
+                if ($product->status === 'available') {
+                    $this->triggerStockRupture($product);
+                }
+            } else {
+                if ($product->status === 'out_of_stock') {
+                    $this->triggerStockRestored($product);
+                } else {
+                    $this->checkThresholds($product);
+                    broadcast(new CatalogUpdated(tenant('id') ?? 'central'));
+                }
+            }
+        });
+    }
+
+    public function registerLoss(
+        Product $product,
+        float $qty,
+        string $reason,
+        string $notes,
+        ?int $userId = null,
+        ?int $orderItemId = null,
+        string $lossType = InventoryLoss::TYPE_OPERATIONAL,
+        ?int $storageLocationId = null
+    ): InventoryLoss {
+        $unitCost = class_exists(ProductCostingService::class)
+            ? ProductCostingService::calculateBaseCost($product)
+            : (float) ($product->base_cost ?? 0);
+
+        return InventoryLoss::create([
+            'product_id'          => $product->id,
+            'order_item_id'       => $orderItemId,
+            'user_id'             => $userId,
+            'storage_location_id' => $storageLocationId,
+            'loss_type'           => $lossType,
+            'quantity'            => $qty,
+            'unit_cost'           => $unitCost,
+            'total_cost'          => round($unitCost * $qty, 5),
+            'reason'              => $reason,
+            'notes'               => $notes,
+        ]);
+    }
+
+    public function auditStorageLocation(int $locationId, array $countedItems, int $userId): array
+    {
+        $location = StorageLocation::findOrFail($locationId);
+        $divergences = [];
+        $totalLossBrl = 0.0;
+
+        DB::transaction(function () use ($location, $countedItems, $userId, &$divergences, &$totalLossBrl) {
+            foreach ($countedItems as $entry) {
+                $productId = (int) $entry['product_id'];
+                $countedQty = (float) $entry['counted_stock'];
+
+                $product = Product::find($productId);
+                if (!$product || !$product->track_inventory) continue;
+
+                // 1. Descobre quanto o sistema ACHA que tem neste local específico
+                $pivotData = DB::table('product_storage_location')
+                    ->where('product_id', $productId)
+                    ->where('storage_location_id', $location->id)
+                    ->first();
+
+                $localSystemQty = $pivotData ? (float) $pivotData->current_stock : 0;
+                $delta = round($countedQty - $localSystemQty, 4);
+
+                if ($delta === 0.0) continue;
+
+                // 2. Atualiza apenas o local específico
+                if ($pivotData) {
+                    $product->storageLocations()->updateExistingPivot($location->id, ['current_stock' => $countedQty]);
+                } else {
+                    $product->storageLocations()->attach($location->id, ['current_stock' => $countedQty]);
+                }
+
+                // 3. Atualiza o estoque Global somando todas as praças
+                $newGlobalStock = (float) DB::table('product_storage_location')
+                    ->where('product_id', $productId)
+                    ->sum('current_stock');
+
+                $product->update(['current_stock' => $newGlobalStock]);
+
+                // 4. Registra perda ou lucro e verifica ruptura
+                if ($delta < 0) {
+                    $lossQty = abs($delta);
+                    $lossRecord = $this->registerLoss(
+                        $product,
+                        $lossQty,
+                        "Furo de Balanço: {$location->name}",
+                        "Contagem física: {$countedQty}. Sistema esperava: {$localSystemQty}.",
+                        $userId,
+                        null,
+                        InventoryLoss::TYPE_INVENTORY_AUDIT,
+                        $location->id
+                    );
+
+                    if ($newGlobalStock <= 0) {
+                        $this->triggerStockRupture($product);
+                    }
+
+                    $totalLossBrl += (float) $lossRecord->total_cost;
+                    $divergences[] = [
+                        'product' => $product->name,
+                        'type'    => 'loss',
+                        'delta'   => $delta,
+                        'uom'     => $product->unit_of_measure,
+                        'cost'    => (float) $lossRecord->total_cost
+                    ];
+                } elseif ($delta > 0) {
+                    if ($product->status === 'out_of_stock' && $newGlobalStock > 0) {
+                        $this->triggerStockRestored($product);
+                    }
+                    $divergences[] = [
+                        'product' => $product->name,
+                        'type'    => 'surplus',
+                        'delta'   => $delta,
+                        'uom'     => $product->unit_of_measure,
+                        'cost'    => 0
+                    ];
+                }
+            }
+        });
+
+        broadcast(new CatalogUpdated(tenant('id') ?? 'central'));
+
+        return [
+            'location'       => $location->name,
+            'divergences'    => $divergences,
+            'total_loss_brl' => round($totalLossBrl, 2),
+        ];
+    }
+
+    public function triggerStockRupture(Product $product): void
+    {
+        $product->update(['status' => 'out_of_stock']);
+
+        ModifierOption::where('linked_product_id', $product->id)->update(['is_active' => false]);
+
+        $parentIds = TechnicalSheet::where('ingredient_product_id', $product->id)->where('is_active', true)->pluck('parent_product_id')->unique();
+        if ($parentIds->isNotEmpty()) {
+            Product::whereIn('id', $parentIds)->whereNotIn('status', ['paused', 'archived'])->update(['status' => 'out_of_stock']);
+        }
+
+        event(new StockLowDetected($product, 'critical'));
+        broadcast(new CatalogUpdated(tenant('id') ?? 'central'));
+
+        Log::warning("🚨 [Estoque Ruptura] '{$product->name}' esgotou. Adicionais e pratos bloqueados.");
+    }
+
+    public function triggerStockRestored(Product $product): void
+    {
+        if (in_array($product->status, ['paused', 'archived'], true)) {
+            return;
+        }
+
+        $hasMissingIngredients = TechnicalSheet::where('parent_product_id', $product->id)->where('is_active', true)
+            ->whereHas('ingredient', function ($query) {
+                $query->whereIn('status', ['out_of_stock', 'unavailable', 'paused', 'archived']);
+            })
+            ->exists();
+
+        if (!$hasMissingIngredients) {
+            $product->update(['status' => 'available']);
+        }
+
+        ModifierOption::where('linked_product_id', $product->id)->update(['is_active' => true]);
+
+        $parentIds = TechnicalSheet::where('ingredient_product_id', $product->id)->where('is_active', true)->pluck('parent_product_id')->unique();
+        foreach ($parentIds as $parentId) {
+            $parent = Product::find($parentId);
+            if (!$parent || in_array($parent->status, ['paused', 'archived'], true)) continue;
+
+            $parentMissing = TechnicalSheet::where('parent_product_id', $parentId)
+                ->whereHas('ingredient', fn($q) => $q->whereIn('status', ['out_of_stock', 'unavailable', 'paused', 'archived']))
+                ->exists();
+
+            $parentPhysical = $parent->track_inventory && (float) $parent->current_stock <= 0;
+
+            if (!$parentMissing && !$parentPhysical) {
+                $parent->update(['status' => 'available']);
+            }
+        }
+
+        broadcast(new CatalogUpdated(tenant('id') ?? 'central'));
+    }
+
+    private function checkThresholds(Product $product): void
+    {
+        if ($product->min_stock !== null && $product->current_stock <= $product->min_stock) {
+            Log::info("⚠️ [Estoque Baixo] Produto {$product->name} atingiu o limite mínimo.");
+            event(new StockLowDetected($product, $product->current_stock <= 0 ? 'critical' : 'normal'));
+        }
+    }
+}

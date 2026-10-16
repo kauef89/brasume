@@ -32,6 +32,7 @@ class UndoImportAction extends Action
                 try {
                     if ($record->type === "v0_consolidated") {
                         LegacyDailyRevenue::where("import_tag", $record->import_tag)->delete();
+
                     } elseif ($record->type === "v2_fiscal") {
                         // 1. Desfaz as notas em staging
                         FiscalDocument::where('import_tag', $record->import_tag)->delete();
@@ -48,16 +49,40 @@ class UndoImportAction extends Action
                         DB::table("legacy_order_payments")->whereIn("legacy_order_id", $orderIds)->delete();
                         LegacyOrder::whereIn("id", $orderIds)->delete();
 
+                    } elseif ($record->type === "v1_database") {
+                        // 🚀 1. Lógica Híbrida: Limpa as Notas Fiscais Enriquecidas (Tira a etiqueta colada)
+                        $enrichedOrders = LegacyOrder::where('import_tag', 'like', "% | {$record->import_tag}")->get();
+                        foreach ($enrichedOrders as $order) {
+                            $cleanTag = trim(str_replace(" | {$record->import_tag}", "", $order->import_tag));
+
+                            $order->update([
+                                'number' => null,
+                                'order_type' => null,
+                                'import_tag' => $cleanTag
+                            ]);
+
+                            // Apaga os itens e pagamentos, deixando a capa do XML limpa para a próxima vez
+                            DB::table("legacy_order_items")->where("legacy_order_id", $order->id)->delete();
+                            DB::table("legacy_order_payments")->where("legacy_order_id", $order->id)->delete();
+                        }
+
+                        // 🚀 2. Lógica Híbrida: Apaga os pedidos puramente criados do zero pelo WP
+                        $orderIds = LegacyOrder::where("import_tag", $record->import_tag)->pluck("id");
+                        DB::table("legacy_order_items")->whereIn("legacy_order_id", $orderIds)->delete();
+                        DB::table("legacy_order_payments")->whereIn("legacy_order_id", $orderIds)->delete();
+                        LegacyOrder::whereIn("id", $orderIds)->delete();
+
                     } else {
-                        // V1 Padrão
+                        // V1 Padrão antigo
                         $orderIds = LegacyOrder::where("import_tag", $record->import_tag)->pluck("id");
                         DB::table("legacy_order_items")->whereIn("legacy_order_id", $orderIds)->delete();
                         DB::table("legacy_order_payments")->whereIn("legacy_order_id", $orderIds)->delete();
                         LegacyOrder::whereIn("id", $orderIds)->delete();
                     }
+
                     $record->delete();
                     DB::commit();
-                    Notification::make()->title("Importação revertida!")->success()->send();
+                    Notification::make()->title("Importação revertida com sucesso!")->success()->send();
                 } catch (\Exception $e) {
                     DB::rollBack();
                     throw $e;

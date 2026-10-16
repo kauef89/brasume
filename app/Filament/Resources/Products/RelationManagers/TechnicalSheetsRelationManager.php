@@ -2,7 +2,8 @@
 
 namespace App\Filament\Resources\Products\RelationManagers;
 
-use Filament\Resources\RelationManagers\RelationManager;
+
+use App\Enums\OrderType;use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -12,9 +13,10 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use App\Models\Product;
 use Filament\Schemas\Components\Utilities\Get;
-use App\Services\ProductCostingService;
+use App\Services\Catalog\ProductCostingService;
 use Illuminate\Support\Facades\DB;
 use Filament\Notifications\Notification;
+use Filament\Tables\Filters\TernaryFilter;
 
 class TechnicalSheetsRelationManager extends RelationManager
 {
@@ -80,15 +82,17 @@ class TechnicalSheetsRelationManager extends RelationManager
                 Select::make("order_type")
                     ->label("Aplicação (Canais)")
                     ->multiple()
-                    ->options([
-                        "table" => "Mesa",
-                        "counter" => "Balcão (Viagem)",
-                        "delivery" => "Delivery",
-                    ])
+                    ->options(OrderType::class)
                     ->default(["table", "counter", "delivery"])
                     ->required()
-                    ->columnSpanFull()
+                    ->columnSpan(1)
                     ->visible($isFinalProduct),
+
+                Toggle::make("is_active")
+                    ->label("Ativo")
+                    ->helperText("Desative insumos antigos em vez de apagá-los para não perder histórico.")
+                    ->default(true)
+                    ->columnSpan(1),
             ])
             ->columns(2);
     }
@@ -104,11 +108,19 @@ class TechnicalSheetsRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute("ingredient_product_id")
             ->columns([
+                Tables\Columns\ToggleColumn::make("is_active")
+                    ->label("Ativo")
+                    ->afterStateUpdated(function ($record, $state, $livewire) {
+                        $livewire->dispatch("update-margin-widget");
+                    }),
+
                 Tables\Columns\TextColumn::make("ingredient.name")
                     ->label("Ingrediente/Insumo")
                     ->searchable()
                     ->sortable()
-                    ->weight("bold"),
+                    ->weight("bold")
+                    ->color(fn ($record) => $record->is_active ? null : 'gray')
+                    ->description(fn ($record) => $record->is_active ? '' : 'Insumo desativado'),
 
                 // A Fusão da Quantidade + Unidade de Medida
                 Tables\Columns\TextColumn::make("quantity")
@@ -129,7 +141,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                         return "{$numStr} {$um}";
                     })
                     ->badge()
-                    ->color("gray"),
+                    ->color(fn ($record) => $record->is_active ? 'gray' : 'gray'),
 
                 Tables\Columns\TextColumn::make("cost")
                     ->label("Custo Total")
@@ -146,7 +158,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                     })
                     ->money("BRL")
                     ->weight("bold")
-                    ->color("danger"),
+                    ->color(fn ($record) => $record->is_active ? 'danger' : 'gray'),
 
                 Tables\Columns\TextColumn::make("order_type")
                     ->label("Aplicação")
@@ -160,7 +172,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                         },
                     )
                     ->color(
-                        fn(string $state): string => match ($state) {
+                        fn(string $state, $record): string => !$record->is_active ? "gray" : match ($state) {
                             "table" => "info",
                             "counter" => "warning",
                             "delivery" => "success",
@@ -169,8 +181,15 @@ class TechnicalSheetsRelationManager extends RelationManager
                     )
                     ->visible($isFinalProduct),
             ])
+            ->filters([
+                TernaryFilter::make('is_active')
+                    ->label('Status do Insumo')
+                    ->placeholder('Todos')
+                    ->trueLabel('Apenas Ativos')
+                    ->falseLabel('Apenas Inativos')
+                    ->default(true), // Por padrão exibe apenas ativos para não poluir a ficha
+            ])
             ->headerActions([
-                // 🚀 ADICIONAR INSUMO: Solto na barra para não bugar o Filament
                 Actions\CreateAction::make()
                     ->label("Adicionar Insumo")
                     ->after(
@@ -179,7 +198,6 @@ class TechnicalSheetsRelationManager extends RelationManager
                         ),
                     ),
 
-                // 🚀 DROPDOWN FERRAMENTAS: Apenas para as ações genéricas de banco de dados
                 Actions\ActionGroup::make([
                     Actions\Action::make("cloneFrom")
                         ->label("Clonar de...")
@@ -200,8 +218,7 @@ class TechnicalSheetsRelationManager extends RelationManager
 
                             Toggle::make("clear_current")
                                 ->label("Limpar ficha atual?")
-                                ->helperText(
-                                    "Apagaremos todos os itens desta ficha antes de puxar a nova receita.",
+                                ->helperText("Apagaremos todos os itens desta ficha antes de puxar a nova receita.",
                                 )
                                 ->default(false),
                         ])
@@ -261,6 +278,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                                         $item->ingredient_product_id,
                                     "quantity" => $item->quantity,
                                     "order_type" => $encodedOrderType,
+                                    "is_active" => $item->is_active ?? true,
                                     "created_at" => now(),
                                     "updated_at" => now(),
                                 ]);
@@ -300,8 +318,7 @@ class TechnicalSheetsRelationManager extends RelationManager
 
                             Toggle::make("clear_target")
                                 ->label("Substituir ficha técnica existente?")
-                                ->helperText(
-                                    "Apaga a receita atual dos produtos de destino antes de colar.",
+                                ->helperText("Apaga a receita atual dos produtos de destino antes de colar.",
                                 )
                                 ->default(false),
                         ])
@@ -359,6 +376,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                                             $item->ingredient_product_id,
                                         "quantity" => $item->quantity,
                                         "order_type" => $encodedOrderType,
+                                        "is_active" => $item->is_active ?? true,
                                         "created_at" => now(),
                                         "updated_at" => now(),
                                     ]);
@@ -378,7 +396,6 @@ class TechnicalSheetsRelationManager extends RelationManager
                     ->color("gray"),
             ])
             ->actions([
-                // 🚀 PURO COMO NO SEU BACKUP: Voltam para as linhas sem frescuras
                 Actions\EditAction::make()->after(
                     fn($livewire) => $livewire->dispatch(
                         "update-margin-widget",
@@ -393,7 +410,25 @@ class TechnicalSheetsRelationManager extends RelationManager
             ])
             ->bulkActions([
                 Actions\BulkActionGroup::make([
-                    // 🚀 BOTÃO CLONAR PARA (AGORA COM TOGGLE E PROTEÇÃO SQL)
+                    // Adicionei Ações em Massa de Status
+                    Actions\BulkAction::make('activate')
+                        ->label('Ativar selecionados')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, $livewire) {
+                            $records->each->update(['is_active' => true]);
+                            $livewire->dispatch("update-margin-widget");
+                        }),
+
+                    Actions\BulkAction::make('deactivate')
+                        ->label('Desativar selecionados')
+                        ->icon('heroicon-o-x-circle')
+                        ->color('gray')
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, $livewire) {
+                            $records->each->update(['is_active' => false]);
+                            $livewire->dispatch("update-margin-widget");
+                        }),
+
                     Actions\BulkAction::make("cloneToTarget")
                         ->label("Clonar Para...")
                         ->icon("heroicon-o-arrow-up-tray")
@@ -419,11 +454,9 @@ class TechnicalSheetsRelationManager extends RelationManager
                                 })
                                 ->required(),
 
-                            // 🚀 AQUI ESTÁ O TOGGLE QUE FALTAVA!
                             Toggle::make("clear_target")
                                 ->label("Substituir ficha técnica existente?")
-                                ->helperText(
-                                    "Apaga a receita atual dos produtos de destino antes de colar os itens.",
+                                ->helperText("Apaga a receita atual dos produtos de destino antes de colar os itens.",
                                 )
                                 ->default(false),
                         ])
@@ -433,7 +466,6 @@ class TechnicalSheetsRelationManager extends RelationManager
                             $livewire,
                         ) {
                             foreach ($data["target_product_ids"] as $targetId) {
-                                // Se marcou o toggle, limpa a ficha do produto destino primeiro
                                 if ($data["clear_target"]) {
                                     DB::table("technical_sheets")
                                         ->where("parent_product_id", $targetId)
@@ -441,7 +473,6 @@ class TechnicalSheetsRelationManager extends RelationManager
                                 }
 
                                 foreach ($records as $item) {
-                                    // 🚀 PROTEÇÃO SQL: Garante que o order_type NUNCA seja null!
                                     $rawOrderType = $item->order_type ?: [
                                         "table",
                                         "counter",
@@ -479,6 +510,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                                             $item->ingredient_product_id,
                                         "quantity" => $item->quantity,
                                         "order_type" => $encodedOrderType,
+                                        "is_active" => $item->is_active ?? true,
                                         "created_at" => now(),
                                         "updated_at" => now(),
                                     ]);
@@ -493,9 +525,8 @@ class TechnicalSheetsRelationManager extends RelationManager
                                 )
                                 ->send();
                         })
-                        ->deselectRecordsAfterCompletion(), // Desmarca os checkboxes depois de clonar
+                        ->deselectRecordsAfterCompletion(),
 
-                    // BOTÃO DE EXCLUIR EM MASSA
                     Actions\DeleteBulkAction::make()->after(
                         fn($livewire) => $livewire->dispatch(
                             "update-margin-widget",
@@ -510,6 +541,11 @@ class TechnicalSheetsRelationManager extends RelationManager
                 ]),
             )
             ->paginationPageOptions(["all"]);
+    }
+
+    public function getTableRecordClassesUsing(): ?\Closure
+    {
+        return fn ($record) => $record->is_active ? '' : 'bg-gray-50/50 opacity-60';
     }
 
     public static function canViewForRecord($ownerRecord, $pageClass): bool

@@ -56,11 +56,11 @@ class ReceivedInvoiceResource extends Resource
     }
 
     // =========================================================
-    // MOTOR CENTRAL DE EVENTOS DA SEFAZ 
+    // MOTOR CENTRAL DE EVENTOS DA SEFAZ
     // =========================================================
     public static function transmitirEventoSefaz($chave, $tpEvento, $justificativa = '')
     {
-        $setting = CompanySetting::first();
+        $setting = CompanySetting::getCached();
         if (!$setting || !$setting->certificate_path || !$setting->certificate_password) {
             throw new \Exception('O certificado digital não foi configurado.');
         }
@@ -80,7 +80,7 @@ class ReceivedInvoiceResource extends Resource
         $tools = new Tools($config, $certificate);
 
         $response = $tools->sefazManifesta($chave, $tpEvento, $justificativa, 1);
-        
+
         $std = new \NFePHP\NFe\Common\Standardize();
         $arr = $std->toArray($response);
 
@@ -110,7 +110,7 @@ class ReceivedInvoiceResource extends Resource
 
     public static function canCreate(): bool
     {
-        return false; 
+        return false;
     }
 
     public static function getPages(): array

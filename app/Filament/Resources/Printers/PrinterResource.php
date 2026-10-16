@@ -16,7 +16,7 @@ class PrinterResource extends Resource
     use HasGlobalSearch;
     protected static ?string $model = Printer::class;
     // protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-printer';
-    protected static string | \UnitEnum | null $navigationGroup = 'Logística';
+    protected static string | \UnitEnum | null $navigationGroup = 'PDV & Infraestrutura';
     protected static ?string $modelLabel = 'Impressora';
     protected static ?string $pluralModelLabel = 'Impressoras';
 

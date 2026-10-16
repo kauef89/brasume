@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Filament\Resources\LegacyDailyRevenueResource;
+namespace App\Filament\Resources\LegacyDailyRevenue;
 
 use App\Models\LegacyDailyRevenue;
 use Filament\Resources\Resource;
@@ -8,14 +8,14 @@ use Filament\Tables\Table;
 use Filament\Schemas\Schema;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\TextInput;
-use App\Filament\Resources\LegacyDailyRevenueResource\Tables\LegacyDailyRevenuesTable;
-use App\Filament\Resources\LegacyDailyRevenueResource\Pages\ManageLegacyDailyRevenues;
+use App\Filament\Resources\LegacyDailyRevenue\Tables\LegacyDailyRevenuesTable;
+use App\Filament\Resources\LegacyDailyRevenue\Pages\ManageLegacyDailyRevenues;
 
 class LegacyDailyRevenueResource extends Resource
 {
     protected static ?string $model = LegacyDailyRevenue::class;
     protected static string|\BackedEnum|null $navigationIcon = "heroicon-o-presentation-chart-line";
-    protected static string|\UnitEnum|null $navigationGroup = "Legado Fiscal";
+    protected static string|\UnitEnum|null $navigationGroup = 'Sistema Legado';
     protected static ?string $navigationLabel = "Faturamento Histórico (V0)";
     protected static ?string $modelLabel = "Faturamento Diário";
     protected static ?string $pluralModelLabel = "Faturamentos Diários";

@@ -6,6 +6,8 @@ use App\Filament\Traits\HasGlobalSearch;
 use App\Filament\Resources\Supplies\Pages;
 use App\Filament\Resources\Supplies\Schemas\SupplyForm;
 use App\Filament\Resources\Supplies\Tables\SuppliesTable;
+use App\Filament\Resources\Products\RelationManagers\CostHistoriesRelationManager;
+use App\Filament\Resources\Products\RelationManagers\InventoryMovementsRelationManager;
 use App\Models\Product;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
@@ -20,14 +22,15 @@ class SupplyResource extends Resource
     protected static ?string $slug = 'material-consumo';
     protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-archive-box';
     protected static string | \UnitEnum | null $navigationGroup = 'Estoque & Compras';
-    protected static ?string $modelLabel = 'Material de Consumo';
-    protected static ?string $pluralModelLabel = 'Mat. de Consumo';
+    protected static ?string $modelLabel = 'Suprimento';
+    protected static ?string $pluralModelLabel = 'Suprimentos';
 
     public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->whereHas('category', fn($query) => $query->where('type', 'supply'));
-    }
+        {
+            return parent::getEloquentQuery()
+                ->whereIn('type', ['supply', 'consumable', 'packaging'])
+                ->whereHas('category', fn($query) => $query->where('type', 'supply'));
+        }
 
     public static function form(Schema $schema): Schema
     {
@@ -42,7 +45,8 @@ class SupplyResource extends Resource
     public static function getRelations(): array
     {
         return [
-            \App\Filament\Resources\Products\RelationManagers\CostHistoriesRelationManager::class,
+            CostHistoriesRelationManager::class,
+            InventoryMovementsRelationManager::class, // 🚀 Extrato Kardex
         ];
     }
 

@@ -1,0 +1,30 @@
+@theme {
+    /* Ensinamos ao Tailwind que estas cores existem e apontam para as nossas variáveis mutáveis */
+    --color-surface-1: var(--surface-1);
+    --color-surface-2: var(--surface-2);
+    --color-surface-3: var(--surface-3);
+
+    --color-surface-text: var(--surface-text);
+    --color-surface-muted: var(--surface-muted);
+    --color-surface-border: var(--surface-border);
+}
+
+@layer base {
+    :root {
+        --surface-1: var(--color-stone-200);
+        --surface-2: var(--color-stone-100);
+        --surface-3: white;
+        --surface-border: var(--color-stone-300);
+        --surface-text: var(--color-stone-900);
+        --surface-muted: var(--color-stone-700);
+    }
+
+    :root.dark {
+        --surface-1: var(--color-stone-950);
+        --surface-2: var(--color-stone-900);
+        --surface-3: var(--color-stone-800);
+        --surface-border: var(--color-stone-700);
+        --surface-text: var(--color-stone-100);
+        --surface-muted: var(--color-stone-400);
+    }
+}

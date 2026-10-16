@@ -59,6 +59,7 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            'timezone'  => '-03:00',
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
@@ -113,6 +114,23 @@ return [
             // 'encrypt' => env('DB_ENCRYPT', 'yes'),
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
+
+        'wordpress' => [
+                    'driver' => 'mysql',
+                    'url' => env('DATABASE_URL'),
+                    'host' => env('DB_WP_HOST', '127.0.0.1'),
+                    'port' => env('DB_WP_PORT', '3306'),
+                    'database' => env('DB_WP_DATABASE', 'forge'),
+                    'username' => env('DB_WP_USERNAME', 'forge'),
+                    'password' => env('DB_WP_PASSWORD', ''),
+                    'unix_socket' => env('DB_WP_SOCKET', ''),
+                    'charset' => 'utf8mb4',
+                    'collation' => 'utf8mb4_unicode_ci',
+                    'prefix' => 'wp_', // 🚀 O Laravel vai adicionar 'wp_' sozinho nas queries!
+                    'prefix_indexes' => true,
+                    'strict' => false,
+                    'engine' => null,
+                ],
 
     ],
 

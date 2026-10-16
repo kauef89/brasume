@@ -1,0 +1,256 @@
+<?php
+
+namespace App\Services\Purchases;
+
+use App\Models\GoodsReceiptItem;
+use App\Models\GoodsReceipt;
+use App\Models\PersonalPurchase;
+use App\Models\Product;
+use App\Models\ProductCostHistory;
+use App\Services\Catalog\InventoryService;
+use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
+
+class InvoiceItemProcessor
+{
+    public function calculateSmartConversion(?int $productId, ?int $supplierId, ?string $currentXmlName, ?string $xmlUomRaw): array
+    {
+        $result = [
+            'factor' => 1.0,
+            'source' => 'manual',
+            'notification' => null,
+        ];
+
+        if (!$productId || !$currentXmlName) {
+            return $result;
+        }
+
+        if ($supplierId) {
+            $lastPurchase = ProductCostHistory::where('supplier_id', $supplierId)
+                ->where('product_id', $productId)
+                ->where('xml_name', $currentXmlName)
+                ->latest('id')
+                ->first();
+
+            if ($lastPurchase && $lastPurchase->conversion_factor) {
+                $factor = (float) $lastPurchase->conversion_factor;
+                $result['factor'] = $factor;
+                $result['source'] = 'history';
+                return $result;
+            }
+        }
+
+        $product = Product::find($productId);
+        $internalUom = strtoupper((string) ($product?->unit_of_measure ?? ''));
+        $xmlUom = strtoupper(preg_replace('/[^A-Z]/', '', (string) ($xmlUomRaw ?? '')));
+
+        $isIdentical = ($xmlUom === $internalUom)
+            || (in_array($xmlUom, ['KG', 'KIL']) && $internalUom === 'KG')
+            || (in_array($xmlUom, ['L', 'LT', 'LIT']) && $internalUom === 'LT')
+            || (in_array($xmlUom, ['UN', 'UND']) && $internalUom === 'UN');
+
+        if ($isIdentical) {
+            $result['factor'] = 1.0;
+            $result['source'] = 'identical';
+            return $result;
+        }
+
+        $factor = 1.0;
+        $autoMath = false;
+
+        if (in_array($xmlUom, ['KG', 'KIL']) && $internalUom === 'G') {
+            $factor = 1000.0;
+            $autoMath = true;
+        } elseif ($xmlUom === 'G' && in_array($internalUom, ['KG', 'KIL'])) {
+            $factor = 0.001;
+            $autoMath = true;
+        } elseif (in_array($xmlUom, ['L', 'LT', 'LIT']) && $internalUom === 'ML') {
+            $factor = 1000.0;
+            $autoMath = true;
+        } elseif ($xmlUom === 'ML' && in_array($internalUom, ['L', 'LT', 'LIT'])) {
+            $factor = 0.001;
+            $autoMath = true;
+        }
+
+        if ($autoMath) {
+            $result['factor'] = $factor;
+            $result['source'] = 'auto_math';
+        }
+
+        return $result;
+    }
+
+    public function processDirectItem(array $item, ?string $invoiceKey, ?int $supplierId, bool $autoApprove = false): void
+    {
+        $processQty = (float) ($item['xml_qty'] ?? 0);
+        $invoiceCost = (float) ($item['xml_cost'] ?? 0);
+        $invoiceUom = (string) ($item['xml_uom'] ?? '');
+        $isPersonal = !empty($item['is_personal']);
+        $receiptItemId = $item['goods_receipt_item_id'] ?? null;
+
+        // 🚀 OTIMIZAÇÃO: Transação individual removida! Assumimos que o chamador (processConfirmedItems) já abriu a transação.
+        if ($isPersonal) {
+            PersonalPurchase::create([
+                'nfe_key'    => $invoiceKey,
+                'supplier_id'=> $supplierId,
+                'xml_name'   => $item['xml_name'],
+                'quantity'   => $processQty,
+                'unit_cost'  => $invoiceCost,
+                'total_cost' => round($processQty * $invoiceCost, 4),
+            ]);
+            return;
+        }
+
+        $productId = $item['product_id'];
+        $conversionFactor = (float) ($item['conversion_factor'] ?? 1.0);
+        if ($conversionFactor <= 0) $conversionFactor = 1.0;
+
+        $actualQty = round($processQty * $conversionFactor, 4);
+        $actualUnitCost = round($invoiceCost / $conversionFactor, 5);
+
+        $product = Product::find($productId);
+        $inventoryService = app(InventoryService::class);
+
+        if ($product) {
+            // Usa updateQuietly para não disparar observers desnecessários
+            $product->updateQuietly(['base_cost' => $actualUnitCost]);
+
+            if ($receiptItemId) {
+                $receiptItem = GoodsReceiptItem::find($receiptItemId);
+                if ($receiptItem) {
+                    $receiptQty = (float) $receiptItem->quantity;
+                    $delta = round($actualQty - $receiptQty, 4);
+
+                    if ($delta > 0) {
+                        $inventoryService->addStock($product->fresh(), $delta, 'nfe_reconcile_surplus');
+                    } elseif ($delta < 0) {
+                        $inventoryService->deductStock($product->fresh(), abs($delta));
+                    }
+
+                    $receiptItem->update([
+                        'status'         => 'reconciled',
+                        'reconciled_qty' => $actualQty,
+                        'nfe_key'        => $invoiceKey,
+                    ]);
+
+                    $receipt = $receiptItem->goodsReceipt;
+                    if ($receipt) {
+                        $hasPending = $receipt->items()->where('status', '!=', 'reconciled')->exists();
+                        if (!$hasPending) {
+                            $receipt->update([
+                                'status'  => 'reconciled',
+                                'nfe_key' => $invoiceKey,
+                            ]);
+                        }
+                    }
+                }
+            } else {
+                $inventoryService->addStock($product->fresh(), $actualQty, 'nfe_import');
+            }
+        }
+
+        ProductCostHistory::create([
+            'product_id'               => $productId,
+            'supplier_id'              => $supplierId,
+            'nfe_key'                  => $invoiceKey,
+            'xml_name'                 => $item['xml_name'],
+            'quantity'                 => $actualQty,
+            'unit_cost'                => $actualUnitCost,
+            'conversion_factor'        => $conversionFactor,
+            'original_quantity'        => $processQty,
+            'original_unit_cost'       => $invoiceCost,
+            'original_unit_of_measure' => $invoiceUom,
+            'auto_approve'             => $autoApprove,
+        ]);
+    }
+
+    public function processConfirmedItems(array $payload, array $currentItems): array
+    {
+        $processQty = (float) ($payload['xml_qty'] ?? 0);
+        $availableQty = (float) ($payload['available_qty'] ?? 0);
+
+        if ($processQty <= 0 || $processQty > $availableQty) {
+            throw new InvalidArgumentException("A quantidade informada ({$processQty}) deve ser maior que zero e menor ou igual a {$availableQty}.");
+        }
+
+        $supplierId = isset($payload['supplier_id']) && !empty($payload['supplier_id'])
+            ? (int) $payload['supplier_id']
+            : null;
+
+        if (!$supplierId) {
+            throw new InvalidArgumentException('O fornecedor é obrigatório para processar itens da nota.');
+        }
+
+        $isPersonal = !empty($payload['is_personal']);
+        $productId = isset($payload['product_id']) && !empty($payload['product_id'])
+            ? (int) $payload['product_id']
+            : null;
+
+        if (!$isPersonal && !$productId) {
+            throw new InvalidArgumentException('Selecione um produto cadastrado ou marque a compra como Uso Pessoal.');
+        }
+
+        $invoiceKey = $payload['invoice_key'] ?? null;
+        $targetXmlName = (string) ($payload['xml_name'] ?? '');
+        $conversionFactor = (float) ($payload['conversion_factor'] ?? 1.0);
+        $uuidToFind = (string) ($payload['item_uuid'] ?? '');
+        $receiptItemId = $payload['goods_receipt_item_id'] ?? null;
+
+        $itemData = [
+            'xml_qty'               => $processQty,
+            'xml_cost'              => (float) ($payload['xml_cost'] ?? 0),
+            'xml_uom'               => (string) ($payload['xml_uom'] ?? ''),
+            'is_personal'           => $isPersonal,
+            'xml_name'              => $targetXmlName,
+            'product_id'            => $productId,
+            'goods_receipt_item_id' => $receiptItemId,
+            'conversion_factor'     => $conversionFactor,
+        ];
+
+        // 🚀 OTIMIZAÇÃO: Uma única transação para englobar a inserção manual e as duplicadas (efeito dominó)
+        return DB::transaction(function () use ($itemData, $invoiceKey, $supplierId, $currentItems, $uuidToFind, $processQty, $availableQty, $targetXmlName, $isPersonal, $productId, $conversionFactor, $receiptItemId) {
+
+            $this->processDirectItem($itemData, $invoiceKey, $supplierId, false);
+
+            $autoProcessedCount = 0;
+            $items = $currentItems;
+
+            foreach ($items as $key => $item) {
+                if ((isset($item['item_uuid']) && (string)$item['item_uuid'] === $uuidToFind) || (string)$key === $uuidToFind) {
+                    if ($processQty < $availableQty) {
+                        $newAvailable = round($availableQty - $processQty, 4);
+                        $items[$key]['available_qty'] = $newAvailable;
+                        $items[$key]['xml_qty'] = $newAvailable;
+                        $items[$key]['is_personal'] = false;
+                        $items[$key]['factor_source'] = 'manual';
+                    } else {
+                        unset($items[$key]);
+                    }
+                    continue;
+                }
+
+                // Efeito dominó para itens idênticos pendentes
+                if (!$receiptItemId && isset($item['xml_name']) && (string)$item['xml_name'] === $targetXmlName) {
+                    $duplicateItemData = [
+                        'xml_qty'           => (float) ($item['available_qty'] ?? $item['xml_qty'] ?? 0),
+                        'xml_cost'          => (float) ($item['xml_cost'] ?? 0),
+                        'xml_uom'           => (string) ($item['xml_uom'] ?? ''),
+                        'is_personal'       => $isPersonal,
+                        'xml_name'          => $targetXmlName,
+                        'product_id'        => $productId,
+                        'conversion_factor' => $conversionFactor,
+                    ];
+
+                    $this->processDirectItem($duplicateItemData, $invoiceKey, $supplierId, false);
+                    unset($items[$key]);
+                    $autoProcessedCount++;
+                }
+            }
+
+            return [
+                'updated_items'        => $items,
+                'auto_processed_count' => $autoProcessedCount,
+            ];
+        });
+    }
+}

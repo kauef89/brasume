@@ -31,6 +31,14 @@ class OptionsRelationManager extends RelationManager
                 ->default(0)
                 ->required(),
 
+            // 🚀 NOSSA NOVA INJEÇÃO AQUI: A QUANTIDADE MÁXIMA
+            FormComponents\TextInput::make("max_quantity")
+                ->label("Qtd. Máxima")
+                ->numeric()
+                ->default(1)
+                ->helperText("Limite por pedido.")
+                ->required(),
+
             FormComponents\Select::make("linked_product_id")
                 ->label("Abater Estoque de Qual Insumo? (Opcional)")
                 ->relationship(
@@ -52,7 +60,6 @@ class OptionsRelationManager extends RelationManager
                         ->modalWidth("4xl");
                 }),
 
-            // 🚀 AQUI ESTÁ ELE DE VOLTA! O input da porção no formulário
             FormComponents\TextInput::make("linked_qty")
                 ->label("Quantidade da Porção")
                 ->numeric()
@@ -101,6 +108,12 @@ class OptionsRelationManager extends RelationManager
                     ->sortable()
                     ->color("primary"),
 
+                Tables\Columns\TextColumn::make("max_quantity")
+                    ->label("Máximo")
+                    ->badge()
+                    ->color("info")
+                    ->formatStateUsing(fn ($state) => $state . "x"),
+
                 Tables\Columns\TextColumn::make("linkedProduct.name")
                     ->label("Insumo")
                     ->searchable()
@@ -113,7 +126,6 @@ class OptionsRelationManager extends RelationManager
                             return "-";
                         }
 
-                        // Formatação limpa: remove zeros à direita e a vírgula se for inteiro
                         $val = (float) $state;
                         $formatted = rtrim(
                             rtrim(number_format($val, 4, ",", "."), "0"),
@@ -140,7 +152,7 @@ class OptionsRelationManager extends RelationManager
                             return null;
                         }
 
-                        $unitCost = \App\Services\ProductCostingService::calculateBaseCost(
+                        $unitCost = \App\Services\Catalog\ProductCostingService::calculateBaseCost(
                             $record->linkedProduct,
                         );
 

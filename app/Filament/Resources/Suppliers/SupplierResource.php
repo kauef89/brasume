@@ -17,6 +17,8 @@ class SupplierResource extends Resource
     use HasGlobalSearch;
     protected static ?string $model = Supplier::class;
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Estoque & Compras';
+
     public static function getNavigationIcon(): string | \BackedEnum | null
     {
         return 'heroicon-o-truck';
@@ -70,5 +72,5 @@ class SupplierResource extends Resource
             'edit' => Pages\EditSupplier::route('/{record}/edit'),
         ];
     }
-    
+
 }

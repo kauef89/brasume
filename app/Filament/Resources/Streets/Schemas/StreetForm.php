@@ -56,8 +56,7 @@ class StreetForm
                             FormComponents\TextInput::make("end_number")
                                 ->label("Número Final")
                                 ->numeric()
-                                ->helperText(
-                                    "Deixe em branco se for até o fim da rua",
+                                ->helperText("Deixe em branco se for até o fim da rua",
                                 )
                                 ->columnSpan(1),
 

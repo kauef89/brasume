@@ -16,7 +16,7 @@ class PersonalPurchaseResource extends Resource
 {
     protected static ?string $model = PersonalPurchase::class;
     // protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-shopping-bag';
-    protected static string | \UnitEnum | null $navigationGroup = 'Estoque & Compras';
+    protected static string | \UnitEnum | null $navigationGroup = 'Financeiro';
     protected static ?string $modelLabel = 'Item de Despesa';
     protected static ?string $pluralModelLabel = 'Despesas de Notas';
 

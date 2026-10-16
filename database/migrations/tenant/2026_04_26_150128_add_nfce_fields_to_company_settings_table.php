@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::table('company_settings', function (Blueprint $table) {
             $table->string('ie')->nullable()->after('cnpj');
             $table->string('csc_id')->nullable();
-            $table->string('csc_code')->nullable();
+            $table->text('csc_code')->nullable();
             $table->enum('environment', ['1', '2'])->default('2'); // 2 = Homologação
         });
     }

@@ -16,7 +16,7 @@ class TableAreaResource extends Resource
 {
     protected static ?string $model = TableArea::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = "Atendimento";
+    protected static string|\UnitEnum|null $navigationGroup = 'Vendas & Atendimento';
     protected static ?string $modelLabel = "Área e Mesas";
     protected static ?string $pluralModelLabel = "Mapa de Mesas";
 

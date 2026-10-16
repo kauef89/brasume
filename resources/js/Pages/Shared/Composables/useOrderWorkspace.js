@@ -1,0 +1,163 @@
+import { useOrderSubmission } from '@/Pages/Shared/Composables/useOrderSubmission';
+import { router } from '@inertiajs/vue3';
+import { useToast } from 'primevue/usetoast';
+import { computed, ref, unref, watch } from 'vue';
+
+export function useOrderWorkspace(cartContext, favoritesContext, editOrderData) {
+    const { cart, clearCart, draftRouting, orderType } = cartContext;
+    const { favorites, fetchFavorites, clearFavorites } = favoritesContext;
+    const toast = useToast();
+
+    const isFavoritesViewActive = ref(false);
+
+    const resolvedEditOrder = computed(() => unref(editOrderData));
+    const resolvedOrderId = computed(() => resolvedEditOrder.value?.id || null);
+
+    const currentCustomerId = computed(() => {
+        const meta = draftRouting.value;
+        if (!meta) return null;
+        return meta.customer?.id || meta.sharedCustomer?.id || meta.address?.customer_id || meta.deliveryAddress?.customer_id || null;
+    });
+
+    watch(currentCustomerId, (newId) => {
+        if (newId) fetchFavorites(newId);
+        else {
+            clearFavorites();
+            isFavoritesViewActive.value = false;
+        }
+    }, { immediate: true });
+
+    watch(favorites, (newFavs) => {
+        isFavoritesViewActive.value = !!(newFavs && newFavs.length > 0);
+    }, { deep: true });
+
+    const activeCartSidebarView = ref('cart');
+    const stashedCheckoutData = ref(null);
+
+    const { submitOrder } = useOrderSubmission(cart, resolvedOrderId, 'pos_app');
+
+    const handleClearWorkspace = () => {
+        clearCart();
+        activeCartSidebarView.value = 'cart';
+        stashedCheckoutData.value = null;
+
+        if (window.location.search) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    };
+
+    const sanitizeMeta = (rawMeta) => {
+        if (!rawMeta || typeof rawMeta !== 'object') return {};
+
+        const rawCustomer = rawMeta.customer || {};
+        const rawTable = rawMeta.table || {};
+        const rawAddress = rawMeta.address || {};
+
+        let parsedNeighborhood = '';
+        if (rawAddress.neighborhood) {
+            parsedNeighborhood = typeof rawAddress.neighborhood === 'object'
+                ? (rawAddress.neighborhood.name || '')
+                : String(rawAddress.neighborhood || '');
+        }
+
+        const resolvedTableId = rawTable.id || rawMeta.dining_table_id || rawMeta.table_id || null;
+        const resolvedAddressId = rawAddress.id || rawMeta.address_id || null;
+
+        return {
+            type: rawMeta.type || orderType.value || 'table',
+            dining_table_id: resolvedTableId,
+            table_id: resolvedTableId,
+            table: (rawMeta.table || resolvedTableId) ? {
+                id: resolvedTableId,
+                name: rawTable.name || rawTable.number || rawMeta.table_number || ''
+            } : null,
+            identifier: String(rawMeta.identifier || ''),
+            customer: rawMeta.customer ? {
+                id: rawCustomer.id || null,
+                name: rawCustomer.name || '',
+                phone: rawCustomer.phone || null
+            } : null,
+            customer_phone: rawMeta.customer_phone || rawCustomer.phone || null,
+            address_id: resolvedAddressId,
+            address: rawMeta.address ? {
+                id: resolvedAddressId,
+                street: rawAddress.street || '',
+                number: rawAddress.number || '',
+                neighborhood: parsedNeighborhood,
+                delivery_fee: Number(rawAddress.delivery_fee || rawAddress.fee || 0)
+            } : null
+        };
+    };
+
+    const handleCheckoutWrapper = (checkoutData) => {
+        const rawPayload = (checkoutData instanceof Event || checkoutData?.target) ? {} : (checkoutData || {});
+
+        const cleanMeta = sanitizeMeta(rawPayload.meta || draftRouting.value);
+
+        const isDelivery = cleanMeta.type === 'delivery' || !!cleanMeta.address || orderType.value === 'delivery';
+        const isCounter = cleanMeta.type === 'counter' || orderType.value === 'counter';
+
+        const safePayload = {
+            ...rawPayload,
+            meta: cleanMeta,
+            totals: rawPayload.totals || {}
+        };
+
+        if (isDelivery || isCounter) {
+            safePayload.meta.type = isDelivery ? 'delivery' : 'counter';
+            stashedCheckoutData.value = safePayload;
+            activeCartSidebarView.value = 'payment';
+        } else {
+            submitOrder(safePayload);
+        }
+    };
+
+    const handleInlinePaymentConfirm = (intentData) => {
+        const targetOrderId = resolvedOrderId.value;
+
+        if (targetOrderId) {
+            return new Promise((resolve, reject) => {
+                router.post(route('operations.orders.update-delivery-payment', targetOrderId), intentData, {
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        if (intentData.intent === 'pay_now' || intentData.payment_intent_status === 'pay_now') {
+                            window.dispatchEvent(new CustomEvent('pos-open-checkout', { detail: { orderId: targetOrderId } }));
+                        }
+                        activeCartSidebarView.value = 'cart';
+                        resolve({ order: { id: targetOrderId }, id: targetOrderId });
+                    },
+                    onError: reject
+                });
+            });
+        } else {
+            if (!stashedCheckoutData.value) {
+                return Promise.reject(new Error('Nenhum dado de pedido retido para checkout.'));
+            }
+
+            stashedCheckoutData.value.meta.payment_intent_status = intentData.payment_intent_status;
+            stashedCheckoutData.value.meta.payment_intent_methods = intentData.payment_intent_methods;
+            stashedCheckoutData.value.frontend_intent = intentData.intent || intentData.payment_intent_status;
+
+            if (Array.isArray(intentData.payment_intent_methods)) {
+                const cashMethod = intentData.payment_intent_methods.find(m => m.change_target);
+                if (cashMethod) {
+                    stashedCheckoutData.value.meta.change_target = cashMethod.change_target;
+                }
+            }
+
+            const submissionPromise = submitOrder(stashedCheckoutData.value);
+            activeCartSidebarView.value = 'cart';
+            return submissionPromise;
+        }
+    };
+
+    return {
+        isFavoritesViewActive,
+        activeCartSidebarView,
+        stashedCheckoutData,
+        handleClearWorkspace,
+        handleCheckoutWrapper,
+        handleInlinePaymentConfirm,
+        handleInlineDeliveryPaymentConfirm: handleInlinePaymentConfirm
+    };
+}

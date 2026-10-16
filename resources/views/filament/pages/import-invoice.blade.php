@@ -2,11 +2,9 @@
     {{-- Renderiza o Formulário Principal (Cabeçalho da Nota e Itens Pendentes) --}}
     {{ $this->form }}
 
-    {{-- Renderiza o Botão de Finalizar --}}
+    {{-- 🚀 Renderiza a Action Nativa do Filament (Resolve a modalidade de aviso sozinha) --}}
     <div class="flex justify-end mt-4">
-        <x-filament::button wire:click="submit" color="primary">
-            Finalizar Importação
-        </x-filament::button>
+        {{ $this->finishImportAction }}
     </div>
 
     {{-- Divisor Elegante --}}
@@ -52,6 +50,6 @@
         </div>
     </x-filament::section>
 
-    {{-- Registra o Modal de Aviso (Para quando o usuário tentar finalizar com itens pendentes) --}}
+    {{-- Registra o Modal de Aviso --}}
     <x-filament-actions::modals />
 </x-filament-panels::page>

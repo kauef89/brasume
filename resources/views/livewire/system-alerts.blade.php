@@ -8,7 +8,7 @@
         <x-heroicon-o-bell class="w-5 h-5 text-gray-500 dark:text-gray-400" />
 
         @if($totalAlerts > 0)
-            <span class="absolute top-1.5 right-1.5 flex items-center justify-center w-4 h-4 text-[9px] font-bold text-white bg-danger-600 rounded-full ring-2 ring-white dark:ring-gray-900">
+            <span class="absolute top-1.5 right-1.5 flex items-center justify-center w-4 h-4 text-[9px] font-medium text-white bg-danger-600 rounded-full ring-2 ring-white dark:ring-gray-900">
                 {{ $totalAlerts }}
             </span>
         @endif

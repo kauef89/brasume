@@ -9,6 +9,7 @@ use Filament\Forms\Components as FormComponents;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Forms\Set;
 use App\Models\Supplier;
+use App\Services\Accounting\AccountingService;
 
 class SupplierForm
 {
@@ -22,7 +23,7 @@ class SupplierForm
                 ->tabs([
                     // ABA 1: CADASTRO BÁSICO
                     SchemaComponents\Tabs\Tab::make("Cadastro")->schema([
-                    FormComponents\Hidden::make("is_formal")
+                        FormComponents\Hidden::make("is_formal")
                             ->default(true)
                             ->dehydrated(false),
 
@@ -30,7 +31,13 @@ class SupplierForm
                             FormComponents\TextInput::make("document")
                                 ->label("CNPJ / CPF")
                                 ->required()
-                                ->maxLength(20),
+                                ->maxLength(20)
+                                ->unique(
+                                    table: \App\Models\Supplier::class,
+                                    column: 'document',
+                                    ignoreRecord: true,
+                                    modifyRuleUsing: fn (\Illuminate\Validation\Rules\Unique $rule) => $rule->withoutTrashed()
+                                ),
 
                             FormComponents\Select::make("type")
                                 ->label("Tipo")
@@ -42,11 +49,9 @@ class SupplierForm
                                 ->live()
                                 ->required(),
 
-                            // 🚀 Nossa flag de uso pessoal está aqui
                             FormComponents\Toggle::make("is_personal")
                                 ->label("Uso Pessoal?")
-                                ->helperText(
-                                    "Despesas auto-conciliadas como uso dos sócios.",
+                                ->helperText("Despesas auto-conciliadas como uso dos sócios.",
                                 )
                                 ->default(false)
                                 ->inline(false),
@@ -65,13 +70,12 @@ class SupplierForm
                                 ->options(fn() => Supplier::pluck("name", "id"))
                                 ->searchable()
                                 ->preload()
-                                ->helperText(
-                                    "Se for uma filial, selecione a matriz aqui.",
+                                ->helperText("Se for uma filial, selecione a matriz aqui.",
                                 ),
                         ]),
                     ]),
 
-                    // 🚀 ABA 2: DRE / CLASSIFICAÇÃO PADRÃO (NOVO!)
+                    // ABA 2: DRE / CLASSIFICAÇÃO PADRÃO
                     SchemaComponents\Tabs\Tab::make("DRE e Padrões")->schema([
                         SchemaComponents\Section::make(
                             "Classificação Contábil Padrão",
@@ -86,7 +90,7 @@ class SupplierForm
                                     )
                                         ->label("Categoria Padrão")
                                         ->options(
-                                            \App\Services\AccountingService::getCategories(),
+                                            AccountingService::getCategories(),
                                         )
                                         ->live()
                                         ->afterStateUpdated(
@@ -103,7 +107,7 @@ class SupplierForm
                                         ->options(
                                             fn(
                                                 $get,
-                                            ) => \App\Services\AccountingService::getSubcategories(
+                                            ) => AccountingService::getSubcategories(
                                                 $get("accounting_category"),
                                             ),
                                         )
@@ -173,10 +177,88 @@ class SupplierForm
                                 ]),
                             ]),
                     ]),
+
+                    // 🚀 ABA 4: LOGÍSTICA DE COMPRAS (ENCAPSULADA CORRETAMENTE)
+                    SchemaComponents\Tabs\Tab::make("Logística")->schema([
+                        SchemaComponents\Section::make("Logística de Compras")
+                            ->schema([
+                                SchemaComponents\Grid::make(2)->schema([
+                                    FormComponents\Select::make('order_days')
+                                        ->label('Dias de Fazer Pedido')
+                                        ->multiple()
+                                        ->options([
+                                            'mon' => 'Segunda-feira', 'tue' => 'Terça-feira', 'wed' => 'Quarta-feira',
+                                            'thu' => 'Quinta-feira', 'fri' => 'Sexta-feira', 'sat' => 'Sábado', 'sun' => 'Domingo',
+                                        ])
+                                        ->helperText('O robô usará estes dias para calcular as necessidades.'),
+
+                                    FormComponents\TextInput::make('lead_time_days')
+                                        ->label('Tempo de Entrega (Lead Time)')
+                                        ->numeric()
+                                        ->default(1)
+                                        ->helperText('Dias entre o pedido e a chegada da mercadoria.'),
+                                ]),
+                            ]),
+                    ]),
                 ])
                 ->columnSpanFull(),
         ];
     }
+
+    /**
+     * Retorna a versão simplificada do formulário para modais de Criação Rápida
+     */
+    public static function getQuickCreateSchema(): array
+    {
+        return [
+            SchemaComponents\Grid::make(2)->schema([
+                FormComponents\TextInput::make("document")
+                    ->label("CNPJ / CPF")
+                    ->required()
+                    ->maxLength(20)
+                    ->unique(
+                        table: \App\Models\Supplier::class,
+                        column: 'document',
+                        ignoreRecord: true,
+                        modifyRuleUsing: fn (\Illuminate\Validation\Rules\Unique $rule) => $rule->withoutTrashed()
+                    ),
+
+                FormComponents\Select::make("type")
+                    ->label("Tipo")
+                    ->options([
+                        "physical" => "Físico",
+                        "virtual" => "Virtual",
+                    ])
+                    ->default("physical")
+                    ->required(),
+            ]),
+
+            FormComponents\TextInput::make("name")
+                ->label("Nome Fantasia / Apelido")
+                ->required()
+                ->maxLength(255),
+
+            SchemaComponents\Grid::make(2)->schema([
+                FormComponents\TextInput::make("document_name")
+                    ->label("Razão Social (Opcional)")
+                    ->maxLength(255),
+
+                FormComponents\Select::make("parent_id")
+                    ->label("Matriz / Marketplace (Opcional)")
+                    ->options(fn() => Supplier::pluck("name", "id"))
+                    ->searchable()
+                    ->preload()
+                    ->helperText("Se for venda via iFood, Mercado Livre, etc., selecione-o aqui."),
+            ]),
+
+            FormComponents\Toggle::make("is_personal")
+                ->label("Fornecedor de Uso Pessoal?")
+                ->helperText("Ative se for um fornecedor apenas para despesas dos sócios.")
+                ->default(false)
+                ->inline(false),
+        ];
+    }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema->schema(self::getFormSchema());

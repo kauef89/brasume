@@ -17,7 +17,7 @@ class LegacyPaymentMethodResource extends Resource
 {
     protected static ?string $model = LegacyPaymentMethod::class;
     protected static string|\BackedEnum|null $navigationIcon = "heroicon-o-credit-card";
-    protected static string|\UnitEnum|null $navigationGroup = "Legado Fiscal";
+    protected static string|\UnitEnum|null $navigationGroup = 'Sistema Legado';
     protected static ?string $navigationLabel = "Formas de Pagto";
     protected static ?int $navigationSort = 3;
 

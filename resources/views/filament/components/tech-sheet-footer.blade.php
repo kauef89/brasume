@@ -3,9 +3,9 @@
     $product = $this->getOwnerRecord();
 
     // 2. Usamos o nosso motor para descer as camadas e calcular cada cenário
-    $mesa = $product ? \App\Services\ProductCostingService::calculateBaseCost($product, 'table') : 0;
-    $balcao = $product ? \App\Services\ProductCostingService::calculateBaseCost($product, 'counter') : 0;
-    $delivery = $product ? \App\Services\ProductCostingService::calculateBaseCost($product, 'delivery') : 0;
+    $mesa = $product ? \App\Services\Catalog\ProductCostingService::calculateBaseCost($product, 'table') : 0;
+    $balcao = $product ? \App\Services\Catalog\ProductCostingService::calculateBaseCost($product, 'counter') : 0;
+    $delivery = $product ? \App\Services\Catalog\ProductCostingService::calculateBaseCost($product, 'delivery') : 0;
 
     $fmt = fn($val) => 'R$ ' . number_format($val, 2, ',', '.');
 @endphp
@@ -18,8 +18,8 @@
             <x-heroicon-o-building-storefront class="w-6 h-6 " />
         </div>
         <div>
-            <p class="text-xs font-bold uppercase tracking-wider ">Mesa</p>
-            <p class="text-xl font-bold ">{{ $fmt($mesa) }}</p>
+            <p class="text-xs font-medium uppercase tracking-wider ">Mesa</p>
+            <p class="text-xl font-medium ">{{ $fmt($mesa) }}</p>
         </div>
     </div>
 
@@ -28,8 +28,8 @@
             <x-heroicon-o-shopping-bag class="w-6 h-6 " />
         </div>
         <div>
-            <p class="text-xs font-bold uppercase tracking-wider ">Balcão</p>
-            <p class="text-xl font-bold ">{{ $fmt($balcao) }}</p>
+            <p class="text-xs font-medium uppercase tracking-wider ">Balcão</p>
+            <p class="text-xl font-medium ">{{ $fmt($balcao) }}</p>
         </div>
     </div>
 
@@ -38,8 +38,8 @@
             <x-heroicon-o-truck class="w-6 h-6 " />
         </div>
         <div>
-            <p class="text-xs font-bold uppercase tracking-wider ">Delivery</p>
-            <p class="text-xl font-bold ">{{ $fmt($delivery) }}</p>
+            <p class="text-xs font-medium uppercase tracking-wider ">Delivery</p>
+            <p class="text-xl font-medium ">{{ $fmt($delivery) }}</p>
         </div>
     </div>
 

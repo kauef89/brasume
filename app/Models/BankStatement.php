@@ -5,6 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property-read \App\Models\BankAccount|null $bankAccount
+ * @property-read Model|\Eloquent $conciliable
+ * @property-read mixed $related_name
+ * @property-read \App\Models\Transaction|null $transaction
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BankStatement newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BankStatement newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BankStatement query()
+ * @mixin \Illuminate\Database\Eloquent\Builder
+ */
 class BankStatement extends Model
 {
     use HasFactory;
