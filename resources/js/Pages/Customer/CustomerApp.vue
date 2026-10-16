@@ -18,7 +18,10 @@
             @open-hours="isBusinessHoursModalVisible = true"
         />
 
-        <main class="flex-1 min-h-0 overflow-hidden relative flex flex-col pt-safe z-10">
+        <!-- 🚀 INJEÇÃO DO PADDING DINÂMICO AQUI -->
+       <main
+            class="flex-1 min-h-0 overflow-hidden relative flex flex-col pt-safe z-10 transition-all duration-200"
+        >
             <CustomerTabContainer
                 v-model:active-tab="activeTab"
                 v-model:menu-search="menuSearchQuery"
@@ -67,22 +70,12 @@
             />
         </main>
 
-        <CustomerDynamicIsland
-            v-model:active-tab="activeTab"
-            :cart="cart"
-            :cart-length="cartTotalItems"
-            :customer="customer"
-            :has-active-order="hasActiveOrder"
-            :can-order="canOrder"
-            :configurator-type="isComboVisible ? 'combo' : (isModifiersVisible ? 'modifier' : null)"
-            @reset-menu="onResetMenu"
-            @trigger-checkout="handleIslandCheckout"
-        />
-
         <Transition name="page-fade">
             <div v-if="isModifiersVisible || isComboVisible" class="fixed inset-0 z-30 flex flex-col bg-surface-1">
+                <!-- 🚀 REFERÊNCIA DOS CONFIGURADORES (Sobrepõem a Island) -->
                 <CustomerProductModifiers
                     v-if="isModifiersVisible"
+                    ref="modifierNavRef"
                     :product="activeProduct"
                     :is-edit-mode="editItemIndex !== null"
                     :is-team-mode="false"
@@ -94,6 +87,7 @@
 
                 <CustomerComboWizard
                     v-else-if="isComboVisible"
+                    ref="comboNavRef"
                     :product="activeProduct"
                     :global-products-list="initialProducts"
                     :is-edit-mode="editItemIndex !== null"
@@ -106,6 +100,20 @@
                 />
             </div>
         </Transition>
+
+        <!-- 🚀 REFERÊNCIA DA ILHA PRINCIPAL -->
+        <CustomerDynamicIsland
+            ref="islandRef"
+            v-model:active-tab="activeTab"
+            :cart="cart"
+            :cart-length="cartTotalItems"
+            :customer="customer"
+            :has-active-order="hasActiveOrder"
+            :can-order="canOrder"
+            :configurator-type="isComboVisible ? 'combo' : (isModifiersVisible ? 'modifier' : null)"
+            @reset-menu="onResetMenu"
+            @trigger-checkout="handleIslandCheckout"
+        />
 
         <CustomerCheckoutModal
             v-if="isCheckoutModalVisible"
@@ -192,6 +200,7 @@ import { useTheme } from '@/Composables/useTheme';
 import { useCustomerHeaderContext } from '@/Pages/Customer/Composables/useCustomerHeaderContext';
 import { useAppLifecycleSync } from '@/Composables/useAppLifecycleSync';
 import { useTenantEcho } from '@/Composables/useTenantEcho';
+import { useDynamicFooterHeight } from '@/Composables/useDynamicFooterHeight';
 
 defineOptions({ layout: MobileLayout, inheritAttrs: false });
 
@@ -391,6 +400,16 @@ const {
     handleModifiersConfirm, handleComboConfirm
 } = useOrderFlow(props, cartContext);
 
+// 🚀 CÁLCULO DINÂMICO DO RODAPÉ (AGORA LOGO APÓS A CRIAÇÃO DE isModifiersVisible/isComboVisible)
+const islandRef = ref(null);
+
+useDynamicFooterHeight(islandRef, {
+    cssVarName: '--app-footer-height',
+    fallbackHeight: 96,
+    extraOffset: 16
+});
+// ===============================================
+
 const closeConfigurators = () => {
     activeComboInnerProduct.value = null;
     if (typeof window !== 'undefined') {
@@ -574,8 +593,3 @@ watch(() => props.customer, (newCustomer) => {
     }
 }, { immediate: true });
 </script>
-
-<style scoped>
-.page-fade-enter-active, .page-fade-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.page-fade-enter-from, .page-fade-leave-to { opacity: 0; transform: scale(0.98); }
-</style>

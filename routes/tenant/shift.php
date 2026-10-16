@@ -39,14 +39,16 @@ Route::prefix('operations')->group(function () {
     // ==========================================
     // 👥 3. EQUIPE DO TURNO (Ponto, Escala & Diárias)
     // ==========================================
-    Route::post('/attendance/sync', [ShiftAttendanceController::class, 'sync'])
-        ->name('operations.attendance.sync');
+    Route::withoutMiddleware([\App\Http\Middleware\EnsureShiftAttendance::class])->group(function () {
+        Route::post('/attendance/sync', [ShiftAttendanceController::class, 'sync'])
+            ->name('operations.attendance.sync');
 
-    Route::get('/attendance/payout-details/{user}', [ShiftAttendanceController::class, 'payoutDetails'])
-        ->name('operations.attendance.payout-details');
+        Route::get('/attendance/payout-details/{user}', [ShiftAttendanceController::class, 'payoutDetails'])
+            ->name('operations.attendance.payout-details');
 
-    Route::post('/attendance/pay', [ShiftAttendanceController::class, 'payFreelancer'])
-        ->name('operations.attendance.pay');
+        Route::post('/attendance/pay', [ShiftAttendanceController::class, 'payFreelancer'])
+            ->name('operations.attendance.pay');
+    });
 
     // ==========================================
     // ↩️ 4. ESTORNOS E AUDITORIA

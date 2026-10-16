@@ -32,52 +32,57 @@
                 </div>
             </Teleport>
 
-            <!-- 📖 FATIA 3: RENDERIZADOR DE ABAS DA OPERAÇÃO -->
-            <TeamTabContainer
-                ref="tabContainerRef"
-                v-model:active-tab="activeTab"
-                :category-layout="categoryLayout"
-                :mobile-category-layout="mobileCategoryLayout"
-                :product-card-layout="productCardLayout"
-                :visible-menu-categories="visibleMenuCategories"
-                :active-menu-category="selectedCategory"
-                :visible-grid-categories="visibleGridCategories"
-                :should-show-category-grid="shouldShowCategoryGrid"
-                :should-show-product-grid="shouldShowProductGrid"
-                :filtered-products="filteredProducts"
-                :on-site-orders="onSiteOrders"
-                :initial-table-areas="initialTableAreas"
-                :restock-data="restockData"
-                :catalog="catalog || initialProducts"
-                :cart-component-key="cartComponentKey"
-                :cart="cart"
-                :cart-subtotal="cartSubtotal"
-                v-model:order-type="orderType"
-                :initial-customers="initialCustomers"
-                :edit-order-data="editOrderData"
-                :is-allowance-mode="isAllowanceMode"
-                :cart-routing-meta="cartRoutingMeta"
-                :bar-items="barItems"
-                @category-select="selectedCategory = $event"
-                @product-click="onProductClick"
-                @open-menu="openContextMenu"
-                @create-order="handleCreateOrderOnTable"
-                @start-allowance-order="handleStartAllowanceOrder"
-                @update-qty="updateQty"
-                @clear-cart="handleClearCart"
-                @edit-item="openEditModifiers"
-                @checkout="handleCheckoutWrapper"
-                @routing-valid="handleRoutingValid"
-                @routing-meta="handleRoutingMeta"
-                @kds-take="handleKdsTake"
-                @kds-complete="handleKdsComplete"
-                @kds-print="handleKdsPrint"
-                @kds-loss="handleKdsCancel"
-                @kds-cancel="handleKdsCancel"
-            />
+            <div
+                class="flex-1 flex flex-col min-h-0 relative transition-all duration-200"
+            >
+                <!-- 📖 FATIA 3: RENDERIZADOR DE ABAS DA OPERAÇÃO -->
+                <TeamTabContainer
+                    ref="tabContainerRef"
+                    v-model:active-tab="activeTab"
+                    :category-layout="categoryLayout"
+                    :mobile-category-layout="mobileCategoryLayout"
+                    :product-card-layout="productCardLayout"
+                    :visible-menu-categories="visibleMenuCategories"
+                    :active-menu-category="selectedCategory"
+                    :visible-grid-categories="visibleGridCategories"
+                    :should-show-category-grid="shouldShowCategoryGrid"
+                    :should-show-product-grid="shouldShowProductGrid"
+                    :filtered-products="filteredProducts"
+                    :on-site-orders="onSiteOrders"
+                    :initial-table-areas="initialTableAreas"
+                    :restock-data="restockData"
+                    :catalog="catalog || initialProducts"
+                    :cart-component-key="cartComponentKey"
+                    :cart="cart"
+                    :cart-subtotal="cartSubtotal"
+                    v-model:order-type="orderType"
+                    :initial-customers="initialCustomers"
+                    :edit-order-data="editOrderData"
+                    :is-allowance-mode="isAllowanceMode"
+                    :cart-routing-meta="cartRoutingMeta"
+                    :bar-items="barItems"
+                    @category-select="selectedCategory = $event"
+                    @product-click="onProductClick"
+                    @open-menu="openContextMenu"
+                    @create-order="handleCreateOrderOnTable"
+                    @start-allowance-order="handleStartAllowanceOrder"
+                    @update-qty="updateQty"
+                    @clear-cart="handleClearCart"
+                    @edit-item="openEditModifiers"
+                    @checkout="handleCheckoutWrapper"
+                    @routing-valid="handleRoutingValid"
+                    @routing-meta="handleRoutingMeta"
+                    @kds-take="handleKdsTake"
+                    @kds-complete="handleKdsComplete"
+                    @kds-print="handleKdsPrint"
+                    @kds-loss="handleKdsCancel"
+                    @kds-cancel="handleKdsCancel"
+                />
+            </div>
 
-            <!-- 🏝️️ DYNAMIC ISLAND DA OPERAÇÃO -->
+            <!-- 🏝 DYNAMIC ISLAND DA OPERAÇÃO -->
             <TeamDynamicIsland
+                ref="islandRef"
                 v-model:active-tab="activeTab"
                 :cart-length="cart.length"
                 :selected-category="selectedCategory"
@@ -90,7 +95,7 @@
                 :is-success="isOrderSuccess"
                 :restock-count="restockData.totalItemsToRestock.value"
                 :is-allowance-mode="isAllowanceMode"
-                :bar-items-count="barItems.length"
+                :bar-items-count="pendingBarItemsCount"
                 :configurator-type="isComboVisible ? 'combo' : (isModifiersVisible ? 'modifier' : null)"
                 @open-more="showMoreMenu = true"
                 @go-back-category="goBackCategory"
@@ -113,6 +118,7 @@
 
             <!-- 🧩 OVERLAYS (CONFIGURADORES E AÇÕES) -->
             <TeamOverlays
+                ref="overlaysRef"
                 :is-modifiers-visible="isModifiersVisible"
                 :is-combo-visible="isComboVisible"
                 :active-product="activeProduct"
@@ -183,6 +189,9 @@ import { useTeamBarKds } from "@/Pages/Team/Composables/useTeamBarKds";
 import { useTeamHeaderContext } from "@/Pages/Team/Composables/useTeamHeaderContext";
 import { useTeamSync } from "@/Pages/Team/Composables/useTeamSync";
 import { useTenantEcho } from '@/Composables/useTenantEcho';
+
+// 🚀 IMPORTAÇÃO DO NOVO COMPOSABLE DE HEIGHT
+import { useDynamicFooterHeight } from '@/Composables/useDynamicFooterHeight';
 
 defineOptions({ layout: MobileLayout });
 
@@ -402,6 +411,17 @@ const {
     handleModifiersConfirm, handleComboConfirm
 } = useOrderFlow(props, cartContext, triggerCheckout);
 
+// 🚀 CÁLCULO DINÂMICO DO RODAPÉ (AGORA LOGO APÓS A CRIAÇÃO DE isModifiersVisible/isComboVisible)
+const islandRef = ref(null);
+const overlaysRef = ref(null);
+
+useDynamicFooterHeight(islandRef, {
+    cssVarName: '--app-footer-height',
+    fallbackHeight: 96,
+    extraOffset: 16
+});
+// ===============================================
+
 const { handleItemModify, handleItemSwap, handleItemCancel } = useItemActions(
     selectedOrderContext,
     contextMenuVisible,
@@ -416,7 +436,12 @@ const handleKdsCancelWrapper = (item) => {
 };
 
 const {
-    barItems, handleKdsTake, handleKdsComplete, handleKdsPrint, handleKdsCancel
+    barItems,
+    pendingBarItemsCount,
+    handleKdsTake,
+    handleKdsComplete,
+    handleKdsPrint,
+    handleKdsCancel
 } = useTeamBarKds(props, handleKdsCancelWrapper);
 
 const handleItemReprint = (item) => {

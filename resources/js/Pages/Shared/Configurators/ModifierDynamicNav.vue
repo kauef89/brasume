@@ -81,7 +81,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import SlideToConfirm from "@/Components/UI/SlideToConfirm.vue";
 import { dynamicIslandTypeOverride } from '@/Pages/Shared/Composables/useDynamicIsland';
 
@@ -106,10 +106,15 @@ const isTeamApp = computed(() => {
 const isMounted = ref(false);
 
 onMounted(() => {
-    isMounted.value = true;
+    // 🚀 O delay permite que o v-if da Ilha insira a div '#island-portal-target'
+    // no DOM antes do Vue tentar fazer o teleport para ela.
+    setTimeout(() => {
+        nextTick(() => {
+            isMounted.value = true;
+        });
+    }, 100);
 });
 
-// 🚀 Notifica a Ilha Dinâmica: 2 rows no TeamApp (rounded-3xl) e 1 row no CustomerApp (rounded-full)
 watch(
     isTeamApp,
     (isTeam) => {

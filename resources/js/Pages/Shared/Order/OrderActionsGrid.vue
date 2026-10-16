@@ -46,6 +46,17 @@
                 @click="$emit('action', 'print_partial', order)"
             />
 
+            <!-- ⚡ AÇÃO DE COBRANÇA PIX DO ATENDENTE / GARÇOM -->
+            <OrderContextAction
+                v-if="canChargePix"
+                :disabled="order?.payment_status === 'paid' || order?.status === 'closed'"
+                label="Cobrar com PIX"
+                subtitle="QR Code Sicredi"
+                icon="pi pi-qrcode"
+                icon-color="text-emerald-500"
+                @click="$emit('action', 'charge_pix', order)"
+            />
+
             <!-- ==================== LOGÍSTICA (DESKTOP) ==================== -->
             <OrderContextAction
                 v-if="isTeamMode ? (['counter', 'delivery'].includes(order?.type) && hasPhone) : true"
@@ -150,6 +161,15 @@ const handlePrimaryAction = () => {
         emit('action', 'checkout', props.order);
     }
 };
+
+const canChargePix = computed(() => {
+    return (
+        Boolean(companySettings.value.sicredi_is_active) &&
+        companySettings.value.sicredi_enable_waiter_pix !== false &&
+        !isPaid.value &&
+        props.order?.status !== 'closed'
+    );
+});
 
 const notifyDispatch = () => {
     if (!hasPhone.value) return;

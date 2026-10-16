@@ -4,9 +4,22 @@ import axios from "axios";
 import { useToast } from "primevue/usetoast";
 import { computed, ref } from "vue";
 
-export function useCustomerRegistration(customerRegistrationMode) {
+export function useCustomerRegistration(customerRegistrationMode, options = {}) {
     const toast = useToast();
     const page = usePage();
+
+    const isCustomerMode = computed(() => {
+        if (typeof options === 'boolean') return options;
+        if (options?.isCustomerMode !== undefined) return Boolean(options.isCustomerMode);
+        if (typeof window !== 'undefined') {
+            const path = window.location.pathname;
+            // 🚀 Se estiver em rotas operacionais do PDV, Balcão ou Equipe, NÃO é modo cliente (B2C)
+            if (path.startsWith('/pos') || path.startsWith('/team') || path.startsWith('/waiter') || path.startsWith('/operations')) {
+                return false;
+            }
+        }
+        return true;
+    });
 
     const settings = computed(() => page.props.companySettings || page.props.company_settings || {});
     const reqWhatsapp = computed(() => settings.value.require_whatsapp !== false && settings.value.require_whatsapp !== 0 && settings.value.require_whatsapp !== '0');
@@ -82,14 +95,17 @@ export function useCustomerRegistration(customerRegistrationMode) {
         if (reqBirthDate.value) valid = valid && hasBirth;
         if (isMinorError.value) valid = false;
 
-        const mode = (typeof customerRegistrationMode === 'object' && customerRegistrationMode?.value)
+        const rawMode = (typeof customerRegistrationMode === 'object' && customerRegistrationMode?.value)
             ? customerRegistrationMode.value
             : (customerRegistrationMode || 'basic');
 
+        // 🛡️ Se o tenant for 'customer_only', no PDV o CPF se comporta como opcional ('basic')
+        const mode = (rawMode === 'customer_only' && !isCustomerMode.value) ? 'basic' : rawMode;
+
         const rawCpf = String(form.value.cpf || '').replace(/\D/g, '');
 
-        // 🚀 Exige CPF estritamente se for cpf_required ou customer_only
-        if (mode === 'cpf_required' || mode === 'customer_only') {
+        // 🚀 Exige CPF estritamente se for cpf_required ou se for customer_only dentro do app do cliente
+        if (mode === 'cpf_required' || (mode === 'customer_only' && isCustomerMode.value)) {
             return valid && isCpfValid.value;
         }
 
@@ -98,7 +114,7 @@ export function useCustomerRegistration(customerRegistrationMode) {
             return (serproStep.value === 'confirm_data' || serproStep.value === 'manual_fallback') && valid;
         }
 
-        // Modos opcionais (basic, etc.): se começou a digitar CPF, valida; se vazio, libera
+        // Modos opcionais (basic, etc.): se começou a digitar CPF, valida; se estiver em branco, libera!
         if (rawCpf.length > 0) {
             return valid && isCpfValid.value;
         }

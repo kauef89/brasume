@@ -31,7 +31,6 @@ export function useTeamBarKds(props, handleItemCancel) {
                 if (isFromBar) {
                     let mappedItem = { ...item, order: order };
 
-                    // 🚀 Resolução precisa do operador/atendente alinhada com a Etapa 6
                     if (routingMode === 'strict' && itemStatus === 'pending') {
                         mappedItem.production_status = 'preparing';
                         mappedItem.operator_id = order.employee_id
@@ -55,7 +54,22 @@ export function useTeamBarKds(props, handleItemCancel) {
         return kdsQueue.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     });
 
+    // 🚀 Contagem estrita apenas de itens aguardando preparo ou sendo preparados (ignora entregues e prontos)
+    const pendingBarItemsCount = computed(() => {
+        return barItems.value.filter(item => {
+            const status = item.production_status || item.status || 'pending';
+            return !['delivered', 'ready', 'cancelled', 'returned'].includes(status);
+        }).length;
+    });
+
     const handleKdsTake = (item) => {
+        // Atualização otimista imediata
+        item.production_status = 'preparing';
+        if (item.order?.items) {
+            const original = item.order.items.find(i => i.id === item.id);
+            if (original) original.production_status = 'preparing';
+        }
+
         router.post(route('operations.kds.update-status', item.id), { production_status: 'preparing' }, {
             preserveScroll: true,
             preserveState: true,
@@ -64,6 +78,13 @@ export function useTeamBarKds(props, handleItemCancel) {
     };
 
     const handleKdsComplete = (item) => {
+        // Atualização otimista imediata para sumir da fila e zerar a badge no mesmo instante
+        item.production_status = 'delivered';
+        if (item.order?.items) {
+            const original = item.order.items.find(i => i.id === item.id);
+            if (original) original.production_status = 'delivered';
+        }
+
         router.post(route('operations.kds.update-status', item.id), { production_status: 'delivered' }, {
             preserveScroll: true,
             preserveState: true,
@@ -79,5 +100,13 @@ export function useTeamBarKds(props, handleItemCancel) {
         if (typeof handleItemCancel === 'function') handleItemCancel(item);
     };
 
-    return { barItems, handleKdsTake, handleKdsComplete, handleKdsPrint, handleKdsCancel };
+    return {
+        barItems,
+        pendingBarItemsCount,
+        barItemsCount: pendingBarItemsCount,
+        handleKdsTake,
+        handleKdsComplete,
+        handleKdsPrint,
+        handleKdsCancel
+    };
 }

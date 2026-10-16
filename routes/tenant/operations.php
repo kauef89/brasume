@@ -11,6 +11,7 @@ use App\Http\Controllers\Tenant\Orders\OrderCreationController;
 use App\Http\Controllers\Tenant\Orders\OrderBillController;
 use App\Http\Controllers\Tenant\Orders\CheckoutPaymentController;
 use App\Http\Controllers\Tenant\Orders\CheckoutFiscalController;
+use App\Http\Controllers\Tenant\Orders\OrderAppendController;
 use App\Http\Controllers\Tenant\RestaurantOps\CashierController;
 
 use App\Http\Controllers\Tenant\Operations\ProcurementController;
@@ -37,8 +38,6 @@ Route::prefix("operations")->group(function () {
     // Rotas pré-turno
     Route::withoutMiddleware([\App\Http\Middleware\EnsureShiftAttendance::class])->group(function () {
         Route::get("/availability", [AvailabilityController::class, "index"])->name("operations.availability");
-        Route::post("/shift-attendance/sync", [ShiftAttendanceController::class, "sync"])->name("operations.attendance.sync");
-        Route::post("/shift-attendance/pay-freelancer", [ShiftAttendanceController::class, "payFreelancer"])->name("operations.attendance.pay");
         Route::get('/carteira', [EmployeeWalletController::class, 'index'])->name('employee.wallet');
     });
 
@@ -46,6 +45,8 @@ Route::prefix("operations")->group(function () {
     Route::post("/orders", [OrderCreationController::class, "store"])->name("operations.orders.store");
     Route::get("/orders/{order}", [OrderController::class, "show"])->name("operations.orders.show");
     Route::post("/orders/{order}/toggle-rating", [OrderController::class, "toggleRating"])->name("operations.orders.toggle-rating");
+
+    Route::post('/operations/orders/{order}/append', [OrderAppendController::class, 'store'])->name('operations.orders.append');
 
     Route::post("/orders/{order}/status", [OrderStatusController::class, "update"])->name("operations.orders.update-status");
     Route::post("/orders/{order}/cancel", [OrderStatusController::class, "cancel"])->name("operations.orders.cancel");
@@ -80,6 +81,7 @@ Route::prefix("operations")->group(function () {
     Route::post("/orders/{order}/pay", [CheckoutPaymentController::class, "processPayment"])->name("operations.orders.pay");
     Route::delete("/orders/{order}/payments/{payment}", [CheckoutPaymentController::class, "destroyPayment"])->name("operations.orders.payments.destroy");
     Route::post("/orders/{order}/emit-nfce", [CheckoutFiscalController::class, "emitNfce"])->name("operations.orders.emit-nfce");
+    Route::post('/operations/orders/{order}/generate-pix', [CheckoutPaymentController::class, 'generatePix'])->name('operations.orders.generate-pix');
     Route::post("/orders/{order}/finalize-receipt", [CheckoutFiscalController::class, "finalizeReceipt"])->name("operations.finalize-receipt");
     Route::post("/orders/{order}/print-conference", [CheckoutFiscalController::class, "printConference"])->name("operations.print-conference");
     Route::delete("/orders/{order}/payments/{payment}/rollback", [CashierController::class, 'rollbackPayment'])->name('operations.orders.payments.rollback');

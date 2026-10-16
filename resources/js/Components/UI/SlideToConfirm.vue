@@ -54,7 +54,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useSlideToConfirm } from '@/Pages/Shared/Composables/useSlideToConfirm';
 
 const props = defineProps({
@@ -74,15 +74,37 @@ const props = defineProps({
 
 const emit = defineEmits(['confirm']);
 
+// 📳 Helper seguro para vibração em dispositivos móveis
+const triggerHaptic = (pattern) => {
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+        try {
+            navigator.vibrate(pattern);
+        } catch {
+            // Ignora silenciosamente navegadores sem suporte de hardware
+        }
+    }
+};
+
 const interceptedEmit = (eventName, ...args) => {
     if (eventName === 'confirm') {
         if (props.disabled || props.isLoading || props.isSuccess) return;
-        if (navigator.vibrate) navigator.vibrate(50);
+
+        // Se a ação for verde/sucesso, vibra em pulso duplo; senão, pulso de confirmação padrão
+        const slidePattern = props.color === 'success' ? [60, 40, 100] : 60;
+        triggerHaptic(slidePattern);
+
         emit('confirm', ...args);
     } else {
         emit(eventName, ...args);
     }
 };
+
+// 🚀 Vibração dupla mais longa no momento em que a prop isSuccess pinta o botão de verde
+watch(() => props.isSuccess, (newVal, oldVal) => {
+    if (newVal && !oldVal) {
+        triggerHaptic([70, 50, 160]);
+    }
+});
 
 const colorThemes = {
     primary: { track: 'bg-primary-500/10', border: 'border-primary-500/20', text: 'text-primary-400', thumb: 'bg-primary-500', trail: 'bg-primary-500/20' },

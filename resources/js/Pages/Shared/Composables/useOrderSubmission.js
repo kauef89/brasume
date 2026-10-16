@@ -19,11 +19,11 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
             if (!isNaN(num)) return num;
         }
         return null;
-    };
+    }
 
-    const executeSubmit = (payload) => {
+    const executeSubmit = (payload, endpointUrl) => {
         return new Promise((resolve, reject) => {
-            router.post(route('operations.orders.store'), payload, {
+            router.post(endpointUrl, payload, {
                 preserveState: true,
                 preserveScroll: true,
                 onSuccess: (pageResp) => {
@@ -43,7 +43,11 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
 
                     const resultData = { order: { id: createdOrderId }, id: createdOrderId };
 
-                    if ((payload.frontend_intent === 'pay_now' || payload.intent === 'pay_now') && createdOrderId) {
+                    const isPayNow = payload.frontend_intent === 'pay_now'
+                                  || payload.intent === 'pay_now'
+                                  || payload.routing?.payment_intent_status === 'pay_now';
+
+                    if (isPayNow && createdOrderId) {
                         window.dispatchEvent(new CustomEvent('pos-open-checkout', { detail: { orderId: createdOrderId } }));
                         resolve(resultData);
                         return;
@@ -66,28 +70,32 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
         const meta = checkoutData?.meta || {};
         const currentType = meta.type || 'table';
 
+        // 🚀 O pulo do gato: Identificação direta se estamos anexando a algo existente
+        const rawMetaOrderId = unref(meta.order_id) || unref(meta.existing_order_id) || unref(meta.id) || unref(checkoutData?.order_id) || unref(checkoutData?.append_to_order);
+        const rawEditOrderId = unref(editOrderId);
+        const resolvedOrderId = rawMetaOrderId || rawEditOrderId || null;
+
         const tableId = meta.table?.id || meta.dining_table_id || meta.table_id || null;
         const tableName = meta.table?.name || meta.table_number || '';
         const addressId = meta.address?.id || meta.address_id || null;
 
-        if (currentType === 'table' && !tableId) {
-            toast.add({ severity: 'warn', summary: 'Mesa Obrigatória', detail: 'Selecione uma mesa válida para lançar o pedido.', life: 4500 });
-            return Promise.reject(new Error('Mesa obrigatória'));
-        }
+        // Validações exclusivas para "Criação de Comanda"
+        if (!resolvedOrderId) {
+            if (currentType === 'table' && !tableId) {
+                toast.add({ severity: 'warn', summary: 'Mesa Obrigatória', detail: 'Selecione uma mesa válida para lançar o pedido.', life: 4500 });
+                return Promise.reject(new Error('Mesa obrigatória'));
+            }
 
-        if (currentType === 'counter') {
-            const customerName = (meta.customer?.name || meta.customer_name || meta.identifier || '').trim();
-            const customerId = meta.customer?.id || meta.customer_id;
+            if (currentType === 'counter') {
+                const customerName = (meta.customer?.name || meta.customer_name || meta.identifier || '').trim();
+                const customerId = meta.customer?.id || meta.customer_id;
 
-            if (!customerName && !customerId) {
-                toast.add({ severity: 'warn', summary: 'Identificação Obrigatória', detail: 'Para pedidos de Balcão, informe o nome ou selecione o cliente.', life: 4500 });
-                return Promise.reject(new Error('Identificação obrigatória'));
+                if (!customerName && !customerId) {
+                    toast.add({ severity: 'warn', summary: 'Identificação Obrigatória', detail: 'Para pedidos de Balcão, informe o nome ou selecione o cliente.', life: 4500 });
+                    return Promise.reject(new Error('Identificação obrigatória'));
+                }
             }
         }
-
-        const rawMetaOrderId = unref(meta.order_id);
-        const rawEditOrderId = unref(editOrderId);
-        const resolvedOrderId = rawMetaOrderId || rawEditOrderId || null;
 
         const cleanItems = (cartRef.value || []).map(item => ({
             cartId: item.cartId,
@@ -132,7 +140,6 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
 
         const payload = {
             source: source,
-            order_id: resolvedOrderId,
             items: cleanItems,
             routing: {
                 ...meta,
@@ -145,11 +152,20 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
                 kitchen_separate_multiples: settings.kitchen_separate_multiples || false
             },
             financials: checkoutData.totals,
-            frontend_intent: checkoutData.frontend_intent || null,
+            frontend_intent: checkoutData.frontend_intent || checkoutData.intent || meta.payment_intent_status || null,
             is_internal_operation: true
         };
 
-        return executeSubmit(payload);
+        // 🚀 ROTEAMENTO: Escolhe a Rota Dedicada
+        const endpointUrl = resolvedOrderId
+            ? route('operations.orders.append', resolvedOrderId)
+            : route('operations.orders.store');
+
+        if (resolvedOrderId) {
+            payload.order_id = resolvedOrderId; // Previne warnings em rotinas internas
+        }
+
+        return executeSubmit(payload, endpointUrl);
     };
 
     return { submitOrder };

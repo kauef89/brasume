@@ -102,7 +102,6 @@
                                         </p>
                                     </div>
 
-                                    <!-- 🚀 Stepper com limite destravado e mutação reativa -->
                                     <div class="shrink-0">
                                         <QtyStepper
                                             :model-value="getItemQty(item.rule_id)"
@@ -291,11 +290,15 @@ const {
     openAvailability, activeSubTab, isFreeMode, totalBoxItemsCount
 } = restock;
 
-// 🚀 FILTRO: Mantém apenas produtos de revenda (type = resale)
+// 🚀 FILTRO ESTRITO: Apenas produtos de revenda (resale) com status 'available'
 const resaleLocations = computed(() => {
     return (locations.value || []).map(loc => ({
         ...loc,
-        items: (loc.items || []).filter(item => item.type === 'resale')
+        items: (loc.items || []).filter(item => {
+            const isResale = (item.type || '').toString().toLowerCase().trim() === 'resale';
+            const isAvailable = (item.status || '').toString().toLowerCase().trim() === 'available';
+            return isResale && isAvailable;
+        })
     })).filter(loc => loc.items.length > 0);
 });
 
@@ -318,14 +321,14 @@ const activeBoxSource = ref(null);
 
 onMounted(() => {
     isMounted.value = true;
-    fetchRestockBoard();
+    // 🚀 force = true para descartar qualquer cache antigo da memória da SPA
+    fetchRestockBoard(true);
 });
 
 const handleResetRound = () => {
     resetForNewRound();
 };
 
-// 🚀 Limite do Stepper: No modo livre, nunca bloqueia no zero
 const getItemMax = (item) => {
     if (isFreeMode.value) {
         return 999;
@@ -334,12 +337,10 @@ const getItemMax = (item) => {
     return diff > 0 ? diff : 999;
 };
 
-// 🚀 Leitura segura que nunca devolve undefined/NaN para o Stepper
 const getItemQty = (ruleId) => {
     return Number(restockDrafts.value?.[ruleId] ?? 0);
 };
 
-// 🚀 Mutação atômica que força o Vue e o localStorage a dispararem as atualizações
 const setItemQty = (ruleId, val) => {
     restockDrafts.value = {
         ...restockDrafts.value,
@@ -347,7 +348,6 @@ const setItemQty = (ruleId, val) => {
     };
 };
 
-// 🏷️ Agrupa os itens da praça por categoria
 const groupItemsByCategory = (items = []) => {
     const groups = {};
     items.forEach(item => {

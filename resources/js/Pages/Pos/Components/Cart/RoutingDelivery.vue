@@ -10,6 +10,7 @@
                 />
             </div>
 
+            <!-- 1. PESQUISAR CLIENTE EXISTENTE -->
             <DeliveryCustomerSearch
                 v-if="activeSubTab === 'search'"
                 :customers="customers"
@@ -17,18 +18,22 @@
                 @go-to-new="handleGoToNew"
             />
 
+            <!-- 2. CADASTRO RÁPIDO -->
             <DeliveryCustomerQuick
                 v-else-if="activeSubTab === 'quick'"
                 :company-settings="companySettings"
                 :customers="customers"
+                order-type="delivery"
                 @success="handleCustomerSelected"
-                />
+            />
 
+            <!-- 3. CADASTRO NOVO COMPLETO (Serpro / Receita / CPF) -->
             <DeliveryCustomerNew
                 v-else-if="activeSubTab === 'new'"
                 :company-settings="companySettings"
                 :customers="customers"
                 :initial-name="newCustomerSeedName"
+                order-type="delivery"
                 @success="handleCustomerSelected"
             />
         </div>
@@ -71,7 +76,8 @@ const emit = defineEmits([
     'apply',
     'customer-selected',
     'open-new-address',
-    'open-edit-address'
+    'open-edit-address',
+    'open-new-customer'
 ]);
 
 const page = usePage();
@@ -86,6 +92,11 @@ const deliverySubTabOptions = [
     { label: 'Novo',      value: 'new',    icon: 'pi-user-plus' }
 ];
 
+const handleGoToNew = (name = '') => {
+    newCustomerSeedName.value = name;
+    activeSubTab.value = 'new';
+};
+
 const handleCustomerSelected = (c) => {
     emit('update:customer', c);
     emit('customer-selected', c);
@@ -95,11 +106,6 @@ const handleCustomerSelected = (c) => {
     } else {
         emit('update:address', null);
     }
-};
-
-const handleGoToNew = (name) => {
-    newCustomerSeedName.value = name;
-    activeSubTab.value = 'new';
 };
 
 const handleChangeCustomer = () => {

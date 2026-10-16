@@ -29,11 +29,18 @@ export function useRestock(shiftId = null) {
         }
     }, { immediate: true });
 
+    // 🛡️ Validação estrita de elegibilidade
+    const isRestockableItem = (item) => {
+        const isResale = (item?.type || '').toLowerCase() === 'resale';
+        const isAvailable = (item?.status || '').toLowerCase() === 'available';
+        return isResale && isAvailable;
+    };
+
     // Contagem reativa de itens pendentes na Caixa de Coleta
     const totalBoxItemsCount = computed(() => {
         let count = 0;
         locations.value.forEach(loc => {
-            const list = loc.items || [];
+            const list = (loc.items || []).filter(isRestockableItem);
             list.forEach(item => {
                 const qty = isFreeMode.value
                     ? Number(restockDrafts.value[item.rule_id] || 0)
@@ -61,11 +68,10 @@ export function useRestock(shiftId = null) {
             hasFetched.value = true;
 
             locations.value.forEach(loc => {
-                const list = loc.items || loc.tasks || [];
+                const list = (loc.items || loc.tasks || []).filter(isRestockableItem);
                 list.forEach(item => {
                     const id = item.rule_id || item.product_id;
                     if (loc.restock_mode === 'free') {
-                        // 🚀 No modo free, a quantidade inicial é SEMPRE ZERO
                         if (forceZero || restockDrafts.value[id] === undefined) {
                             restockDrafts.value[id] = 0;
                         }
@@ -87,13 +93,10 @@ export function useRestock(shiftId = null) {
         }
     };
 
-    /**
-     * 🚀 Zera todos os rascunhos para iniciar uma nova rodada limpa de reposição
-     */
     const resetForNewRound = () => {
         const freshDrafts = {};
         locations.value.forEach(loc => {
-            const list = loc.items || loc.tasks || [];
+            const list = (loc.items || loc.tasks || []).filter(isRestockableItem);
             list.forEach(item => {
                 const id = item.rule_id || item.product_id;
                 freshDrafts[id] = 0;
@@ -187,7 +190,7 @@ export function useRestock(shiftId = null) {
 
     const totalItemsToRestock = computed(() => {
         return locations.value.reduce((total, loc) => {
-            const list = loc.items || [];
+            const list = (loc.items || []).filter(isRestockableItem);
             return total + list.filter(item => (item.suggested_restock > 0 || item.is_critical)).length;
         }, 0);
     });

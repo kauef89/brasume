@@ -1,6 +1,7 @@
 <template>
     <div class="w-full h-screen bg-surface-1 text-surface-text overflow-hidden flex flex-col">
         <Toast position="top-right" />
+        <ConfirmDialog :style="{ width: '400px' }" :breakpoints="{ '575px': '90vw' }" />
         <slot />
     </div>
 </template>
@@ -9,6 +10,7 @@
 import { onMounted } from "vue";
 import { router } from "@inertiajs/vue3";
 import Toast from "primevue/toast";
+import ConfirmDialog from "primevue/confirmdialog";
 import { usePushNotifications } from "@/Composables/usePushNotifications";
 import { useAudioAlert } from "@/Composables/useAudioAlert";
 import { useTenantEcho } from "@/Composables/useTenantEcho";

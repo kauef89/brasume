@@ -199,8 +199,7 @@ const {
 } = useCustomerRegistration(customerRegistrationMode);
 
 const registrationMode = computed(() => {
-    const mode = props.companySettings.customer_registration_mode || 'basic';
-    // 🚀 Se a regra exige CPF apenas no app do cliente, no PDV ele se comporta como opcional (basic)
+    const mode = page.props.companySettings?.customer_registration_mode || 'basic';
     if (mode === 'customer_only') {
         return 'basic';
     }

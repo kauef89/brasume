@@ -14,6 +14,12 @@
         </div>
 
         <!-- CONTEÚDO (ITENS E TOTAIS) -->
+
+        <OrderPixModal
+            v-model:visible="isPixModalOpen"
+            :order="order"
+        />
+
         <div class="flex-1 overflow-y-auto hide-scrollbar flex flex-col pb-32 relative">
 
             <!-- Barra de Totais -->

@@ -116,7 +116,7 @@
             </div>
         </template>
 
-        <!-- 4. FORMULÁRIO MANUAL (COMPATÍVEL COM CPF_REQUIRED) -->
+        <!-- 4. FORMULÁRIO MANUAL (COMPATÍVEL COM BASIC E CPF_REQUIRED) -->
         <div v-if="(!isSerproMagic || serproStep === 'manual_fallback') && serproStep !== 'cpf_exists'" class="flex flex-col gap-3">
             <div v-if="isSerproMagic" class="flex items-center justify-between pb-1 border-b border-surface-border/40">
                 <span class="text-[10px] font-black uppercase text-surface-muted">Preenchimento Manual</span>
@@ -173,7 +173,7 @@
                     />
                 </div>
 
-                <!-- Campo CPF: Rótulo reflete a regra de negócio do tenant -->
+                <!-- Campo CPF: Rótulo reflete a regra no PDV -->
                 <div>
                     <label class="block text-[10px] font-black uppercase text-surface-muted mb-1">
                         CPF {{ isCpfRequired ? '*' : '(Opcional)' }}
@@ -219,14 +219,23 @@ import { formatPhone, formatCpfCnpj } from '@/Utils/formatters';
 const props = defineProps({
     companySettings: { type: Object, default: () => ({}) },
     customers: { type: Array, default: () => [] },
-    initialName: { type: String, default: '' }
+    initialName: { type: String, default: '' },
+    orderType: { type: String, default: 'delivery' }
 });
 
 const emit = defineEmits(['success']);
 const toast = useToast();
 const isSubmitting = ref(false);
 
-const registrationMode = computed(() => props.companySettings.customer_registration_mode || 'basic');
+// 🚀 No PDV, se a regra for 'customer_only', o CPF é opcional ('basic')
+const registrationMode = computed(() => {
+    const mode = props.companySettings?.customer_registration_mode || 'basic';
+    if (mode === 'customer_only') {
+        return 'basic';
+    }
+    return mode;
+});
+
 const isSerproMagic = computed(() => registrationMode.value === 'serpro_magic');
 const isCpfRequired = computed(() => registrationMode.value === 'cpf_required');
 
@@ -245,36 +254,7 @@ const {
     formatPhoneInput,
     lookupSerpro,
     resetForm
-} = useCustomerRegistration(registrationMode);
-
-// 🚀 SONDA REATIVA NO CONSOLE (Identifica exatamente qual campo está barrando)
-watch(
-    [
-        () => form.value.name,
-        () => form.value.phone,
-        () => form.value.cpf,
-        () => form.value.birth_date,
-        isFormValid,
-        isMinorError,
-        isSubmitting
-    ],
-    () => {
-        console.log('📍 [DIAGNÓSTICO CADASTRO NOVO CLIENTE]', {
-            nomePreenchido: Boolean(form.value.name && form.value.name.trim().length >= 2),
-            telefoneValido: isPhoneValid.value,
-            cpfDigitado: form.value.cpf,
-            cpfValido: isCpfValid.value,
-            cpfObrigatorio: isCpfRequired.value,
-            dataNascimentoObrigatoria: reqBirthDate.value,
-            dataNascimentoPreenchida: Boolean(form.value.birth_date),
-            isMinorError: isMinorError.value,
-            modoDoTenant: registrationMode.value,
-            FORMULARIO_VALIDO: isFormValid.value,
-            BOTAO_DESABILITADO: !isFormValid.value || isMinorError.value || isSubmitting.value
-        });
-    },
-    { deep: true, immediate: true }
-);
+} = useCustomerRegistration(registrationMode, { isCustomerMode: false });
 
 watch(() => props.initialName, (val) => {
     if (val && !form.value.name) {

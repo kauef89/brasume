@@ -33,7 +33,6 @@
                 class="flex flex-col gap-3 shrink-0 transition-opacity"
                 :class="{ 'pointer-events-none': processingStatus === 'loading' }"
             >
-                <!-- 1. DECIDIR DEPOIS -->
                 <SelectableCard
                     v-if="!hidePendingChoice"
                     @select="selectMode('pending_choice')"
@@ -46,7 +45,6 @@
                     :subtitle="isCounter ? 'Envia para a cozinha. O pagamento será cobrado ao entregar o produto.' : 'Envia para a cozinha. Será definido na expedição.'"
                 />
 
-                <!-- 2. PAGAR NA ENTREGA (MOTOBOY) -->
                 <SelectableCard
                     v-if="!isCounter"
                     @select="selectMode('pay_on_delivery')"
@@ -59,7 +57,6 @@
                     subtitle="Compor o pagamento para o motoboy levar troco ou máquina."
                 />
 
-                <!-- 2. PAGAR NA RETIRADA / BALCÃO -->
                 <SelectableCard
                     v-if="isCounter"
                     @select="selectMode('pay_on_counter')"
@@ -72,7 +69,6 @@
                     subtitle="Registrar a promessa (dinheiro, troco, cartão ou PIX) para receber quando o cliente buscar."
                 />
 
-                <!-- 3. PAGAR AGORA NO CAIXA -->
                 <SelectableCard
                     @select="selectMode('pay_now')"
                     :is-selected="finalIntent === 'pay_now'"
@@ -182,7 +178,6 @@ const currentStep = ref('mode');
 const finalIntent = ref('pending_choice');
 const promises = ref([]);
 
-// Gerenciamento de Status de Processamento
 const processingMode = ref(null);
 const processingStatus = ref('idle');
 
@@ -269,6 +264,7 @@ watch(() => props.visible, (val) => {
             finalIntent.value = props.existingIntent;
             if (['pay_on_delivery', 'pay_on_counter', 'pay_on_pickup'].includes(props.existingIntent)) {
                 currentStep.value = 'payment_panel';
+                // 🚀 Aqui carregamos o método esticado que veio do hook useOrderAppend!
                 let parsed = props.existingMethods;
                 while (typeof parsed === 'string') {
                     try { parsed = JSON.parse(parsed); } catch (e) { break; }
@@ -315,7 +311,6 @@ const selectMode = (mode) => {
                 onError: handleError
             });
 
-            // Fallback protetor caso a chamada síncrona não execute o callback
             setTimeout(() => {
                 if (processingStatus.value === 'loading') {
                     handleSuccess();
@@ -353,6 +348,7 @@ const handleConfirmFinal = () => {
     processingMode.value = resolvedStatus;
 
     setTimeout(() => {
+        // 🚀 O pulo do gato: Entrega exatamente as promessas (promises.value) ajustadas!
         emit('confirm', {
             intent: resolvedStatus,
             payment_intent_status: resolvedStatus,
@@ -361,7 +357,6 @@ const handleConfirmFinal = () => {
             onError: handleError
         });
 
-        // Fallback protetor
         setTimeout(() => {
             if (processingStatus.value === 'loading') {
                 handleSuccess();

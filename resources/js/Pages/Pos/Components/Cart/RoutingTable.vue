@@ -79,15 +79,19 @@
 
                         <template v-if="!expandedTableId || expandedTableId === table.id">
 
-                            <!-- BOTÃO DA MESA (CIRCULAR OU DUPLO/PÍLULA SE ESTIVER UNIDA) -->
+                            <!-- BOTÃO DA MESA -->
                             <div
                                 @click="handleTableClick(table)"
-                                class="relative h-14 p-1 rounded-full transition-all cursor-pointer flex flex-col items-center justify-center text-center shadow-xs select-none"
+                                class="relative h-14 p-1 rounded-full transition-all cursor-pointer flex flex-col items-center justify-center text-center shadow-xs select-none border"
                                 :class="[
                                     isMergedParent(table) ? 'min-w-28 w-auto px-4' : 'w-14',
                                     expandedTableId === table.id
-                                        ? (table.status === 'occupied' ? 'bg-primary-600/40 scale-110 ring-2 ring-primary-500/30' : 'bg-primary-500/80 scale-110 ring-2 ring-primary-500/30')
-                                        : (table.status === 'occupied' ? 'bg-primary-500/40 hover:bg-primary-500/60' : 'bg-primary-500/10 text-primary-300 hover:bg-primary-500/40')
+                                        ? (isTableOccupied(table)
+                                            ? 'bg-warning-500/30 border-warning-500/50 text-warning-400 scale-110 ring-2 ring-warning-500/40'
+                                            : 'bg-primary-500/80 border-primary-500 text-white scale-110 ring-2 ring-primary-500/30')
+                                        : (isTableOccupied(table)
+                                            ? 'bg-warning-500/15 border-warning-500/30 text-warning-400 hover:bg-warning-500/25'
+                                            : 'bg-primary-500/10 border-transparent text-primary-300 hover:bg-primary-500/25 hover:border-primary-500/30')
                                 ]"
                             >
                                 <div class="flex items-center justify-center gap-1">
@@ -97,10 +101,11 @@
                                     >
                                         {{ getMergedDisplayName(table) }}
                                     </span>
-                                    <i v-if="isMergedParent(table)" class="pi pi-link text-[10px] text-primary-300 ml-0.5 opacity-80"></i>
+                                    <i v-if="isMergedParent(table)" class="pi pi-link text-[10px] ml-0.5 opacity-80"
+                                       :class="isTableOccupied(table) ? 'text-warning-400' : 'text-primary-300'"></i>
                                 </div>
 
-                                <!-- BADGE SUCCESS COM CHECKMARK QUANDO SELECIONADA NO MODO JUNÇÃO -->
+                                <!-- BADGE MODO JUNÇÃO -->
                                 <div
                                     v-if="selectedForMerge.includes(table.id)"
                                     class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-success-500 text-white flex items-center justify-center border-2 border-surface-2 shadow-sm z-10 animate-in zoom-in-50 duration-150"
@@ -109,10 +114,10 @@
                                     <i class="pi pi-check text-[9px] font-black"></i>
                                 </div>
 
-                                <!-- PONTO DE STATUS OCUPADA -->
+                                <!-- INDICADOR DE STATUS OCUPADA -->
                                 <div
-                                    v-else-if="table.status === 'occupied'"
-                                    class="absolute top-0 right-0 md:-top-1 md:-right-1 w-4 h-4 md:w-2.5 md:h-2.5 rounded-full bg-warning-500 border-2 border-surface-2 shadow-sm"
+                                    v-else-if="isTableOccupied(table)"
+                                    class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-warning-500 border-2 border-surface-2 shadow-sm animate-pulse"
                                     title="Mesa Ocupada"
                                 ></div>
                             </div>
@@ -120,7 +125,9 @@
                             <!-- CARD EXPANDIDO: CONTAS ATIVAS DA MESA -->
                             <div v-if="expandedTableId === table.id" class="basis-full w-full my-1 p-3 bg-surface-2 border border-surface-border rounded-2xl flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 shadow-inner">
                                 <div class="flex items-center justify-between">
-                                    <span class="micro-label">Contas ativas na Mesa {{ getMergedDisplayName(table) }}</span>
+                                    <span class="micro-label">
+                                        Contas ativas na Mesa {{ getMergedDisplayName(table) }} ({{ getTableActiveOrders(table).length }})
+                                    </span>
 
                                     <!-- Botão Separar se a mesa estiver agrupada -->
                                     <button
@@ -134,15 +141,15 @@
                                 </div>
 
                                 <div class="flex flex-col gap-2">
-                                    <button v-for="order in table.active_orders" :key="order.id"
+                                    <button v-for="order in getTableActiveOrders(table)" :key="order.id"
                                         @click="selectExistingOrder(table, order)"
-                                        class="p-3 bg-surface-1 border border-surface-border hover:border-primary-500 hover:text-primary-600 rounded-xl text-sm font-medium text-surface-text text-left truncate transition-colors flex items-center gap-2 outline-none cursor-pointer">
-                                        <i class="pi fa-receipt text-primary-500 text-xs"></i>
-                                        {{ order.identifier ? `${getMergedDisplayName(table)} (${order.identifier})` : getMergedDisplayName(table) }}
+                                        class="p-3 bg-surface-1 border border-surface-border hover:border-warning-500 hover:text-warning-400 rounded-xl text-sm font-medium text-surface-text text-left truncate transition-colors flex items-center gap-2 outline-none cursor-pointer">
+                                        <i class="pi fa-receipt text-warning-500 text-xs"></i>
+                                        {{ order.identifier ? `${getMergedDisplayName(table)} (${order.identifier})` : `Conta #${order.id}` }}
                                     </button>
 
                                     <button @click="createNewSubAccount(table)"
-                                        class="p-3 bg-primary-500/10 text-primary-600 hover:bg-primary-500/20 rounded-xl text-sm font-black border border-transparent transition-colors flex items-center justify-center gap-2 shadow-sm outline-none cursor-pointer">
+                                        class="p-3 bg-primary-500/10 text-primary-400 hover:bg-primary-500/20 rounded-xl text-sm font-black border border-transparent transition-colors flex items-center justify-center gap-2 shadow-sm outline-none cursor-pointer">
                                         <i class="pi pi-plus-circle text-sm"></i> Nova Conta Paralela
                                     </button>
                                 </div>
@@ -204,18 +211,17 @@ const expandedTableId = ref(null);
 const isMergeMode = ref(false);
 const selectedForMerge = ref([]);
 
-// Todas as mesas do salão em array simples
+// Todas as mesas do salão em array plano
 const allTables = computed(() => {
     return (props.tableAreas || []).flatMap(area => area.tables || []);
 });
 
-// Resolução de mesas filhas agrupadas a uma mesa mãe
+// Resolução de mesas secundárias vinculadas
 const getLinkedChildren = (table) => {
     if (!table) return [];
     if (table.linked_tables && table.linked_tables.length > 0) {
         return table.linked_tables;
     }
-    // 🛡️ Garante comparação Number vs Number
     return allTables.value.filter(t => Number(t.parent_table_id) === Number(table.id));
 };
 
@@ -227,13 +233,13 @@ const isMergedChild = (table) => {
     return table.parent_table_id !== null && table.parent_table_id !== undefined && table.parent_table_id !== '';
 };
 
-// 🚀 Filtra mesas secundárias da grade (a mesa 12 some do mapa!)
+// Filtra mesas secundárias da grade (mesas filhas são ocultadas)
 const getVisibleTables = (area) => {
     if (!area?.tables) return [];
     return area.tables.filter(table => !isMergedChild(table));
 };
 
-// 🚀 Nome amigável combinado em ordem ascendente (ex: 1+12)
+// Nome amigável combinado em ordem ascendente (ex: 1+12)
 const getMergedDisplayName = (table) => {
     if (!table) return '';
     const children = getLinkedChildren(table);
@@ -244,6 +250,40 @@ const getMergedDisplayName = (table) => {
     );
 
     return names.join('+');
+};
+
+// Consolida os pedidos ativos da mesa e de suas mesas filhas
+const getTableActiveOrders = (table) => {
+    if (!table) return [];
+    const orders = [...(table.active_orders || [])];
+
+    const children = getLinkedChildren(table);
+    children.forEach(child => {
+        const fullChild = allTables.value.find(t => t.id === child.id) || child;
+        if (Array.isArray(fullChild.active_orders)) {
+            orders.push(...fullChild.active_orders);
+        }
+    });
+
+    const seen = new Set();
+    return orders.filter(o => {
+        if (!o || !o.id || seen.has(o.id)) return false;
+        seen.add(o.id);
+        return true;
+    });
+};
+
+// Determina ocupação via status ou presença de pedidos ativos
+const isTableOccupied = (table) => {
+    if (!table) return false;
+    if (table.status === 'occupied') return true;
+    if (getTableActiveOrders(table).length > 0) return true;
+
+    const children = getLinkedChildren(table);
+    return children.some(c => {
+        const fullChild = allTables.value.find(t => t.id === c.id) || c;
+        return fullChild.status === 'occupied' || (fullChild.active_orders?.length > 0);
+    });
 };
 
 const selectedForMergeNames = computed(() => {
@@ -266,7 +306,6 @@ const toggleMergeMode = () => {
 };
 
 const handleTableClick = (table) => {
-    // 🛡️ Se estiver no modo de junção, seleciona/deseleciona
     if (isMergeMode.value) {
         if (selectedForMerge.value.includes(table.id)) {
             selectedForMerge.value = selectedForMerge.value.filter(id => id !== table.id);
@@ -276,19 +315,20 @@ const handleTableClick = (table) => {
         return;
     }
 
-    const isOccupied = table.status === 'occupied' && table.active_orders && table.active_orders.length > 0;
-    const existingOrder = isOccupied ? table.active_orders[0] : null;
+    const occupied = isTableOccupied(table);
+    const activeOrders = getTableActiveOrders(table);
+    const existingOrder = occupied && activeOrders.length > 0 ? activeOrders[0] : null;
 
     if (props.mode === 'direct') {
-        if (isOccupied && table.active_orders.length > 1) {
+        if (occupied && activeOrders.length > 1) {
             expandedTableId.value = expandedTableId.value === table.id ? null : table.id;
             return;
         }
-        emit('table-click', table, isOccupied, existingOrder);
+        emit('table-click', table, occupied, existingOrder);
         return;
     }
 
-    if (isOccupied) {
+    if (occupied) {
         expandedTableId.value = expandedTableId.value === table.id ? null : table.id;
     } else {
         expandedTableId.value = null;
@@ -298,12 +338,10 @@ const handleTableClick = (table) => {
     }
 };
 
-// 🚀 CONFIRMAR JUNÇÃO COM PRIORIZAÇÃO ASCENDENTE
 const confirmMergeTables = async () => {
     if (selectedForMerge.value.length < 2) return;
 
     try {
-        // Ordena as mesas selecionadas naturalmente em ordem crescente (ex: 1 antes de 12)
         const sortedSelectedTables = [...selectedForMerge.value]
             .map(id => allTables.value.find(t => t.id === id))
             .filter(Boolean)
@@ -325,7 +363,6 @@ const confirmMergeTables = async () => {
 
         isMergeMode.value = false;
         selectedForMerge.value = [];
-
         router.reload({ only: ['initialTableAreas'], preserveState: true, preserveScroll: true });
 
     } catch (error) {
@@ -338,7 +375,6 @@ const confirmMergeTables = async () => {
     }
 };
 
-// SEPARAR MESA DESMEMBRANDO
 const handleSplitTable = async (table) => {
     try {
         await axios.post(route('operations.tables.split', table.id));

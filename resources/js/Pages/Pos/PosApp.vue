@@ -178,6 +178,7 @@ import PrintAlertNotice from '@/Components/UI/PrintAlertNotice.vue';
 import { usePosTerminalLock } from '@/Pages/Pos/Composables/usePosTerminalLock';
 import { usePosSync } from '@/Pages/Pos/Composables/usePosSync';
 import { useTenantEcho } from '@/Composables/useTenantEcho';
+import { usePosIdleTimer } from '@/Pages/Pos/Composables/usePosIdleTimer';
 
 defineOptions({ layout: DesktopLayout });
 
@@ -322,6 +323,38 @@ const handleTabChange = (e) => {
         window.history.pushState({ tab: targetTab }, '', newUrl);
     }
 };
+
+// 🛡️ AUTO-RESET E PRIVACIDADE DE CAIXA POR INATIVIDADE (60 segundos)
+usePosIdleTimer({
+    timeout: 60000, // 1 minuto
+    isEnabled: () => {
+        // 1. Cenário Checkout: está na aba checkout E o pedido já foi pago/liquidado
+        const isFinishedCheckout = activeTab.value === 'checkout' &&
+            (checkoutData.value?.order?.payment_status === 'paid' ||
+             checkoutData.value?.order?.status === 'closed' ||
+             checkoutData.value?.order?.status === 'completed');
+
+        // 2. Cenário Turno/Caixa: está na aba de conferência de turno/valores
+        const isShiftView = activeTab.value === 'shift';
+
+        return isFinishedCheckout || isShiftView;
+    },
+    onIdle: () => {
+        // Cenário 1: Fecha o checkout concluído e prepara nova venda
+        if (activeTab.value === 'checkout') {
+            closeCheckout();
+            activeTab.value = 'new';
+        }
+        // Cenário 2: Oculta valores financeiros do caixa e volta ao cardápio de atendimento
+        else if (activeTab.value === 'shift') {
+            activeTab.value = 'new';
+            const newUrl = '/pos/new';
+            if (window.location.pathname !== newUrl) {
+                window.history.pushState({ tab: 'new' }, '', newUrl);
+            }
+        }
+    }
+});
 
 const closeCheckout = () => {
     checkoutData.value = null;

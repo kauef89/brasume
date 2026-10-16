@@ -1,0 +1,2342 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files and files not matching ignore patterns, combined into a single document by Repomix.
+
+# File Summary
+
+## Purpose
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+
+## File Format
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  a. A header with the file path (## File: path/to/file)
+  b. The full contents of the file in a code block
+
+## Usage Guidelines
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+
+## Notes
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: resources/js/Composables/useDynamicFooterHeight.js, resources/js/Pages/Customer/CustomerApp.vue, resources/js/Pages/Customer/CustomerMenuTab.vue, resources/js/Pages/Customer/CustomerCartTab.vue, resources/js/Pages/Team/TeamApp.vue, resources/js/Pages/Team/TeamMenuTab.vue, resources/js/Pages/Shared/Configurators/ModifierDynamicNav.vue, resources/js/Pages/Shared/Configurators/ComboDynamicNav.vue
+- Files matching these patterns are excluded: vendor/**, node_modules/**, public/**, storage/**, bootstrap/cache/**, database/migrations/**, database/factories/**, tests/**, .git/**, *.lock, package-lock.json, composer.lock, repomix*.xml
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+
+# Directory Structure
+```
+resources/
+  js/
+    Composables/
+      useDynamicFooterHeight.js
+    Pages/
+      Customer/
+        CustomerApp.vue
+        CustomerCartTab.vue
+        CustomerMenuTab.vue
+      Shared/
+        Configurators/
+          ComboDynamicNav.vue
+          ModifierDynamicNav.vue
+      Team/
+        TeamApp.vue
+        TeamMenuTab.vue
+```
+
+# Files
+
+## File: resources/js/Composables/useDynamicFooterHeight.js
+```javascript
+import { ref, onMounted, onUnmounted, watch } from 'vue';
+
+export function useDynamicFooterHeight(targetRef, options = {}) {
+    const {
+        cssVarName = '--app-footer-height',
+        fallbackHeight = 96,
+        extraOffset = 16,
+        includeBottomMargin = true
+    } = options;
+
+    const footerHeight = ref(fallbackHeight);
+    let observer = null;
+    let currentObservedEl = null;
+
+    const resolveElement = (target) => {
+        if (!target) return null;
+        const el = target.$el !== undefined ? target.$el : target;
+
+        // 🛡️ Blindagem estrita: só aceita Elementos HTML reais (nodeType 1)
+        // Ignora comentários DOM (<!---->), fragmentos ou nós de texto
+        if (el && el.nodeType === 1 && typeof el.getBoundingClientRect === 'function') {
+            return el;
+        }
+        return null;
+    };
+
+    const updateHeight = (el) => {
+        if (!el || el.nodeType !== 1 || typeof el.getBoundingClientRect !== 'function' || !el.isConnected) return;
+
+        const rect = el.getBoundingClientRect();
+        let totalSpan = rect.height;
+
+        if (includeBottomMargin) {
+            const distanceFromBottom = Math.max(0, window.innerHeight - rect.bottom);
+            totalSpan += distanceFromBottom;
+        }
+
+        const calculatedHeight = Math.ceil(totalSpan) + extraOffset;
+
+        if (calculatedHeight > 0 && calculatedHeight !== footerHeight.value) {
+            footerHeight.value = calculatedHeight;
+            document.documentElement.style.setProperty(cssVarName, `${calculatedHeight}px`);
+        }
+    };
+
+    const handleResize = () => {
+        if (currentObservedEl) {
+            updateHeight(currentObservedEl);
+        }
+    };
+
+    const setupObserver = (newEl) => {
+        if (observer) {
+            observer.disconnect();
+            observer = null;
+        }
+        currentObservedEl = null;
+
+        const el = resolveElement(newEl);
+        if (!el) {
+            document.documentElement.style.setProperty(cssVarName, '0px');
+            footerHeight.value = 0;
+            return;
+        }
+
+        currentObservedEl = el;
+        updateHeight(el);
+
+        if (typeof ResizeObserver !== 'undefined') {
+            observer = new ResizeObserver(() => updateHeight(el));
+            observer.observe(el);
+        }
+    };
+
+    watch(
+        () => resolveElement(targetRef?.value),
+        (newEl) => {
+            setupObserver(newEl);
+        },
+        { immediate: true, flush: 'post' }
+    );
+
+    onMounted(() => {
+        window.addEventListener('resize', handleResize, { passive: true });
+    });
+
+    onUnmounted(() => {
+        if (observer) {
+            observer.disconnect();
+            observer = null;
+        }
+        window.removeEventListener('resize', handleResize);
+        document.documentElement.style.removeProperty(cssVarName);
+    });
+
+    return {
+        footerHeight
+    };
+}
+```
+
+## File: resources/js/Pages/Customer/CustomerApp.vue
+```vue
+<template>
+    <div class="h-[100dvh] max-h-[100dvh] w-full text-surface-text flex flex-col font-sans overflow-hidden select-none relative">
+
+        <div
+            class="fixed inset-0 z-0 bg-cover bg-center transition-all duration-1000 pointer-events-none"
+            :style="backgroundStyle"
+        ></div>
+
+        <CustomerHeader
+            :context-title="headerContext.title"
+            :context-subtitle="headerContext.subtitle"
+            :price="headerContext.price"
+            :active-product="isModifiersVisible || isComboVisible ? activeProduct : null"
+            :is-home="headerContext.isHome"
+            :first-name="headerContext.firstName"
+            @close-product="closeConfigurators"
+            @open-location="isStoreLocationModalVisible = true"
+            @open-hours="isBusinessHoursModalVisible = true"
+        />
+
+        <!-- 🚀 INJEÇÃO DO PADDING DINÂMICO AQUI -->
+        <main
+            class="flex-1 min-h-0 overflow-hidden relative flex flex-col pt-safe z-10 transition-all duration-200"
+            :style="{ paddingBottom: '6rem' }"
+        >
+            <CustomerTabContainer
+                v-model:active-tab="activeTab"
+                v-model:menu-search="menuSearchQuery"
+                v-model:menu-category="menuActiveCategory"
+                v-model:menu-view="menuView"
+                @update:visibleCategories="activeMenuCategories = $event"
+                :is-configurator-open="isModifiersVisible || isComboVisible"
+                :my-active-orders="myActiveOrders"
+                :my-history="myHistory"
+                :is-guest="isGuest"
+                :initial-products="initialProducts"
+                :initial-categories="initialCategories"
+                :cart="cart"
+                :customer="customer"
+                :cart-subtotal="cartSubtotal"
+                :order-type="orderType"
+                :login-config="loginConfig"
+                :active-combo-product="isComboVisible ? activeProduct : null"
+                :is-edit-mode="editItemIndex !== null"
+                :append-order="activeAppendOrder"
+                @confirmCombo="handleComboConfirm"
+                @upgrade-account="isUpgradeModalVisible = true"
+                @reorder="handleReorder"
+                @redeem-reward="handleRedeemReward"
+                @product-click="onProductClick"
+                @update-qty="updateQty"
+                @clear-cart="clearCart"
+                @cancel-append="handleCancelAppend"
+                @edit-item="openEditModifiers"
+                @checkout="openCheckout"
+                @update:orderType="orderType = $event"
+                @open-register="showNewCustomerModal = true"
+                @add-address="isNewAddressModalVisible = true"
+                @logout="handleLogout"
+                @delete-account="confirmDeleteAccount"
+                @update-profile="handleUpdateProfile"
+                @deactivate-address="handleDeactivateAddress"
+                @open-location="isStoreLocationModalVisible = true"
+                @open-hours="isBusinessHoursModalVisible = true"
+            />
+
+            <NewCustomerModal
+                v-model:visible="showNewCustomerModal"
+                :ask-password="true"
+                @save="handleRegisterSubmit"
+            />
+        </main>
+
+        <Transition name="page-fade">
+            <div v-if="isModifiersVisible || isComboVisible" class="fixed inset-0 z-30 flex flex-col bg-surface-1">
+                <!-- 🚀 REFERÊNCIA DOS CONFIGURADORES (Sobrepõem a Island) -->
+                <CustomerProductModifiers
+                    v-if="isModifiersVisible"
+                    ref="modifierNavRef"
+                    :product="activeProduct"
+                    :is-edit-mode="editItemIndex !== null"
+                    :is-team-mode="false"
+                    :is-customer-mode="true"
+                    @update:total="productTotal = $event"
+                    @confirm="handleModifiersConfirm"
+                    @close="closeConfigurators"
+                />
+
+                <CustomerComboWizard
+                    v-else-if="isComboVisible"
+                    ref="comboNavRef"
+                    :product="activeProduct"
+                    :global-products-list="initialProducts"
+                    :is-edit-mode="editItemIndex !== null"
+                    :is-team-mode="false"
+                    :is-customer-mode="true"
+                    @update:total="productTotal = $event"
+                    @update:inner-product="activeComboInnerProduct = $event"
+                    @confirm-combo="handleComboConfirm"
+                    @close="closeConfigurators"
+                />
+            </div>
+        </Transition>
+
+        <!-- 🚀 REFERÊNCIA DA ILHA PRINCIPAL -->
+        <CustomerDynamicIsland
+            ref="islandRef"
+            v-model:active-tab="activeTab"
+            :cart="cart"
+            :cart-length="cartTotalItems"
+            :customer="customer"
+            :has-active-order="hasActiveOrder"
+            :can-order="canOrder"
+            :configurator-type="isComboVisible ? 'combo' : (isModifiersVisible ? 'modifier' : null)"
+            @reset-menu="onResetMenu"
+            @trigger-checkout="handleIslandCheckout"
+        />
+
+        <CustomerCheckoutModal
+            v-if="isCheckoutModalVisible"
+            :visible="isCheckoutModalVisible"
+            @update:visible="isCheckoutModalVisible = $event"
+
+            :customer="$page.props.auth?.user?.customer || customer"
+            :is-guest="!$page.props.auth?.user"
+            :payment-methods="$page.props.paymentMethods || []"
+            :login-config="loginConfig"
+
+            :state="checkoutState"
+            :financials="financials"
+            :loyalty="loyalty"
+            :is-submitting="isSubmitting"
+            :pending-order-id="activeOrderId"
+            :pix-data="activePixData"
+            :append-order="activeAppendOrder"
+
+            :header-state="headerState || { title: 'Carregando...', current: 1, max: 1 }"
+            :go-back="goBack || (() => {})"
+            @bind-ref="stepRef = $event"
+            @update-substep="(context, val) => {
+                if(context === 'auth') checkoutState.authSubStep = val;
+                else checkoutState.addressSubStep = val;
+            }"
+
+            @save-address="handleSaveNewAddress"
+            @checkout-login="handleCheckoutLogin"
+            @open-register="isRegisterModalVisible = true"
+            @confirm="finalizeOrder"
+            @pix-success="handlePixSuccess"
+        />
+
+        <UpgradeAccountModal v-model:visible="isUpgradeModalVisible" />
+        <NewAddressModal
+            v-model:visible="isNewAddressModalVisible"
+            :customer-id="customer?.id"
+            @save="handleSaveNewAddress"
+            :is-customer-mode="true"
+        />
+
+        <StoreLocationModal
+            v-model:visible="isStoreLocationModalVisible"
+            :settings="$page.props.companySettings"
+        />
+
+        <BusinessHoursModal
+            v-model:visible="isBusinessHoursModalVisible"
+            :settings="$page.props.companySettings"
+        />
+    </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { router, usePage } from '@inertiajs/vue3';
+import { useToast } from "primevue/usetoast";
+import axios from 'axios';
+
+import MobileLayout from "@/Layouts/MobileLayout.vue";
+import CustomerProductModifiers from "@/Pages/Customer/Menu/CustomerProductModifiers.vue";
+import CustomerComboWizard from "@/Pages/Customer/Menu/CustomerComboWizard.vue";
+import CustomerDynamicIsland from "@/Pages/Customer/CustomerDynamicIsland.vue";
+import CustomerCheckoutModal from "@/Pages/Customer/CustomerCheckoutModal.vue";
+import UpgradeAccountModal from "@/Pages/Customer/Profile/UpgradeAccountModal.vue";
+import NewAddressModal from "@/Components/Modals/NewAddressModal.vue";
+import NewCustomerModal from "@/Components/Modals/NewCustomerModal.vue";
+import StoreLocationModal from "@/Pages/Customer/Home/StoreLocationModal.vue";
+import BusinessHoursModal from "@/Pages/Customer/Home/BusinessHoursModal.vue";
+
+import CustomerHeader from "@/Pages/Customer/CustomerHeader.vue";
+import { useDynamicBackground } from '@/Composables/useDynamicBackground';
+import CustomerTabContainer from "@/Pages/Customer/CustomerTabContainer.vue";
+import { useCart } from "@/Pages/Shared/Composables/useCart";
+import { useOrderFlow } from "@/Pages/Shared/Composables/useOrderFlow";
+import { useReorder } from "@/Pages/Shared/Composables/useReorder";
+import { useStoreStatus } from "@/Composables/useStoreStatus";
+import { useCoupons } from '@/Pages/Shared/Composables/useCoupons';
+import { useAnalytics } from '@/Composables/useAnalytics';
+import { useCustomerCheckoutFlow } from '@/Pages/Customer/Composables/useCustomerCheckoutFlow';
+import { useCustomerSync } from '@/Pages/Customer/Composables/useCustomerSync';
+import { useTheme } from '@/Composables/useTheme';
+import { useCustomerHeaderContext } from '@/Pages/Customer/Composables/useCustomerHeaderContext';
+import { useAppLifecycleSync } from '@/Composables/useAppLifecycleSync';
+import { useTenantEcho } from '@/Composables/useTenantEcho';
+import { useDynamicFooterHeight } from '@/Composables/useDynamicFooterHeight';
+
+defineOptions({ layout: MobileLayout, inheritAttrs: false });
+
+const props = defineProps({
+    customer: { type: Object, default: null },
+    isGuest: { type: Boolean, default: false },
+    initialCategories: { type: Array, default: () => [] },
+    initialProducts: { type: Array, default: () => [] },
+    myActiveOrders: { type: Array, default: () => [] },
+    myHistory: { type: Array, default: () => [] }
+});
+
+const page = usePage();
+const toast = useToast();
+const { trackViewContent } = useAnalytics();
+const { backgroundStyle } = useDynamicBackground();
+const { setMode } = useTheme();
+
+useAppLifecycleSync({
+    only: ['customerOrder', 'catalog', 'companySettings'],
+    minSleepSeconds: 15
+});
+
+const cartContext = useCart();
+const { cart, cartSubtotal, updateQty, clearCart, autoParkCurrent } = cartContext;
+const orderType = cartContext.orderType = ref('delivery');
+
+const hasActiveOrder = computed(() => props.myActiveOrders && props.myActiveOrders.length > 0);
+const cartTotalItems = computed(() => {
+    return (cart.value || []).reduce((acc, item) => acc + (Number(item.qty) || 1), 0);
+});
+
+const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+const hasDeepLink = searchParams ? (searchParams.has('produto') || searchParams.has('categoria')) : false;
+const activeTab = ref(hasDeepLink ? 'menu' : 'home');
+
+const currentAppendOrderId = ref(null);
+const activeAppendOrder = computed(() => {
+    if (!currentAppendOrderId.value) return null;
+    return (props.myActiveOrders || []).find(o => String(o.id) === String(currentAppendOrderId.value)) || null;
+});
+
+const handleCancelAppend = () => {
+    sessionStorage.removeItem('customer_append_order_id');
+    currentAppendOrderId.value = null;
+    clearCart();
+    toast.add({ severity: 'info', summary: 'Cancelado', detail: 'Modo de adição de itens cancelado.', life: 3000 });
+};
+
+const isUpgradeModalVisible = ref(false);
+const isNewAddressModalVisible = ref(false);
+const showNewCustomerModal = ref(false);
+const isStoreLocationModalVisible = ref(false);
+const isBusinessHoursModalVisible = ref(false);
+const isRegisterModalVisible = ref(false);
+
+const handleOpenAuthModal = () => { showNewCustomerModal.value = true; };
+
+const handleSwitchTabEvent = (event) => {
+    if (event.detail && typeof event.detail === 'string') activeTab.value = event.detail;
+    currentAppendOrderId.value = sessionStorage.getItem('customer_append_order_id');
+};
+
+const couponsContext = useCoupons();
+
+const tryApplyCouponCode = async (couponCode) => {
+    if (!couponCode) return;
+    const cleanCode = String(couponCode).trim().toUpperCase();
+
+    try {
+        const response = await axios.post(route('customer.coupons.validate'), {
+            code: cleanCode,
+            subtotal: Number(cartSubtotal.value || 0)
+        });
+
+        const data = response.data;
+        if (data.success) {
+            if (typeof couponsContext.applyCoupon === 'function') {
+                couponsContext.applyCoupon(data);
+            } else if (couponsContext.activeCoupon) {
+                couponsContext.activeCoupon.value = data;
+            }
+
+            sessionStorage.removeItem('pending_coupon_code');
+
+            toast.add({
+                severity: 'success',
+                summary: '🎁 Presente Resgatado!',
+                detail: `Cupom ${cleanCode} aplicado com sucesso!`,
+                life: 6000
+            });
+        } else {
+            toast.add({
+                severity: 'warn',
+                summary: 'Atenção ao Cupom',
+                detail: data.message || 'Cupom inválido para esta compra.',
+                life: 5000
+            });
+        }
+    } catch (e) {
+        console.warn('[Coupon] Falha ao validar cupom recebido:', e);
+    }
+};
+
+const sanitizeCustomerSession = () => {
+    const storedAppendId = sessionStorage.getItem('customer_append_order_id');
+    if (storedAppendId) {
+        const orderStillValid = (props.myActiveOrders || []).some(o => String(o.id) === String(storedAppendId));
+        if (!orderStillValid) {
+            sessionStorage.removeItem('customer_append_order_id');
+            currentAppendOrderId.value = null;
+        }
+    }
+
+    if (orderType.value === 'table' && !page.props.tableMode) {
+        orderType.value = 'delivery';
+        localStorage.removeItem('pos_draft_routing');
+    }
+};
+
+onMounted(() => {
+    setMode('dark');
+    sanitizeCustomerSession();
+
+    const storedAppendId = sessionStorage.getItem('customer_append_order_id');
+    if (storedAppendId) {
+        currentAppendOrderId.value = storedAppendId;
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const incomingCoupon = urlParams.get('cupom') || urlParams.get('coupon');
+
+    if (incomingCoupon) {
+        const cleanIncoming = incomingCoupon.trim().toUpperCase();
+        const isAuthenticatedUser = Boolean(props.customer?.id || page.props.auth?.user?.id);
+
+        if (isAuthenticatedUser) {
+            tryApplyCouponCode(cleanIncoming);
+        } else {
+            sessionStorage.setItem('pending_coupon_code', cleanIncoming);
+            toast.add({
+                severity: 'info',
+                summary: '🎁 Presente Identificado!',
+                detail: `Cupom ${cleanIncoming} reservado! Identifique-se para ativá-lo no seu primeiro pedido.`,
+                life: 8000
+            });
+        }
+
+        urlParams.delete('cupom');
+        urlParams.delete('coupon');
+        const cleanQuery = urlParams.toString() ? `?${urlParams.toString()}` : '';
+        window.history.replaceState({}, document.title, `${window.location.pathname}${cleanQuery}`);
+    }
+
+    window.addEventListener('open-customer-auth-modal', handleOpenAuthModal);
+    window.addEventListener('customer-switch-tab', handleSwitchTabEvent);
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('open-customer-auth-modal', handleOpenAuthModal);
+    window.removeEventListener('customer-switch-tab', handleSwitchTabEvent);
+});
+
+useTenantEcho().listenChannel('shift', '.shift.closed', () => {
+    sanitizeCustomerSession();
+    router.reload({ only: ['myActiveOrders', 'companySettings'], preserveState: true, preserveScroll: true });
+});
+
+const menuSearchQuery = ref('');
+const menuActiveCategory = ref(null);
+const menuView = ref('catalog');
+const activeMenuCategories = ref([]);
+
+const productTotal = ref(0);
+const activeComboInnerProduct = ref(null);
+
+const loginConfig = computed(() => {
+    const methods = page.props.companySettings?.customer_auth_methods ?? page.props.company?.customerAuthMethods ?? [];
+    const allowGuestFlag = page.props.companySettings?.customer_allow_guest ?? page.props.company?.allowGuest;
+    return {
+        allowGuest: allowGuestFlag === true || allowGuestFlag === 1 || allowGuestFlag === '1',
+        customerAuthMethods: methods,
+        needsEmailFallback: !methods || methods.length === 0
+    };
+});
+
+watch(() => cart.value.length, (newLength, oldLength) => {
+    if (newLength === 0 && oldLength > 0 && activeTab.value === 'cart' && !activeAppendOrder.value) {
+        activeTab.value = 'menu';
+        toast.add({ severity: 'info', summary: 'Carrinho Vazio', detail: 'O cardápio está te esperando!', life: 3000 });
+    }
+});
+
+const {
+    isModifiersVisible, isComboVisible, activeProduct, editItemIndex,
+    initializeFlow, closeConfigurators: originalCloseConfigurators, handleProductClick, openEditModifiers,
+    handleModifiersConfirm, handleComboConfirm
+} = useOrderFlow(props, cartContext);
+
+// 🚀 CÁLCULO DINÂMICO DO RODAPÉ (AGORA LOGO APÓS A CRIAÇÃO DE isModifiersVisible/isComboVisible)
+const islandRef = ref(null);
+
+useDynamicFooterHeight(islandRef, {
+    cssVarName: '--app-footer-height',
+    fallbackHeight: 96,
+    extraOffset: 16
+});
+// ===============================================
+
+const closeConfigurators = () => {
+    activeComboInnerProduct.value = null;
+    if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('produto');
+        window.history.pushState({}, '', url.toString());
+    }
+    originalCloseConfigurators();
+};
+
+watch(isComboVisible, (visible) => { if (!visible) activeComboInnerProduct.value = null; });
+
+const { handleReorder } = useReorder(cartContext, activeTab, computed(() => props.initialProducts));
+
+const { isOpen, isPreOrder, canOrder, storeAvailabilityText } = useStoreStatus();
+
+const {
+    isCheckoutModalVisible, isSubmitting, activePixData, activeOrderId,
+    checkoutState, loyalty, financials, headerState, goBack, stepRef,
+    openCheckout, finalizeOrder, handlePixSuccess, handleCheckoutLogin
+} = useCustomerCheckoutFlow(props, cartContext, activeTab);
+
+useCustomerSync(props, activeTab, couponsContext, { initializeFlow, autoParkCurrent });
+
+const { headerContext } = useCustomerHeaderContext({
+    activeTab,
+    activeAppendOrder,
+    activeCategory: computed(() => (activeMenuCategories.value || []).find(c => c.id === menuActiveCategory.value)),
+    activeProduct: computed(() => (isModifiersVisible.value || isComboVisible.value) ? activeProduct.value : null),
+    activeComboInnerProduct,
+    productTotal,
+    menuSearchQuery,
+    menuView
+});
+
+const handleIslandCheckout = () => {
+    if (!canOrder.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Loja Fechada',
+            detail: 'Não estamos aceitando pedidos no momento.',
+            life: 4000
+        });
+        return;
+    }
+
+    const isAppend = !!activeAppendOrder.value;
+    openCheckout({ totals: { finalTotal: cartSubtotal.value }, isAppend });
+};
+
+const onResetMenu = () => {
+    const scrollEl = document.querySelector('.hide-scrollbar');
+    if (scrollEl) scrollEl.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+const onProductClick = (product) => {
+    productTotal.value = Number(product.price || product.base_price || 0);
+    trackViewContent(product);
+
+    if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        const productParam = product.slug || product.id;
+        url.searchParams.set('produto', productParam);
+        window.history.pushState({}, '', url.toString());
+    }
+
+    handleProductClick(product);
+};
+
+watch(menuActiveCategory, (newCatId) => {
+    if (newCatId && activeTab.value === 'menu' && !isModifiersVisible.value && !isComboVisible.value) {
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            const cat = (activeMenuCategories.value || []).find(c => c.id === newCatId);
+            const catParam = (cat?.slug || cat?.name || newCatId).toString().toLowerCase().trim().replace(/[\s_]+/g, '-');
+            url.searchParams.set('categoria', catParam);
+            window.history.replaceState({}, document.title, url.toString());
+        }
+    }
+});
+
+const handleRedeemReward = (product) => {
+    const rewardProduct = {
+        ...product, dine_in_price: 0, delivery_price: 0, promo_price: 0,
+        name: `🎁 [Prêmio] ${product.name}`,
+    };
+    cartContext.addToCart({
+        product: rewardProduct, qty: 1, modifiersText: `Custo: ${product.loyalty_points_cost} pts`, extraPrice: 0,
+        isTakeaway: false, comboItems: null, structuredModifiers: [], orderType: orderType.value
+    });
+    cart.value[cart.value.length - 1].is_reward = true;
+    cart.value[cart.value.length - 1].points_cost = product.loyalty_points_cost;
+
+    toast.add({ severity: 'success', summary: 'Prêmio Resgatado!', detail: `${product.name} foi adicionado ao carrinho grátis!`, life: 3000 });
+    activeTab.value = 'cart';
+};
+
+const handleUpdateProfile = (formData, closeEditCallback) => {
+    router.post(route('customer.profile.update'), formData, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => {
+            if (closeEditCallback) closeEditCallback();
+            toast.add({ severity: 'success', summary: 'Perfil atualizado!', detail: 'Os seus dados foram guardados.', life: 3000 });
+        },
+        onError: (err) => toast.add({ severity: 'error', summary: 'Atenção', detail: Object.values(err)[0] || 'Verifique os dados.', life: 4000 })
+    });
+};
+
+const handleDeactivateAddress = (addressId) => {
+    router.post(route('customer.profile.deactivate-address', addressId), {}, {
+        preserveScroll: true, preserveState: true,
+        onSuccess: () => toast.add({ severity: 'success', summary: 'Endereço Removido', detail: 'Endereço removido com sucesso.', life: 3000 })
+    });
+};
+
+const handleSaveNewAddress = (addressData, callbacks = null) => {
+    const isGuestUser = props.isGuest || !page.props.auth?.user;
+    const endpoint = isGuestUser ? route('customer.auth.guest-address') : route('customer.profile.add-address');
+
+    router.post(endpoint, addressData, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: (pageResp) => {
+            isNewAddressModalVisible.value = false;
+            if (callbacks && typeof callbacks.onSuccess === 'function') {
+                callbacks.onSuccess(pageResp);
+            }
+        },
+        onError: (errors) => {
+            if (callbacks && typeof callbacks.onError === 'function') callbacks.onError(errors);
+        },
+        onFinish: () => {
+            if (callbacks && typeof callbacks.onFinish === 'function') callbacks.onFinish();
+        }
+    });
+};
+
+const handleLogout = () => {
+    clearCart();
+    localStorage.removeItem('brasume_guest_anchor');
+    localStorage.removeItem('pos_draft_routing');
+    router.post(route('customer.auth.logout'));
+};
+
+const confirmDeleteAccount = () => {
+    if (confirm('Tem certeza de que deseja apagar a sua conta e todo o seu histórico de pedidos? Esta ação é irreversível.')) {
+        localStorage.removeItem('brasume_guest_anchor');
+        localStorage.removeItem('pos_draft_routing');
+        router.post(route('customer.auth.delete-account'));
+    }
+};
+
+const handleRegisterSubmit = (formData) => {};
+
+watch(() => props.customer, (newCustomer) => {
+    if (newCustomer) {
+        localStorage.setItem('brasume_customer_footprint', JSON.stringify({
+            name: newCustomer.name,
+            email: newCustomer.email,
+            method: page.props.auth?.user?.provider_name || 'email'
+        }));
+
+        const pendingCode = sessionStorage.getItem('pending_coupon_code');
+        if (pendingCode) {
+            tryApplyCouponCode(pendingCode);
+        }
+
+        if (!props.isGuest) {
+            const currentMode = page.props.companySettings?.customer_registration_mode;
+            const needsCpf = ['cpf_required', 'customer_only', 'serpro_magic'].includes(currentMode);
+
+            if (!newCustomer.phone || (needsCpf && !newCustomer.cpf)) {
+                toast.add({ severity: 'warn', summary: 'Quase lá!', detail: 'Para liberar todas as funções, confirme alguns dados.', life: 6000 });
+                isUpgradeModalVisible.value = true;
+            }
+        } else if (!newCustomer.phone) {
+            toast.add({ severity: 'warn', summary: 'Quase lá!', detail: 'Por favor, informe seu WhatsApp para liberar as opções de entrega.', life: 8000 });
+            activeTab.value = 'account';
+        }
+    }
+}, { immediate: true });
+</script>
+```
+
+## File: resources/js/Pages/Customer/CustomerCartTab.vue
+```vue
+<template>
+    <div
+        class="w-full h-full flex flex-col overflow-hidden shrink-0"
+        :style="{ top: 'var(--app-header-height, 7rem)' }"
+    >
+
+        <!-- ==========================================
+             CABEÇALHO
+             ========================================== -->
+        <div class="p-6 pb-4 pt-12 shrink-0 flex items-center justify-between">
+            <div class="flex flex-col">
+                <h2 class="c-title">{{ appendOrder ? 'Adicionar ao Pedido' : 'Revise seu Pedido' }}</h2>
+                <p v-if="cart.length > 0 || appendOrder" class="c-text-muted mt-1 uppercase tracking-widest text-[11px]">
+                    <span v-if="appendOrder" class="text-amber-400 font-bold">Complementando Pedido #{{ $formatNumber(appendOrder.id) }}</span>
+                    <span v-else>{{ cart.length }} {{ cart.length === 1 ? 'item selecionado' : 'itens selecionados' }}</span>
+                </p>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button
+                    v-if="appendOrder"
+                    @click="() => { console.log('[SONDA: CustomerCartTab] Cancelar append acionado'); $emit('cancel-append'); }"
+                    class="c-btn-ghost !h-9 !px-3 text-white/70 hover:text-white"
+                    title="Desistir do complemento"
+                >
+                    <i class="pi pi-times text-xs"></i>
+                    <span>Cancelar</span>
+                </button>
+
+                <button
+                    v-if="cart.length > 0"
+                    @click="() => { console.log('[SONDA: CustomerCartTab] Limpar carrinho acionado'); $emit('clear-cart'); }"
+                    class="c-btn-ghost !h-9 !px-3 text-red-400 active:text-red-300"
+                >
+                    <i class="pi pi-trash text-xs"></i>
+                    <span class="hidden sm:inline">Limpar</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             LISTAGEM DE ITENS
+             ========================================== -->
+        <div class="flex-1 overflow-y-auto px-4 pt-2 flex flex-col gap-4 hide-scrollbar relative pb-[calc(env(safe-area-inset-bottom,1rem)+7rem)]">
+
+            <!-- 🛑 BLOCO 1: ITENS JÁ ENVIADOS (Modo Append - Somente Leitura) -->
+            <div v-if="appendOrder && appendOrder.items?.length > 0" class="flex flex-col gap-2">
+                <div class="flex items-center justify-between px-1">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-surface-muted flex items-center gap-1.5">
+                        <i class="pi pi-lock text-[10px]"></i> Já em Preparo (Não alterável)
+                    </span>
+                    <span class="text-[10px] font-bold text-amber-400">Pedido #{{ $formatNumber(appendOrder.id) }}</span>
+                </div>
+
+                <div class="c-glass-card !bg-white/5 border border-white/10 p-3 flex flex-col gap-2 opacity-70 select-none">
+                    <div v-for="(oldItem, oIdx) in appendOrder.items" :key="'old_' + oIdx" class="flex justify-between items-center text-xs py-1 border-b border-white/5 last:border-none">
+                        <div class="flex items-center gap-2 text-surface-text">
+                            <span class="font-bold text-white/60">{{ oldItem.quantity }}×</span>
+                            <span class="font-medium line-clamp-1">{{ oldItem.product_name || oldItem.name }}</span>
+                        </div>
+                        <span class="font-bold text-white/80 shrink-0">{{ $formatCurrency(oldItem.total_price || oldItem.price) }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🛒 BLOCO 2: NOVOS ITENS (Carrinho Editável) -->
+            <div class="flex flex-col gap-2">
+                <span v-if="appendOrder" class="text-[10px] font-black uppercase tracking-widest text-emerald-400 px-1 flex items-center gap-1.5 mt-2">
+                    <i class="pi pi-plus-circle text-[10px]"></i> Novos Itens a Adicionar
+                </span>
+
+                <!-- EMPTY STATE -->
+                <div v-if="cart.length === 0" class="c-glass-card p-8 flex flex-col items-center justify-center text-center mx-2" :class="appendOrder ? 'mt-4' : 'mt-20'">
+                    <div class="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-3">
+                        <i class="pi pi-shopping-bag text-2xl text-white/40"></i>
+                    </div>
+                    <h3 class="c-title text-base mb-1">{{ appendOrder ? 'Escolha novos itens' : 'Carrinho Vazio' }}</h3>
+                    <p class="c-text-muted px-4 mb-4 text-xs">
+                        {{ appendOrder ? 'Navegue no cardápio para adicionar bebidas, sobremesas ou pratos ao pedido em andamento.' : 'Nenhum produto foi adicionado ao seu pedido ainda.' }}
+                    </p>
+
+                    <button @click="$emit('go-to-menu')" class="c-btn-primary max-w-xs !h-11 !text-xs">
+                        Explorar Cardápio
+                    </button>
+                </div>
+
+                <!-- ITENS EDITÁVEIS -->
+                <div v-for="(item, index) in cart" :key="item.cartId || index" class="flex flex-col">
+                    <CustomerOrderLineItem
+                        :title="item.name"
+                        :qty="item.qty"
+                        :price="item.price * item.qty"
+                        :structured-modifiers="item.structuredModifiers"
+                        :combo-items="item.comboItems"
+                        :is-takeaway="item.isTakeaway"
+                        :is-customer-mode="true"
+                    >
+                        <template #actions>
+                            <div class="flex items-center justify-between w-full gap-2 cursor-default" @click.stop>
+                                <QtyStepper
+                                    :model-value="item.qty"
+                                    :min="1"
+                                    @increment="$emit('update-qty', index, 1)"
+                                    @decrement="$emit('update-qty', index, -1)"
+                                    size="sm"
+                                    class="bg-white/5!"
+                                >
+                                    <template #value><span class="text-xs text-white font-black">{{ item.qty }}</span></template>
+                                </QtyStepper>
+
+                                <div class="flex items-center gap-2">
+                                    <button
+                                        @click="$emit('edit-item', item, index)"
+                                        type="button"
+                                        class="c-btn-icon"
+                                        title="Editar Adicionais"
+                                    >
+                                        <i class="pi pi-pencil text-xs"></i>
+                                    </button>
+                                    <button
+                                        @click="$emit('update-qty', index, -item.qty)"
+                                        type="button"
+                                        class="c-btn-icon-danger"
+                                        title="Remover"
+                                    >
+                                        <i class="pi pi-trash text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </CustomerOrderLineItem>
+                </div>
+            </div>
+
+            <!-- ==========================================
+                 RODAPÉ FINANCEIRO & AVISOS
+                 ========================================== -->
+            <template v-if="cart.length > 0">
+
+                <!-- Resumo Repactuado (Se for Complemento) -->
+                <div v-if="appendOrder" class="c-glass-card p-4 rounded-2xl flex flex-col gap-2 border border-white/10 mt-2 mb-2">
+                    <div class="flex justify-between text-xs text-white/70">
+                        <span>Novos Itens Adicionados</span>
+                        <span class="font-bold text-white">{{ $formatCurrency(cartSubtotal) }}</span>
+                    </div>
+
+                    <div class="flex justify-between text-xs text-white/70">
+                        <span>Nova Taxa de Entrega</span>
+                        <span class="text-emerald-400 font-bold">Grátis (Mesmo Envio)</span>
+                    </div>
+
+                    <!-- LINHA DA TAXA DE SERVIÇO EM COMPLEMENTO -->
+                    <div v-if="hasServiceTaxGlobal" class="flex justify-between text-xs text-white/70">
+                        <span>Taxa de Serviço {{ serviceTaxPercentage > 0 ? `(${serviceTaxPercentage}%)` : '' }}</span>
+                        <span v-if="appendServiceFee === 0" class="text-emerald-400 font-bold uppercase tracking-wider text-[11px]">R$ 0,00</span>
+                        <span v-else class="text-white font-bold">+ {{ $formatCurrency(appendServiceFee) }}</span>
+                    </div>
+
+                    <div class="h-px bg-white/10 my-1"></div>
+
+                    <div class="flex justify-between text-sm font-black text-white">
+                        <span>Total Adicional a Pagar</span>
+                        <span class="text-primary-400">{{ $formatCurrency(appendTotal) }}</span>
+                    </div>
+                </div>
+
+                <!-- Aviso de Loja Fechada -->
+                <CustomerClosedCheckoutBlock
+                    v-if="!canOrder"
+                    :is-guest="isGuest"
+                    :customer="customer"
+                    @open-register="$emit('open-register')"
+                    class="mt-2 mb-8"
+                />
+
+                <!-- Se a loja estiver aberta, exibimos o indicador para a Dynamic Island -->
+                <div v-else class="h-20 mt-2 mb-8 flex flex-col items-center justify-center opacity-50 select-none pointer-events-none">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-surface-muted text-center max-w-[200px]">
+                        {{ appendOrder ? 'Deslize o botão abaixo para confirmar os adicionais' : 'Deslize o botão no rodapé para finalizar' }}
+                    </span>
+                    <i class="pi pi-arrow-down mt-2 animate-bounce"></i>
+                </div>
+
+            </template>
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { computed } from 'vue';
+import { usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/formatters';
+import CustomerOrderLineItem from "@/Pages/Customer/Cart/CustomerOrderLineItem.vue";
+import QtyStepper from "@/Components/UI/QtyStepper.vue";
+import CustomerClosedCheckoutBlock from "@/Pages/Customer/Cart/CustomerClosedCheckoutBlock.vue";
+import { useStoreStatus } from '@/Composables/useStoreStatus';
+
+const props = defineProps({
+    cart: { type: Array, required: true },
+    cartSubtotal: { type: Number, required: true },
+    isGuest: { type: Boolean, default: false },
+    customer: { type: Object, default: null },
+    appendOrder: { type: Object, default: null }
+});
+
+defineEmits(['update-qty', 'clear-cart', 'edit-item', 'checkout', 'go-to-menu', 'open-register', 'cancel-append']);
+
+const page = usePage();
+const { canOrder } = useStoreStatus();
+
+const companySettings = computed(() => page.props.companySettings || {});
+const hasServiceTaxGlobal = computed(() => Boolean(companySettings.value.has_service_tax));
+const serviceTaxPercentage = computed(() => Number(companySettings.value.service_tax_percentage || 0));
+
+const isTaxEnabledForChannel = computed(() => {
+    if (!hasServiceTaxGlobal.value) return false;
+    const type = props.appendOrder?.type || 'delivery';
+    if (type === 'table') {
+        return companySettings.value.service_tax_table !== false && companySettings.value.service_tax_table !== 0;
+    }
+    if (type === 'counter' || type === 'takeaway' || type === 'pickup') {
+        return Boolean(companySettings.value.service_tax_counter);
+    }
+    if (type === 'delivery') {
+        return Boolean(companySettings.value.service_tax_delivery);
+    }
+    return false;
+});
+
+const appendServiceFee = computed(() => {
+    if (!props.appendOrder || !isTaxEnabledForChannel.value) return 0;
+    return Math.round((props.cartSubtotal * (serviceTaxPercentage.value / 100)) * 100) / 100;
+});
+
+const appendTotal = computed(() => {
+    return props.cartSubtotal + appendServiceFee.value;
+});
+</script>
+```
+
+## File: resources/js/Pages/Customer/CustomerMenuTab.vue
+```vue
+<template>
+    <div class="flex flex-col h-full relative w-full overflow-hidden select-none">
+
+        <!-- 🚀 1. TELEPORT DA BUSCA AO LADO DO TÍTULO "CARDÁPIO" -->
+        <Teleport to="#customer-header-actions-target" v-if="isMounted && isActive && !isConfiguratorOpen && menuView === 'catalog'">
+            <ExpandableSearch
+                :model-value="menuSearch"
+                @update:modelValue="$emit('update:menuSearch',$event)"
+                placeholder="Buscar produtos..."
+            />
+        </Teleport>
+
+        <!-- 🚀 2. TELEPORT DAS PÍLULAS E SELETOR NO SUB-HEADER -->
+        <Teleport to="#customer-header-portal-target" v-if="isMounted && isActive && !isConfiguratorOpen">
+            <div class="flex flex-col gap-2 pt-1 pb-1 animate-in fade-in duration-200">
+
+                <!-- SELETOR SEGMENTED CONTROL -->
+                <div v-if="customer && !isGuest" class="flex justify-center px-4">
+                    <SegmentedControl
+                        :model-value="menuView"
+                        @update:model-value="$emit('update:menuView',$event)"
+                        :options="menuViewOptions"
+                    />
+                </div>
+
+                <!-- PÍLULAS DE CATEGORIA 100% SINCRONIZADAS COM A ORDEM DO CARDÁPIO CORRIDO -->
+                <div v-if="menuView === 'catalog' && synchronizedCategories.length > 0" class="w-full overflow-hidden">
+                    <CategoryMenu
+                        :categories="synchronizedCategories"
+                        :selected="activeCategoryId"
+                        layout="horizontal"
+                        :show-all="false"
+                        :glass-mode="true"
+                        @update:selected="handleCategoryClick"
+                        class="shrink-0 pl-2"
+                    />
+                </div>
+
+            </div>
+        </Teleport>
+
+        <!-- ÁREA DE ROLAGEM GERAL COM RECUO DINÂMICO -->
+        <div
+            class="flex-1 overflow-y-auto scroll-smooth hide-scrollbar relative"
+            :style="{ paddingTop: 'var(--app-header-height, 7rem)' }"
+            ref="scrollArea"
+            @scroll="handleScroll"
+        >
+
+            <!-- MOTOR DE SWIPE -->
+            <div
+                class="flex w-full items-start touch-pan-y will-change-transform"
+                :class="{ 'transition-transform duration-300 ease-out': !isDragging }"
+                :style="{ transform: `translateX(calc(-${activeIndex * 100}% + ${dragOffset}px))` }"
+                @touchstart="handleTouchStart"
+                @touchmove="handleTouchMove"
+                @touchend="handleTouchEnd"
+            >
+
+                <!-- 🍔 VISTA 1: CARDÁPIO COMPLETO (Busca removida daqui para não consumir altura) -->
+                <div class="w-full shrink-0 px-4 pb-6 pt-2">
+                    <EmptyState
+                        v-if="groupedMenu.length === 0"
+                        icon="pi-search"
+                        title="Nenhum item encontrado"
+                        class="mt-10"
+                    />
+
+                    <!-- Lista Linear do Cardápio -->
+                    <div
+                        v-for="group in groupedMenu"
+                        :key="group.category.id"
+                        :id="'category-group-' + group.category.id"
+                        :ref="el => setCategoryRef(el, group.category.id)"
+                        class="mb-8 last:mb-0"
+                    >
+                        <div class="flex items-center gap-3 mb-3 px-1">
+                            <h2 class="c-title !text-lg md:!text-xl whitespace-nowrap">
+                                {{ group.category.displayName || group.category.name }}
+                            </h2>
+                            <div class="h-px bg-white/10 flex-1"></div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                            <CustomerProductCard
+                                v-for="product in group.products"
+                                :key="product.id"
+                                :product="product"
+                                layout="list"
+                                @click="$emit('product-click', product)"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 🔥 VISTA 2: MAIS VENDIDOS -->
+                <div v-if="customer && !isGuest" class="w-full shrink-0 px-4 pb-6 pt-2">
+                    <div class="flex items-center gap-3 mb-4 px-1">
+                        <h2 class="c-title !text-lg md:!text-xl whitespace-nowrap">Top 10: Mais Pedidos</h2>
+                        <div class="h-px bg-white/10 flex-1"></div>
+                    </div>
+
+                    <TopSellingWidget
+                        :customer-id="customer?.id"
+                        layout="list"
+                        @open-product="$emit('open-recommended',$event)"
+                    />
+                </div>
+
+                <!-- ⭐ VISTA 3: FAVORITOS -->
+                <div v-if="customer && !isGuest" class="w-full shrink-0 px-4 pb-6 pt-2">
+                    <div class="flex items-center gap-3 mb-4 px-1">
+                        <h2 class="c-title !text-lg md:!text-xl whitespace-nowrap">Meus Favoritos</h2>
+                        <div class="h-px bg-white/10 flex-1"></div>
+                    </div>
+
+                    <CustomerFavoritesMenu
+                        :favorites="enrichedFavorites"
+                        @favorite-click="$emit('product-click',$event)"
+                    />
+                </div>
+
+            </div>
+
+            <div class="h-32 shrink-0 w-full pointer-events-none"></div>
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
+import CustomerProductCard from "@/Pages/Customer/Menu/CustomerProductCard.vue";
+import EmptyState from "@/Components/UI/EmptyState.vue";
+import ExpandableSearch from "@/Components/UI/ExpandableSearch.vue";
+import SegmentedControl from '@/Components/UI/SegmentedControl.vue';
+import CategoryMenu from "@/Pages/Pos/Components/Menu/CategoryMenu.vue";
+
+import TopSellingWidget from '@/Pages/Customer/Menu/TopSellingWidget.vue';
+import CustomerFavoritesMenu from '@/Pages/Customer/Menu/CustomerFavoritesMenu.vue';
+
+import { useCustomerMenu } from "@/Pages/Customer/Composables/useCustomerMenu";
+import { useCustomerFavorites } from '@/Pages/Customer/Composables/useCustomerFavorites';
+
+const props = defineProps({
+    isActive: { type: Boolean, default: true },
+    isConfiguratorOpen: { type: Boolean, default: false },
+    categories: { type: Array, required: true },
+    products: { type: Array, required: true },
+    menuSearch: { type: String, default: '' },
+    menuView: { type: String, default: 'catalog' },
+    customer: { type: Object, default: null },
+    isGuest: { type: Boolean, default: true }
+});
+
+const emit = defineEmits([
+    'product-click', 'open-recommended', 'update:menuCategory',
+    'update:menuSearch', 'update:menuView', 'open-login',
+    'update:visibleCategories'
+]);
+
+const isMounted = ref(false);
+onMounted(() => { isMounted.value = true; });
+
+const filteredCategories = computed(() => {
+    return (props.categories || []).filter(c => {
+        if (!c || !c.name) return false;
+        const nameLower = String(c.name).toLowerCase().trim();
+        return c.id !== 'all' &&
+               c.id !== 0 &&
+               c.id !== null &&
+               c.id !== '' &&
+               nameLower !== 'todos os itens' &&
+               nameLower !== 'todos';
+    });
+});
+
+const productDictionary = computed(() => {
+    const dict = {};
+    const len = props.products.length;
+    for (let i = 0; i < len; i++) {
+        dict[props.products[i].id] = props.products[i];
+    }
+    return dict;
+});
+
+const { favorites, fetchFavorites } = useCustomerFavorites();
+
+watch(() => props.customer?.id, (newId) => {
+    if (newId && !props.isGuest) {
+        fetchFavorites(newId);
+    }
+}, { immediate: true });
+
+const enrichedFavorites = computed(() => {
+    if (!favorites.value || favorites.value.length === 0) return [];
+
+    return favorites.value
+        .map(fav => {
+            const realProduct = productDictionary.value[fav.product_id || fav.id];
+            if (!realProduct) return null;
+
+            const rawSelections = fav.modifiers || fav.selections || [];
+            const ingredientGroups = (realProduct.modifiers || []).filter(g => g.type === 'ingredient');
+            let cleanedSelections = rawSelections;
+
+            if (ingredientGroups.length > 0) {
+                const validIngredients = [];
+                ingredientGroups.forEach(g => {
+                    (g.options || []).forEach(opt => validIngredients.push({ ...opt, groupId: g.id }));
+                });
+
+                const tempCleaned = [];
+                let isMappingBroken = false;
+
+                for (const sel of rawSelections) {
+                    const selId = String(sel.id || sel.modifier_option_id);
+                    const selName = String(sel.name || '').toLowerCase().trim();
+                    const selGroupId = String(sel.group_id || sel.modifier_group_id);
+
+                    const matchedIngredient = validIngredients.find(opt =>
+                        String(opt.id) === selId || String(opt.name).toLowerCase().trim() === selName
+                    );
+
+                    if (matchedIngredient) {
+                        tempCleaned.push({
+                            ...sel,
+                            id: matchedIngredient.id,
+                            name: matchedIngredient.name,
+                            price: Number(matchedIngredient.price || 0),
+                            group_id: matchedIngredient.groupId
+                        });
+                    } else if (sel.type === 'ingredient' || sel.is_ingredient || (selGroupId && ingredientGroups.some(g => String(g.id) === selGroupId))) {
+                        isMappingBroken = true;
+                        break;
+                    } else {
+                        tempCleaned.push(sel);
+                    }
+                }
+
+                if (isMappingBroken) return null;
+                cleanedSelections = tempCleaned;
+            }
+
+            return {
+                ...realProduct,
+                favorite_selections: cleanedSelections,
+                cartItem: {
+                    qty: fav.quantity || 1,
+                    isTakeaway: false,
+                    structuredModifiers: cleanedSelections.map(m => ({
+                        id: m.id,
+                        name: m.name,
+                        price: Number(m.price || 0),
+                        qty: Number(m.quantity || m.qty || 1),
+                        is_joker: !m.is_joker,
+                        group_id: m.group_id || m.modifier_group_id || null
+                    }))
+                }
+            };
+        })
+        .filter(Boolean);
+});
+
+const menuViewOptions = computed(() => [
+    { label: 'Cardápio', value: 'catalog', icon: 'pi-th-large' },
+    { label: 'Top 10', value: 'bestsellers', icon: 'pi-bolt' },
+    {
+        label: enrichedFavorites.value.length > 0 ? `Favoritos (${enrichedFavorites.value.length})` : 'Favoritos',
+        value: 'favorites',
+        icon: 'pi-heart-fill'
+    }
+]);
+
+const {
+    searchQuery, activeCategoryId, scrollArea, setCategoryRef,
+    groupedMenu, visibleCategories, scrollToCategory, handleScroll,
+    autoOpenProduct
+} = useCustomerMenu(props);
+
+// 🚀 SINCRONIZAÇÃO DA ORDEM DO MENU: As pílulas usam a ordem exata de groupedMenu
+const synchronizedCategories = computed(() => {
+    if (groupedMenu.value && groupedMenu.value.length > 0) {
+        return groupedMenu.value.map(g => g.category);
+    }
+    return filteredCategories.value;
+});
+
+watch(autoOpenProduct, (productToOpen) => {
+    if (productToOpen) {
+        emit('product-click', productToOpen);
+    }
+});
+
+watch(visibleCategories, (newVal) => {
+    emit('update:visibleCategories', newVal);
+}, { immediate: true });
+
+watch(() => props.menuSearch, (newVal) => { searchQuery.value = newVal; });
+watch(activeCategoryId, (newVal) => { emit('update:menuCategory', newVal); });
+
+const handleCategoryClick = (categoryId) => {
+    activeCategoryId.value = categoryId;
+    const targetEl = document.getElementById(`category-group-${categoryId}`);
+
+    if (targetEl && scrollArea.value) {
+        scrollArea.value.scrollTo({ top: targetEl.offsetTop - 10, behavior: 'smooth' });
+    } else {
+        scrollToCategory(categoryId);
+    }
+};
+
+const views = computed(() => {
+    if (props.customer && !props.isGuest) return ['catalog', 'bestsellers', 'favorites'];
+    return ['catalog'];
+});
+
+const activeIndex = computed(() => {
+    const idx = views.value.indexOf(props.menuView);
+    return idx !== -1 ? idx : 0;
+});
+
+watch(activeIndex, () => {
+    if (scrollArea.value) scrollArea.value.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+const isDragging = ref(false);
+const dragOffset = ref(0);
+const touchStartX = ref(0);
+const touchStartY = ref(0);
+let isHorizontalSwiping = null;
+
+const handleTouchStart = (e) => {
+    touchStartX.value = e.touches[0].clientX;
+    touchStartY.value = e.touches[0].clientY;
+    isDragging.value = true;
+    dragOffset.value = 0;
+    isHorizontalSwiping = null;
+};
+
+const handleTouchMove = (e) => {
+    if (!isDragging.value) return;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const diffX = currentX - touchStartX.value;
+    const diffY = Math.abs(currentY - touchStartY.value);
+
+    if (isHorizontalSwiping === null) {
+        if (diffY > 10 && diffY > Math.abs(diffX)) {
+            isHorizontalSwiping = false;
+        } else if (Math.abs(diffX) > 10) {
+            isHorizontalSwiping = true;
+        }
+    }
+
+    if (isHorizontalSwiping) {
+        if (
+            (activeIndex.value === 0 && diffX > 0) ||
+            (activeIndex.value === views.value.length - 1 && diffX < 0)
+        ) {
+            dragOffset.value = diffX * 0.3;
+        } else {
+            dragOffset.value = diffX;
+        }
+    }
+};
+
+const handleTouchEnd = () => {
+    if (!isDragging.value) return;
+    isDragging.value = false;
+
+    if (isHorizontalSwiping) {
+        const threshold = window.innerWidth * 0.25;
+
+        if (dragOffset.value < -threshold && activeIndex.value < views.value.length - 1) {
+            emit('update:menuView', views.value[activeIndex.value + 1]);
+        } else if (dragOffset.value > threshold && activeIndex.value > 0) {
+            emit('update:menuView', views.value[activeIndex.value - 1]);
+        }
+    }
+
+    dragOffset.value = 0;
+    isHorizontalSwiping = null;
+};
+
+const handleGlobalCategoryClick = (e) => {
+    if (props.menuView !== 'catalog') emit('update:menuView', 'catalog');
+    handleCategoryClick(e.detail);
+};
+
+onMounted(() => { window.addEventListener('menu-scroll-to-category', handleGlobalCategoryClick); });
+onUnmounted(() => { window.removeEventListener('menu-scroll-to-category', handleGlobalCategoryClick); });
+</script>
+```
+
+## File: resources/js/Pages/Shared/Configurators/ComboDynamicNav.vue
+```vue
+<template>
+    <Teleport to="#island-portal-target" v-if="isMounted && !hide">
+
+        <!-- 📱 ESTRUTURA 1: TEAM APP (2 ROWS ORGANIZADAS) -->
+        <div
+            v-if="isTeamApp"
+            class="w-72 sm:w-80 flex flex-col gap-2 select-none py-1"
+        >
+            <!-- ROW 1: Voltar + Sacolinha (Viagem) + Cancelar (Lixeira) -->
+            <div class="w-full flex items-center justify-between gap-2">
+                <button
+                    v-if="canGoBack"
+                    @click="$emit('back')"
+                    type="button"
+                    class="w-11 h-11 shrink-0 rounded-full bg-surface-1/50 hover:bg-surface-2 text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
+                    title="Voltar"
+                >
+                    <i class="pi pi-arrow-left text-sm"></i>
+                </button>
+
+                <div class="flex items-center gap-2">
+                    <button
+                        v-if="showTakeaway"
+                        @click="$emit('toggle-takeaway')"
+                        type="button"
+                        class="h-11 px-3.5 shrink-0 rounded-full transition-all flex items-center justify-center gap-1.5 outline-none cursor-pointer border-none shadow-sm active:scale-95"
+                        :class="isTakeaway
+                            ? 'bg-warning-500 text-white shadow-sm'
+                            : 'bg-warning-500/10 text-warning-600 dark:text-warning-400 hover:bg-warning-500/20'"
+                        :title="isTakeaway ? 'Combo marcado para viagem' : 'Marcar para viagem'"
+                    >
+                        <i class="pi pi-shopping-bag text-sm"></i>
+                        <span class="font-black text-xs uppercase tracking-wider">Viagem</span>
+                    </button>
+
+                    <button
+                        @click="$emit('cancel')"
+                        type="button"
+                        class="w-11 h-11 shrink-0 rounded-full bg-danger-500/10 text-danger-500 hover:bg-danger-500 hover:text-white transition-all outline-none cursor-pointer border-none flex items-center justify-center active:scale-90 shadow-sm"
+                        title="Cancelar Combo"
+                    >
+                        <i class="pi pi-trash text-sm"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ROW 2: Ação Principal (Conferir Itens ou Deslize Final Long) -->
+            <div class="w-full">
+                <button
+                    v-if="!showSummary"
+                    @click="$emit('toggle-summary')"
+                    type="button"
+                    class="w-full h-11 px-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all outline-none cursor-pointer border-none flex items-center justify-center gap-2 active:scale-98 bg-surface-2 hover:bg-surface-3 text-surface-text shadow-sm"
+                >
+                    <i class="pi pi-list text-sm"></i>
+                    <span>Conferir Itens</span>
+                    <span class="bg-primary-500 text-white px-2 py-0.5 rounded-full text-[10px] min-w-[20px] text-center font-black">
+                        {{ itemsCountDisplay }}
+                    </span>
+                </button>
+
+                <SlideToConfirm
+                    v-else
+                    class="w-full !h-11 !shadow-none"
+                    text="Finalizar Combo"
+                    success-text="Pronto!"
+                    icon="pi-check"
+                    format="long"
+                    :disabled="!isValid"
+                    :is-loading="isAdding"
+                    :is-success="isAddSuccess"
+                    @confirm="$emit('next')"
+                />
+            </div>
+        </div>
+
+        <!-- 👤 ESTRUTURA 2: CUSTOMER APP (1 ROW COMPACTA - LARGURA ORGÂNICA GARANTIDA) -->
+        <div
+            v-else
+            class="flex items-center gap-2 select-none px-1 whitespace-nowrap"
+        >
+            <!-- Botão Voltar -->
+            <button
+                v-if="canGoBack"
+                @click="$emit('back')"
+                type="button"
+                class="w-11 h-11 shrink-0 rounded-full bg-surface-1/50 hover:bg-surface-2 text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
+                title="Voltar"
+            >
+                <i class="pi pi-arrow-left text-sm"></i>
+            </button>
+
+            <!-- Ação Central: Sempre presente com largura (resolve o bug da bolinha) -->
+            <button
+                v-if="!showSummary"
+                @click="$emit('toggle-summary')"
+                type="button"
+                class="h-11 px-4 rounded-full font-black text-[11px] uppercase tracking-widest transition-all outline-none cursor-pointer border-none flex items-center justify-center gap-2 active:scale-95 bg-surface-1/50 text-surface-text hover:bg-surface-2 shadow-sm whitespace-nowrap"
+            >
+                <i class="pi pi-list text-sm"></i>
+                <span>Conferir</span>
+                <span class="bg-primary-500 text-white px-1.5 py-0.5 rounded-full leading-none text-[10px] min-w-[18px] text-center font-black">
+                    {{ itemsCountDisplay }}
+                </span>
+            </button>
+
+            <!-- SlideToConfirm tipo SHORT no resumo do CustomerApp -->
+            <SlideToConfirm
+                v-else
+                class="!h-11 !shadow-none"
+                text="Finalizar Combo"
+                success-text="Pronto!"
+                icon="pi-check"
+                format="short"
+                :disabled="!isValid"
+                :is-loading="isAdding"
+                :is-success="isAddSuccess"
+                @confirm="$emit('next')"
+            />
+
+            <!-- Botão Cancelar -->
+            <button
+                @click="$emit('cancel')"
+                type="button"
+                class="w-11 h-11 shrink-0 rounded-full bg-danger-500/10 text-danger-500 hover:bg-danger-500 hover:text-white transition-all outline-none cursor-pointer border-none flex items-center justify-center active:scale-90 shadow-sm"
+                title="Cancelar Combo"
+            >
+                <i class="pi pi-trash text-sm"></i>
+            </button>
+        </div>
+
+    </Teleport>
+</template>
+
+<script setup>
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import SlideToConfirm from "@/Components/UI/SlideToConfirm.vue";
+import { dynamicIslandTypeOverride } from '@/Pages/Shared/Composables/useDynamicIsland';
+
+const props = defineProps({
+    hide: Boolean,
+    showSummary: Boolean,
+    showTakeaway: { type: Boolean, default: true },
+    isTakeaway: { type: Boolean, default: false },
+    progress: { type: Number, default: 0 },
+    totalItems: { type: Number, default: 0 },
+    hasItems: { type: Boolean, default: null },
+    isLastStep: Boolean,
+    isValid: Boolean,
+    isAdding: Boolean,
+    isAddSuccess: Boolean,
+    canGoBack: { type: Boolean, default: true }
+});
+
+defineEmits(['back', 'toggle-takeaway', 'toggle-summary', 'next', 'cancel']);
+
+const isTeamApp = computed(() => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname;
+    return path.startsWith('/team') || path.startsWith('/pos') || path.startsWith('/waiter');
+});
+
+const isMounted = ref(false);
+
+onMounted(() => {
+    // 🚀 Timer protetor de montagem do Teleport
+    setTimeout(() => {
+        nextTick(() => {
+            isMounted.value = true;
+        });
+    }, 100);
+});
+
+const itemsCountDisplay = computed(() => {
+    return props.totalItems > 0 ? props.totalItems : props.progress;
+});
+
+watch(
+    isTeamApp,
+    (isTeam) => {
+        dynamicIslandTypeOverride.value = isTeam ? 'two-rows' : 'single-row';
+    },
+    { immediate: true }
+);
+
+onUnmounted(() => {
+    dynamicIslandTypeOverride.value = null;
+});
+</script>
+```
+
+## File: resources/js/Pages/Shared/Configurators/ModifierDynamicNav.vue
+```vue
+<template>
+    <Teleport to="#island-portal-target" v-if="isMounted && !hide">
+
+        <!-- 📱 TEAM APP: 2 LINHAS COM LARGURA ORGÂNICA -->
+        <div v-if="isTeamApp" class="w-72 sm:w-80 flex flex-col gap-2 select-none py-1">
+            <!-- ROW 1: Voltar + Stepper Centralizado + Sacolinha de Viagem -->
+            <div class="w-full flex items-center justify-between gap-2">
+                <button
+                    @click="$emit('back')"
+                    type="button"
+                    class="w-11 h-11 shrink-0 rounded-full bg-surface-1/50 hover:bg-surface-2 text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
+                    title="Voltar"
+                >
+                    <i class="pi pi-arrow-left text-sm"></i>
+                </button>
+
+                <div class="shrink-0 flex items-center justify-center">
+                    <slot name="stepper"></slot>
+                </div>
+
+                <button
+                    v-if="showTakeaway"
+                    type="button"
+                    @click="$emit('toggle-takeaway')"
+                    class="h-11 px-3.5 shrink-0 rounded-full transition-all flex items-center justify-center gap-1.5 outline-none cursor-pointer border-none shadow-sm active:scale-95"
+                    :class="isTakeaway
+                        ? 'bg-warning-500 text-white shadow-sm'
+                        : 'bg-warning-500/10 text-warning-600 dark:text-warning-400 hover:bg-warning-500/20'"
+                    :title="isTakeaway ? 'Item marcado para viagem' : 'Marcar para viagem'"
+                >
+                    <i class="pi pi-shopping-bag text-sm"></i>
+                    <span class="font-black text-xs uppercase tracking-wider">Viagem</span>
+                </button>
+            </div>
+
+            <!-- ROW 2: SlideToConfirm tipo LONG sozinho na segunda linha -->
+            <div class="w-full">
+                <SlideToConfirm
+                    :text="isEditMode ? 'Atualizar Item' : 'Adicionar Item'"
+                    :success-text="isEditMode ? 'Atualizado!' : 'Adicionado!'"
+                    :icon="isEditMode ? 'pi-check' : 'pi-shopping-cart'"
+                    format="long"
+                    :disabled="!isValid"
+                    :is-loading="isAdding"
+                    :is-success="isAddSuccess"
+                    @confirm="$emit('confirm')"
+                    class="w-full !h-11 !shadow-none"
+                />
+            </div>
+        </div>
+
+        <!-- 👤 CUSTOMER APP: 1 LINHA COMPACTA (SlideToConfirm tipo SHORT abraçando o conteúdo) -->
+        <div v-else class="flex items-center gap-2 select-none px-1 whitespace-nowrap">
+            <button
+                @click="$emit('back')"
+                type="button"
+                class="w-11 h-11 shrink-0 rounded-full bg-surface-1/50 hover:bg-surface-2 text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
+                title="Voltar"
+            >
+                <i class="pi pi-arrow-left text-sm"></i>
+            </button>
+
+            <div class="shrink-0 flex items-center">
+                <slot name="stepper"></slot>
+            </div>
+
+            <SlideToConfirm
+                :text="isEditMode ? 'Atualizar' : 'Adicionar'"
+                :success-text="isEditMode ? 'Atualizado!' : 'Adicionado!'"
+                :icon="isEditMode ? 'pi-check' : 'pi-shopping-cart'"
+                format="short"
+                :disabled="!isValid"
+                :is-loading="isAdding"
+                :is-success="isAddSuccess"
+                @confirm="$emit('confirm')"
+                class="!h-11 !shadow-none"
+            />
+        </div>
+
+    </Teleport>
+</template>
+
+<script setup>
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import SlideToConfirm from "@/Components/UI/SlideToConfirm.vue";
+import { dynamicIslandTypeOverride } from '@/Pages/Shared/Composables/useDynamicIsland';
+
+defineProps({
+    hide: Boolean,
+    showTakeaway: { type: Boolean, default: true },
+    isTakeaway: { type: Boolean, default: false },
+    isEditMode: Boolean,
+    isValid: Boolean,
+    isAdding: Boolean,
+    isAddSuccess: Boolean
+});
+
+defineEmits(['back', 'toggle-takeaway', 'confirm']);
+
+const isTeamApp = computed(() => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname;
+    return path.startsWith('/team') || path.startsWith('/pos') || path.startsWith('/waiter');
+});
+
+const isMounted = ref(false);
+
+onMounted(() => {
+    // 🚀 O delay permite que o v-if da Ilha insira a div '#island-portal-target'
+    // no DOM antes do Vue tentar fazer o teleport para ela.
+    setTimeout(() => {
+        nextTick(() => {
+            isMounted.value = true;
+        });
+    }, 100);
+});
+
+watch(
+    isTeamApp,
+    (isTeam) => {
+        dynamicIslandTypeOverride.value = isTeam ? 'two-rows' : 'single-row';
+    },
+    { immediate: true }
+);
+
+onUnmounted(() => {
+    dynamicIslandTypeOverride.value = null;
+});
+</script>
+```
+
+## File: resources/js/Pages/Team/TeamApp.vue
+```vue
+<template>
+    <div class="h-full w-full bg-surface-1 text-surface-text flex flex-col font-sans overflow-hidden select-none relative">
+
+        <!-- 🔒 FATIA 1: BLOQUEIO DE TURNO -->
+        <TeamShiftLockOverlay
+            v-if="!isOnDuty"
+            :is-starting="isStarting"
+            @start-shift="startShift"
+        />
+
+        <div v-else class="flex-1 flex flex-col h-full overflow-hidden relative bg-surface-2">
+
+            <!-- 👑 FATIA 2: HEADER GLOBAL COM CONTEXTO CONDICIONAL -->
+            <TeamHeader
+                :active-tab="activeTab"
+                :active-category="activeMenuCategory"
+                :active-product="isModifiersVisible || isComboVisible ? activeProduct : null"
+                :current-total="Number(productTotal)"
+                :context-title="headerContext.title"
+                :context-subtitle="headerContext.subtitle"
+                @open-notifications="() => {}"
+            />
+
+            <!-- 🔍 TELEPORT DIRETO DA BUSCA DO CARDÁPIO (Protegido por isMounted) -->
+            <Teleport to="#team-header-action-portal" v-if="isMounted && activeTab === 'menu' && !activeProduct">
+                <div class="flex items-center">
+                    <ExpandableSearch
+                        v-model="searchQuery"
+                        placeholder="Buscar no Cardápio..."
+                        class="!w-36 sm:!w-48 md:!w-64 animate-in fade-in duration-300"
+                    />
+                </div>
+            </Teleport>
+
+            <!-- 🚀 INJEÇÃO DO PADDING DINÂMICO AQUI -->
+            <div
+                class="flex-1 flex flex-col min-h-0 relative transition-all duration-200"
+                :style="{ paddingBottom: `var(--app-footer-height, 6rem)` }"
+            >
+                <!-- 📖 FATIA 3: RENDERIZADOR DE ABAS DA OPERAÇÃO -->
+                <TeamTabContainer
+                    ref="tabContainerRef"
+                    v-model:active-tab="activeTab"
+                    :category-layout="categoryLayout"
+                    :mobile-category-layout="mobileCategoryLayout"
+                    :product-card-layout="productCardLayout"
+                    :visible-menu-categories="visibleMenuCategories"
+                    :active-menu-category="selectedCategory"
+                    :visible-grid-categories="visibleGridCategories"
+                    :should-show-category-grid="shouldShowCategoryGrid"
+                    :should-show-product-grid="shouldShowProductGrid"
+                    :filtered-products="filteredProducts"
+                    :on-site-orders="onSiteOrders"
+                    :initial-table-areas="initialTableAreas"
+                    :restock-data="restockData"
+                    :catalog="catalog || initialProducts"
+                    :cart-component-key="cartComponentKey"
+                    :cart="cart"
+                    :cart-subtotal="cartSubtotal"
+                    v-model:order-type="orderType"
+                    :initial-customers="initialCustomers"
+                    :edit-order-data="editOrderData"
+                    :is-allowance-mode="isAllowanceMode"
+                    :cart-routing-meta="cartRoutingMeta"
+                    :bar-items="barItems"
+                    @category-select="selectedCategory = $event"
+                    @product-click="onProductClick"
+                    @open-menu="openContextMenu"
+                    @create-order="handleCreateOrderOnTable"
+                    @start-allowance-order="handleStartAllowanceOrder"
+                    @update-qty="updateQty"
+                    @clear-cart="handleClearCart"
+                    @edit-item="openEditModifiers"
+                    @checkout="handleCheckoutWrapper"
+                    @routing-valid="handleRoutingValid"
+                    @routing-meta="handleRoutingMeta"
+                    @kds-take="handleKdsTake"
+                    @kds-complete="handleKdsComplete"
+                    @kds-print="handleKdsPrint"
+                    @kds-loss="handleKdsCancel"
+                    @kds-cancel="handleKdsCancel"
+                />
+            </div>
+
+            <!-- 🏝 DYNAMIC ISLAND DA OPERAÇÃO -->
+            <TeamDynamicIsland
+                ref="islandRef"
+                v-model:active-tab="activeTab"
+                :cart-length="cart.length"
+                :selected-category="selectedCategory"
+                :category-layout="categoryLayout"
+                :breadcrumbs="breadcrumbs"
+                :order-context="contextMenuVisible ? selectedOrderContext : null"
+                :cart-routing-valid="cartRoutingValid"
+                :cart-routing-meta="cartRoutingMeta"
+                :is-submitting="isSubmittingOrder"
+                :is-success="isOrderSuccess"
+                :restock-count="restockData.totalItemsToRestock.value"
+                :is-allowance-mode="isAllowanceMode"
+                :bar-items-count="pendingBarItemsCount"
+                :configurator-type="isComboVisible ? 'combo' : (isModifiersVisible ? 'modifier' : null)"
+                @open-more="showMoreMenu = true"
+                @go-back-category="goBackCategory"
+                @navigate="activeTab = 'operations'"
+                @reset-menu="selectedCategory = null; searchQuery = ''"
+                @close-context="contextMenuVisible = false"
+                @show-more-actions="showOrderActionsSheet = true"
+                @toggle-routing="tabContainerRef?.toggleCartRouting()"
+                @submit-order="triggerCheckout"
+                @clear-cart="handleClearCart"
+            />
+
+            <!-- 🎛️ MODAL DE MÓDULOS -->
+            <TeamModulesModal
+                v-model:visible="showMoreMenu"
+                :manager-data="$page.props.managerData"
+                :restock-count="restockData.totalItemsToRestock.value"
+                @select-tab="selectMenuTab"
+            />
+
+            <!-- 🧩 OVERLAYS (CONFIGURADORES E AÇÕES) -->
+            <TeamOverlays
+                ref="overlaysRef"
+                :is-modifiers-visible="isModifiersVisible"
+                :is-combo-visible="isComboVisible"
+                :active-product="activeProduct"
+                :is-edit-mode="editItemIndex !== null"
+                :initial-products="initialProducts"
+                v-model:contextMenuVisible="contextMenuVisible"
+                v-model:showOrderActionsSheet="showOrderActionsSheet"
+                :selected-order-context="selectedOrderContext"
+                :company-settings="$page.props.companySettings"
+                @update:total="productTotal = Number($event || 0)"
+                @confirm-modifiers="handleModifiersConfirm"
+                @confirm-combo="handleComboConfirm"
+                @close-configurators="closeConfigurators"
+                @action="(actionId, orderObj) => customHandleMenuAction(actionId, orderObj)"
+                @duplicate-item="(item, cb) => customHandleItemDuplicate(item, cb)"
+                @modify-item="handleItemModify"
+                @swap-item="handleItemSwap"
+                @cancel-item="handleItemCancel"
+                @reprint-item="handleItemReprint"
+            />
+
+            <!-- 🚀 BOTTOM SHEET DE DESBLOQUEIO POR QR CODE -->
+            <QuickUnlockSheet
+                v-model:visible="showQuickUnlockSheet"
+                :token="quickUnlockToken"
+                @unlocked="quickUnlockToken = ''"
+            />
+
+            <!-- 🔔 MODAL DE ALERTA DE IMPRESSÃO -->
+            <PrintAlertNotice
+                v-if="activePrintAlert"
+                :alert="activePrintAlert"
+                mode="modal"
+                @dismiss="activePrintAlert = null"
+            />
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onBeforeUnmount, defineAsyncComponent, watch, nextTick } from 'vue';
+import { router, usePage } from '@inertiajs/vue3';
+import { useToast } from "primevue/usetoast";
+
+import MobileLayout from "@/Layouts/MobileLayout.vue";
+import TeamDynamicIsland from "@/Pages/Team/TeamDynamicIsland.vue";
+import TeamModulesModal from "@/Pages/Team/TeamModulesModal.vue";
+import TeamOverlays from "@/Pages/Team/TeamOverlays.vue";
+import TeamHeader from "@/Pages/Team/TeamHeader.vue";
+import TeamShiftLockOverlay from "@/Pages/Team/TeamShiftLockOverlay.vue";
+import TeamTabContainer from "@/Pages/Team/TeamTabContainer.vue";
+import PrintAlertNotice from '@/Components/UI/PrintAlertNotice.vue';
+import ExpandableSearch from '@/Components/UI/ExpandableSearch.vue';
+
+const QuickUnlockSheet = defineAsyncComponent(() => import('@/Pages/Gateway/QuickUnlockSheet.vue'));
+
+import { useAppLifecycleSync } from '@/Composables/useAppLifecycleSync';
+import { useCart } from "@/Pages/Shared/Composables/useCart";
+import { useMenuNavigation } from "@/Pages/Shared/Composables/useMenuNavigation";
+import { usePosSettings } from "@/Pages/Pos/Composables/usePosSettings";
+import { useTeamApp } from "@/Pages/Team/Composables/useTeamApp";
+import { usePushNotifications } from "@/Composables/usePushNotifications";
+import { useOrderFlow } from "@/Pages/Shared/Composables/useOrderFlow";
+import { useItemActions } from "@/Pages/Shared/Composables/useItemActions";
+import { useRestock } from "@/Pages/Shared/Composables/useRestock";
+import { useTeamSubmit } from "@/Pages/Team/Composables/useTeamSubmit";
+import { useTeamBarKds } from "@/Pages/Team/Composables/useTeamBarKds";
+import { useTeamHeaderContext } from "@/Pages/Team/Composables/useTeamHeaderContext";
+import { useTeamSync } from "@/Pages/Team/Composables/useTeamSync";
+import { useTenantEcho } from '@/Composables/useTenantEcho';
+
+// 🚀 IMPORTAÇÃO DO NOVO COMPOSABLE DE HEIGHT
+import { useDynamicFooterHeight } from '@/Composables/useDynamicFooterHeight';
+
+defineOptions({ layout: MobileLayout });
+
+const props = defineProps({
+    defaultTab: { type: String, default: 'menu' },
+    initialCategories: { type: Array, default: () => [] },
+    initialProducts: { type: Array, default: () => [] },
+    catalog: { type: Array, default: () => [] },
+    initialTableAreas: { type: Array, default: () => [] },
+    initialCustomers: { type: Array, default: () => [] },
+    initialOrders: { type: Array, default: () => [] },
+    editOrderData: Object,
+    operatorName: { type: String, default: 'Equipe' },
+    isOnDuty: { type: Boolean, default: false }
+});
+
+const toast = useToast();
+const page = usePage();
+const settings = usePosSettings();
+const { categoryLayout, productCardLayout } = settings;
+const { requestPushPermission, checkSubscriptionStatus, subscribeToWebPush } = usePushNotifications();
+
+const tabContainerRef = ref(null);
+const cartComponentKey = ref(0);
+const showOrderActionsSheet = ref(false);
+const cartRoutingValid = ref(false);
+const cartRoutingMeta = ref(null);
+const activePrintAlert = ref(null);
+const isMounted = ref(false);
+
+const handleClearCart = () => {
+    isAllowanceMode.value = false;
+    clearCart();
+    cartRoutingValid.value = false;
+    cartRoutingMeta.value = null;
+
+    setTimeout(() => {
+        localStorage.removeItem("pos_draft_routing");
+        localStorage.removeItem('pos_draft_cart');
+        localStorage.removeItem('pos_return_order_id');
+        localStorage.removeItem('pos_return_url');
+        localStorage.removeItem('pos_append_title');
+    }, 50);
+
+    if (window.location.search) {
+        window.history.replaceState({}, '', window.location.pathname);
+        router.visit(window.location.pathname);
+    } else {
+        cartComponentKey.value++;
+        activeTab.value = 'menu';
+    }
+};
+
+useAppLifecycleSync({
+    only: ['initialOrders', 'initialTableAreas', 'cashierData', 'initialProducts'],
+    minSleepSeconds: 10,
+    onWake: (freshPage) => {
+        const targetOrderId = cartRoutingMeta.value?.id || cartRoutingMeta.value?.order_id;
+        if (targetOrderId) {
+            const freshOrders = freshPage.props?.initialOrders || [];
+            const isStillActive = freshOrders.some(o =>
+                Number(o.id) === Number(targetOrderId) &&
+                !['closed', 'cancelled', 'completed', 'delivered'].includes(o.status) &&
+                o.payment_status !== 'paid'
+            );
+
+            if (!isStillActive) {
+                toast.add({
+                    severity: 'warn',
+                    summary: 'Comanda Encerrada',
+                    detail: 'Esta mesa foi quitada ou finalizada no caixa enquanto o aparelho estava em repouso.',
+                    life: 6000
+                });
+                handleClearCart();
+            }
+        }
+    }
+});
+
+const handleRoutingMeta = (newMeta) => {
+    if (!newMeta && !cartRoutingMeta.value) return;
+    try {
+        if (JSON.stringify(newMeta) === JSON.stringify(cartRoutingMeta.value)) return;
+    } catch (e) {}
+    cartRoutingMeta.value = newMeta;
+};
+
+const handleRoutingValid = (isValid) => {
+    if (cartRoutingValid.value !== isValid) {
+        cartRoutingValid.value = isValid;
+    }
+};
+
+const showMoreMenu = ref(false);
+const showQuickUnlockSheet = ref(false);
+const quickUnlockToken = ref('');
+
+const restockData = useRestock();
+const isAllowanceMode = ref(false);
+
+const onSiteOrders = computed(() => {
+    return (props.initialOrders || []).filter(o =>
+        (o.type === 'table' || o.type === 'counter') &&
+        !['closed', 'cancelled', 'completed', 'delivered'].includes(o.status)
+    );
+});
+
+const {
+    isStarting, activeTab, contextMenuVisible, selectedOrderContext,
+    startShift: originalStartShift, openContextMenu, handleMenuAction
+} = useTeamApp();
+
+activeTab.value = props.defaultTab;
+
+const cartContext = useCart();
+const { cart, cartSubtotal, updateQty, clearCart, autoParkCurrent } = cartContext;
+const orderType = cartContext.orderType = ref('table');
+
+const { headerContext } = useTeamHeaderContext({
+    activeTab,
+    contextMenuVisible,
+    selectedOrderContext,
+    isAllowanceMode,
+    cartRoutingMeta,
+    cart,
+    orderType,
+    operatorName: computed(() => props.operatorName)
+});
+
+watch(activeTab, (newTab, oldTab) => {
+    if (!newTab || newTab === oldTab) return;
+    const targetUrl = route('team.app', { tab: newTab });
+    if (window.location.href !== targetUrl) {
+        window.history.pushState({ tab: newTab }, '', targetUrl);
+    }
+});
+
+watch(showQuickUnlockSheet, (isVisible) => {
+    if (!isVisible && window.location.search.includes('quick_unlock_token')) {
+        router.visit(route('team.app', { tab: activeTab.value }), {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true
+        });
+    }
+});
+
+const handlePopState = (event) => {
+    if (event.state && event.state.tab) {
+        activeTab.value = event.state.tab;
+    } else {
+        const path = window.location.pathname;
+        const match = path.match(/\/team\/app\/([^/?#]+)/) || path.match(/\/waiter\/([^/?#]+)/);
+        activeTab.value = match ? match[1] : 'menu';
+    }
+};
+
+const handleTabChange = (e) => {
+    activeTab.value = e.detail;
+};
+
+const selectMenuTab = (tab) => {
+    activeTab.value = tab;
+    showMoreMenu.value = false;
+};
+
+const openCheckout = (orderId) => {
+    router.visit(route('operations.checkout', orderId));
+};
+
+const handleOpenCheckoutEvent = (e) => openCheckout(e.detail.orderId || e.detail);
+
+const startShift = async () => {
+    isStarting.value = true;
+    const hasPermission = await requestPushPermission();
+    if (hasPermission && page.props.vapidPublicKey) {
+        await subscribeToWebPush(page.props.vapidPublicKey);
+    }
+    originalStartShift();
+    restockData.clearRestock();
+    restockData.fetchRestockBoard(true);
+};
+
+const {
+    isSubmittingOrder, isOrderSuccess, handleCreateOrderOnTable,
+    customHandleMenuAction, handleSendOrder, triggerCheckout, customHandleItemDuplicate
+} = useTeamSubmit({
+    props, cart, cartSubtotal, clearCart, activeTab,
+    cartRoutingMeta, cartRoutingValid, orderType, cartComponentKey,
+    selectedOrderContext, contextMenuVisible, showOrderActionsSheet, openContextMenu, handleMenuAction,
+    isAllowanceMode,
+    source: 'team_app'
+});
+
+const handleStartAllowanceOrder = () => {
+    isAllowanceMode.value = true;
+    clearCart();
+    activeTab.value = 'menu';
+    cartRoutingValid.value = true;
+    cartRoutingMeta.value = { type: 'counter', identifier: 'Consumo Interno' };
+    toast.add({ severity: 'info', summary: 'Modo Consumo Interno', detail: 'Monte seu pedido. O pagamento será debitado da sua carteira.', life: 4000 });
+};
+
+const handleCheckoutWrapper = (checkoutPayload) => {
+    if (isAllowanceMode.value) {
+        checkoutPayload.routing = checkoutPayload.routing || {};
+        checkoutPayload.routing.payment_engine = 'internal';
+        checkoutPayload.routing.payment_method_name = 'Consumo Interno';
+    }
+    handleSendOrder(checkoutPayload);
+    setTimeout(() => { isAllowanceMode.value = false; }, 1000);
+};
+
+const {
+    isModifiersVisible, isComboVisible, activeProduct, editItemIndex,
+    initializeFlow, closeConfigurators, handleProductClick, openEditModifiers,
+    handleModifiersConfirm, handleComboConfirm
+} = useOrderFlow(props, cartContext, triggerCheckout);
+
+// 🚀 CÁLCULO DINÂMICO DO RODAPÉ (AGORA LOGO APÓS A CRIAÇÃO DE isModifiersVisible/isComboVisible)
+const islandRef = ref(null);
+const overlaysRef = ref(null);
+
+useDynamicFooterHeight(islandRef, {
+    cssVarName: '--app-footer-height',
+    fallbackHeight: 96,
+    extraOffset: 16
+});
+// ===============================================
+
+const { handleItemModify, handleItemSwap, handleItemCancel } = useItemActions(
+    selectedOrderContext,
+    contextMenuVisible,
+    'team.app'
+);
+
+const productTotal = ref(0);
+
+const handleKdsCancelWrapper = (item) => {
+    selectedOrderContext.value = item.order;
+    handleItemCancel(item);
+};
+
+const {
+    barItems,
+    pendingBarItemsCount,
+    handleKdsTake,
+    handleKdsComplete,
+    handleKdsPrint,
+    handleKdsCancel
+} = useTeamBarKds(props, handleKdsCancelWrapper);
+
+const handleItemReprint = (item) => {
+    router.post(route('operations.kds.print-item', item.id), {}, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => { toast.add({ severity: 'success', summary: 'Reimpressão', detail: 'Via enviada para a cozinha!', life: 3000 }); }
+    });
+};
+
+const mobileCategoryLayout = computed(() => categoryLayout.value === 'list' || productCardLayout.value === 'list' ? 'list' : 'grid');
+
+const mobileSettings = {
+    categoryHierarchy: settings.categoryHierarchy,
+    productCardLayout: settings.productCardLayout,
+    outOfStockMode: settings.outOfStockMode,
+    categoryLayout: mobileCategoryLayout
+};
+
+const {
+    selectedCategory, activeMenuCategory, visibleMenuCategories,
+    filteredProducts, shouldShowProductGrid, breadcrumbs, goBackCategory,
+    visibleGridCategories, shouldShowCategoryGrid, searchQuery
+} = useMenuNavigation(() => props.initialCategories, () => props.initialProducts, mobileSettings);
+
+useTeamSync({
+    selectedOrderContext,
+    activeTab,
+    onShiftClosed: handleClearCart
+});
+
+useTenantEcho().listenChannel('operations', '.print.alert', (data) => {
+    if (data.source === 'team_app') {
+        activePrintAlert.value = data;
+    }
+});
+
+onMounted(() => {
+    checkSubscriptionStatus();
+    window.addEventListener('team-tab-changed', handleTabChange);
+    window.addEventListener('team-open-checkout', handleOpenCheckoutEvent);
+    window.addEventListener('popstate', handlePopState);
+
+    if (!props.isOnDuty) {
+        handleClearCart();
+    } else {
+        restockData.fetchRestockBoard();
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('quick_unlock_token');
+
+    if (token) {
+        quickUnlockToken.value = token;
+        showQuickUnlockSheet.value = true;
+        urlParams.delete('quick_unlock_token');
+        const cleanSearch = urlParams.toString() ? `?${urlParams.toString()}` : '';
+        window.history.replaceState({ tab: activeTab.value }, document.title, `${window.location.pathname}${cleanSearch}`);
+    }
+
+    initializeFlow(urlParams);
+    if (urlParams.get('action') === 'new') cartComponentKey.value++;
+    if (props.editOrderData) activeTab.value = 'menu';
+
+    if (!token) {
+        window.history.replaceState({ tab: activeTab.value }, '', route('team.app', { tab: activeTab.value }));
+    }
+    nextTick(() => {
+        isMounted.value = true;
+    });
+});
+
+onBeforeUnmount(() => {
+    autoParkCurrent();
+    window.removeEventListener('team-tab-changed', handleTabChange);
+    window.removeEventListener('team-open-checkout', handleOpenCheckoutEvent);
+    window.removeEventListener('popstate', handlePopState);
+});
+
+const onProductClick = (product) => {
+    searchQuery.value = '';
+    productTotal.value = Number(product?.price ?? product?.base_price ?? 0);
+    handleProductClick(product);
+};
+</script>
+```
+
+## File: resources/js/Pages/Team/TeamMenuTab.vue
+```vue
+<template>
+    <div
+        class="flex-1 flex flex-col min-h-0 p-4 pb-0 gap-4 animate-in fade-in duration-300"
+        :style="{ paddingTop: 'var(--app-header-height, 7rem)' }"
+    >
+        <CategoryMenu
+            v-if="categoryLayout === 'horizontal' || categoryLayout === 'vertical'"
+            :categories="visibleMenuCategories"
+            :selected="activeMenuCategory"
+            :layout="categoryLayout"
+            @update:selected="$emit('category-select', $event)"
+            class="shrink-0"
+        />
+
+        <div ref="scrollContainerRef" class="flex-1 overflow-y-auto hide-scrollbar -mx-2 px-2">
+            <!-- Subcategorias do nível atual -->
+            <CategoryGrid
+                v-if="shouldShowCategoryGrid"
+                :categories="visibleGridCategories"
+                :layout="mobileCategoryLayout"
+                @category-click="$emit('category-select', $event)"
+                :class="shouldShowProductGrid ? 'mb-6' : ''"
+            />
+
+            <!-- O divisor "Produtos Soltos" SÓ vai aparecer se houver subcategorias E produtos diretos na mesma pasta -->
+            <div v-if="shouldShowCategoryGrid && shouldShowProductGrid" class="flex items-center gap-4 mb-4 opacity-50">
+                <div class="h-px bg-surface-border flex-1"></div>
+                <span class="micro-label text-[10px] font-bold uppercase tracking-widest">Produtos Soltos</span>
+                <div class="h-px bg-surface-border flex-1"></div>
+            </div>
+
+            <!-- Grid de produtos da categoria -->
+            <ProductGrid
+                v-if="shouldShowProductGrid"
+                :products="filteredProducts"
+                :layout="productCardLayout"
+                @product-click="$emit('product-click', $event)"
+            />
+
+            <div v-if="!shouldShowProductGrid && !shouldShowCategoryGrid" class="flex flex-col items-center justify-center py-20 text-surface-muted opacity-60">
+                <i class="pi pi-search text-5xl mb-3 text-primary-500/40"></i>
+                <h3 class="text-lg font-bold text-center">Nenhum produto encontrado</h3>
+                <p class="text-xs mt-1 text-center max-w-xs">Não localizamos itens para a sua busca ou não há produtos disponíveis.</p>
+            </div>
+
+            <div class="h-32 shrink-0 w-full pointer-events-none"></div>
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { ref, watch } from 'vue';
+import CategoryMenu from "@/Pages/Pos/Components/Menu/CategoryMenu.vue";
+import ProductGrid from "@/Pages/Pos/Components/Menu/ProductGrid.vue";
+import CategoryGrid from "@/Pages/Pos/Components/Menu/CategoryGrid.vue";
+
+const props = defineProps({
+    isActive: { type: Boolean, default: true },
+    categoryLayout: String,
+    mobileCategoryLayout: String,
+    productCardLayout: String,
+    visibleMenuCategories: Array,
+    activeMenuCategory: [String, Number],
+    visibleGridCategories: Array,
+    shouldShowCategoryGrid: Boolean,
+    shouldShowProductGrid: Boolean,
+    filteredProducts: Array
+});
+
+defineEmits(['product-click', 'category-select']);
+
+const scrollContainerRef = ref(null);
+
+watch(() => props.activeMenuCategory, () => {
+    if (scrollContainerRef.value) {
+        scrollContainerRef.value.scrollTop = 0;
+    }
+});
+</script>
+```

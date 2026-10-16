@@ -1,19 +1,19 @@
 <template>
     <nav
-        v-if="isVisible"
+        v-show="isVisible"
         ref="islandRef"
         :class="[baseIslandClass, shapeIslandClass]"
         :style="islandStyle"
     >
         <!-- Container isolado de layout -->
-        <div ref="contentRef" class="w-max h-max flex items-center justify-center shrink-0 p-1.5">
+        <div ref="contentRef" class="w-max h-max flex items-center justify-center shrink-0 p-1.5 transition-all duration-300">
 
             <!-- ESTADO 1: NAVEGAÇÃO NORMAL -->
             <div
-                v-if="!isCartMode && !configuratorType"
+                v-show="!isCartMode && !configuratorType"
                 class="flex items-center gap-1 shrink-0"
             >
-                <!-- 🚀 MODO PADRÃO: Exibe Home -->
+                <!-- MODO PADRÃO: Exibe Home -->
                 <template v-if="!isTableMode && showAdvancedTabs">
                     <button
                         @click="handleTabClick('home')"
@@ -33,7 +33,7 @@
                     <i class="pi pi-book"></i>
                 </button>
 
-                <!-- 🚀 BOTÃO DA CONTA (Mesa ou Pedidos) -->
+                <!-- BOTÃO DA CONTA (Mesa ou Pedidos) -->
                 <button
                     v-if="isTableMode || showAdvancedTabs"
                     @click="$emit('update:activeTab', 'orders')"
@@ -77,16 +77,17 @@
                 </template>
             </div>
 
-            <!-- ESTADO 2: PORTAL DE CONFIGURADORES -->
+            <!-- 🚀 ESTADO 2: PORTAL DE CONFIGURADORES -->
+            <!-- O alvo DEVE estar sempre no DOM (usamos v-show em vez de v-if) para que os Navs encontrem a âncora instantaneamente. -->
             <div
-                v-if="configuratorType && !isCartMode"
+                v-show="configuratorType && !isCartMode"
                 id="island-portal-target"
                 class="w-max flex items-center justify-center shrink-0"
             ></div>
 
             <!-- ESTADO 3: MODO CARRINHO -->
             <div
-                v-if="isCartMode"
+                v-show="isCartMode"
                 class="flex items-center gap-2 shrink-0 px-1"
             >
                 <button
@@ -110,7 +111,6 @@
                     :class="{ 'opacity-60 grayscale cursor-not-allowed pointer-events-none': !canOrder }"
                 />
             </div>
-
         </div>
     </nav>
 </template>
@@ -170,6 +170,7 @@ const {
     handleTabClick
 } = useDynamicIsland(props, emit);
 
+// 🚀 A ILHA ESTÁ SEMPRE VISÍVEL QUANDO ESTÁ NO MODO CONFIGURADOR
 const isVisible = computed(() =>
     isTableMode.value ||
     totalCartCount.value > 0 ||

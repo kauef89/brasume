@@ -5,6 +5,7 @@ export function useOrderAppend(draftRouting, cartSubtotal, initialOrdersRef = nu
         return draftRouting.value?.order_id
             || draftRouting.value?.id
             || draftRouting.value?.existing_order_id
+            || draftRouting.value?.append_to_order
             || null;
     });
 
@@ -23,7 +24,7 @@ export function useOrderAppend(draftRouting, cartSubtotal, initialOrdersRef = nu
             return Number(originalOrder.value.total_paid);
         }
         const payments = originalOrder.value.payments || [];
-        return payments.filter(p => p.is_paid).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+        return payments.filter(p => p.is_paid || p.status === 'paid').reduce((sum, p) => sum + Number(p.amount || 0), 0);
     });
 
     const originalTotal = computed(() => {
@@ -48,7 +49,34 @@ export function useOrderAppend(draftRouting, cartSubtotal, initialOrdersRef = nu
             || (alreadyPaidAmount.value > 0 && alreadyPaidAmount.value >= (originalTotal.value - 0.05));
     });
 
-    // Análise inteligente de Troco (Delivery / Balcão com dinheiro)
+    // 🚀 LÊ E EXPORTA AS PROMESSAS PRÉVIAS
+    const preExistingPaymentIntents = computed(() => {
+        if (!originalOrder.value) return [];
+        let methods = originalOrder.value.payment_intent_methods;
+        if (!methods) return [];
+
+        while (typeof methods === 'string') {
+            try { methods = JSON.parse(methods); } catch (e) { break; }
+        }
+        return Array.isArray(methods) ? methods : [];
+    });
+
+    // 🚀 INFLA O ÚLTIMO PAGAMENTO PARA COBRIR O NOVO VALOR
+    const autoScaledPaymentIntents = computed(() => {
+        const baseMethods = [...preExistingPaymentIntents.value];
+        if (baseMethods.length === 0) return [];
+
+        // Pega o último método usado e soma a ele o valor dos novos itens
+        const lastMethod = { ...baseMethods[baseMethods.length - 1] };
+        lastMethod.amount = Number(lastMethod.amount) + newItemsAmount.value;
+
+        // Limpa o target do troco para forçar o operador a reavaliar a nota
+        lastMethod.change_target = null;
+
+        baseMethods[baseMethods.length - 1] = lastMethod;
+        return baseMethods;
+    });
+
     const changeAnalysis = computed(() => {
         const target = draftRouting.value?.cash_change_target
             || draftRouting.value?.change_target
@@ -84,6 +112,8 @@ export function useOrderAppend(draftRouting, cartSubtotal, initialOrdersRef = nu
         projectedTotal,
         balanceDue,
         wasOriginallyPaid,
+        preExistingPaymentIntents,
+        autoScaledPaymentIntents,
         changeAnalysis
     };
 }

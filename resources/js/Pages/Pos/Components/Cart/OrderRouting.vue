@@ -46,6 +46,7 @@
                 :customers="customers"
                 @apply="triggerImmediateApply"
                 @create-new="handleCreateNewCustomer"
+                @open-new-customer="handleCreateNewCustomer"
             />
 
             <RoutingDelivery
@@ -57,6 +58,7 @@
                 :customers="customers"
                 @apply="handleApply($event)"
                 @create-new="handleCreateNewCustomer"
+                @open-new-customer="handleCreateNewCustomer"
                 @customer-selected="updateParentState"
                 @open-new-address="$emit('open-new-address')"
                 @open-edit-address="$emit('open-edit-address', $event)"

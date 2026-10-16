@@ -454,9 +454,10 @@ const openOperationalView = () => {
 };
 
 const handleConfirmOperationalClose = (closeStoreChoice) => {
+    const unpaidCount = (props.currentAttendees || []).filter(a => Number(a.daily_rate) > 0 && !a.account_payable_id).length;
     submitOperationalCloseShift(closeStoreChoice, () => {
         resetViews();
-    });
+    }, unpaidCount);
 };
 </script>
 
