@@ -48,7 +48,7 @@
                     :key="addr.id"
                     @click="chooseAddress(addr)"
                     class="p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between select-none"
-                    :class="selectedAddress?.id === addr.id
+                    :class="activeAddress?.id === addr.id
                         ? 'bg-primary-500/20 border-primary-400 shadow-sm'
                         : 'bg-white/5 border-white/10 hover:bg-white/10'"
                 >
@@ -58,21 +58,21 @@
                         </span>
                         <span class="text-xs text-white/60 mt-0.5">
                             {{ addr.neighborhood || 'Bairro' }}
-                            <span v-if="addr.delivery_fee !== undefined"> — Taxa: {{ $formatCurrency(addr.delivery_fee) }}</span>
+                            <span v-if="addr.delivery_fee !== undefined"> — Taxa: {{ formatCurrency(addr.delivery_fee) }}</span>
                         </span>
                     </div>
 
                     <div
                         class="w-6 h-6 rounded-full flex items-center justify-center border shrink-0 transition-colors"
-                        :class="selectedAddress?.id === addr.id ? 'bg-primary-500 border-primary-400 text-white' : 'border-white/20'"
+                        :class="activeAddress?.id === addr.id ? 'bg-primary-500 border-primary-400 text-white' : 'border-white/20'"
                     >
-                        <i v-if="selectedAddress?.id === addr.id" class="pi pi-check text-[10px] font-black"></i>
+                        <i v-if="activeAddress?.id === addr.id" class="pi pi-check text-[10px] font-black"></i>
                     </div>
                 </div>
 
                 <button
                     type="button"
-                    :disabled="!selectedAddress"
+                    :disabled="!activeAddress"
                     @click="confirmDeliveryStep"
                     class="w-full c-btn-primary !h-12 !text-xs !uppercase !tracking-widest mt-2 flex items-center justify-center gap-2 border-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -162,6 +162,33 @@ const availableChannels = computed(() => {
 const customerAddresses = computed(() => {
     return props.customer?.addresses || [];
 });
+
+// 🚀 O SEGREDO DO BUG RESOLVIDO: Memória Rastreável de Endereços
+const knownAddressIds = ref(props.customer?.addresses?.map(a => a.id) || []);
+
+watch(() => props.customer?.addresses, (newAddresses) => {
+    if (!newAddresses) return;
+
+    const currentIds = newAddresses.map(a => a.id);
+
+    // Descobre se algum ID novo e inédito acabou de chegar via Props (cliente recém-salvou)
+    const addedIds = currentIds.filter(id => !knownAddressIds.value.includes(id));
+
+    if (currentType.value === 'delivery') {
+        if (addedIds.length > 0) {
+            // 🚀 Endereço novo criado! Pula nele e seleciona instantaneamente
+            const newAddr = newAddresses.find(a => a.id === addedIds[addedIds.length - 1]);
+            if (newAddr) chooseAddress(newAddr);
+        } else if (!activeAddress.value && newAddresses.length > 0) {
+            // Fallback: se não tiver nada ativo (primeiro carregamento), pega o padrão ou o primeiro
+            const defaultAddr = newAddresses.find(a => a.is_default) || newAddresses[0];
+            chooseAddress(defaultAddr);
+        }
+    }
+
+    // Sincroniza a memória com o estado atual para não rodar duas vezes
+    knownAddressIds.value = currentIds;
+}, { deep: true, immediate: true });
 
 const selectChannel = (type) => {
     currentType.value = type;

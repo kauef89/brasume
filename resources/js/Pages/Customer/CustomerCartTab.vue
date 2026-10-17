@@ -39,9 +39,12 @@
         </div>
 
         <!-- ==========================================
-             LISTAGEM DE ITENS
+             LISTAGEM DE ITENS COM PADDING DINÂMICO
              ========================================== -->
-        <div class="flex-1 overflow-y-auto px-4 pt-2 flex flex-col gap-4 hide-scrollbar relative pb-[calc(env(safe-area-inset-bottom,1rem)+7rem)]">
+        <div
+            class="flex-1 overflow-y-auto px-4 pt-2 flex flex-col gap-4 hide-scrollbar relative"
+            :style="{ paddingBottom: 'calc(env(safe-area-inset-bottom, 1rem) + var(--app-footer-height, 100px))' }"
+        >
 
             <!-- 🛑 BLOCO 1: ITENS JÁ ENVIADOS (Modo Append - Somente Leitura) -->
             <div v-if="appendOrder && appendOrder.items?.length > 0" class="flex flex-col gap-2">

@@ -67,7 +67,6 @@ class PosOrderSubmitRequest extends FormRequest
             'routing.notes'                                         => ['nullable', 'string'],
             'routing.identifier'                                    => ['nullable', 'string'],
 
-            // 🚀 Correção: Permitir as chaves de ID dentro do routing para que não sejam limpadas pelo validated()
             'routing.id'                                            => ['nullable', 'integer'],
             'routing.order_id'                                      => ['nullable', 'integer'],
             'routing.existing_order_id'                             => ['nullable', 'integer'],
@@ -91,7 +90,8 @@ class PosOrderSubmitRequest extends FormRequest
 
             'routing.address_id'                                    => ['nullable'],
             'routing.address'                                       => ['nullable', 'array'],
-            'routing.address.id'                                    => ['required_if:routing.type,delivery', 'nullable'],
+            // 🚀 CORREÇÃO CRÍTICA: Não permite endereço nulo se for delivery! Deve existir no DB.
+            'routing.address.id'                                    => ['required_if:routing.type,delivery', 'integer', 'exists:addresses,id'],
             'routing.address.street_id'                             => ['nullable'],
             'routing.address.street'                                => ['nullable'],
             'routing.address.number'                                => ['nullable'],
@@ -102,7 +102,8 @@ class PosOrderSubmitRequest extends FormRequest
             'routing.address.reference'                             => ['nullable', 'string'],
             'routing.address.nickname'                              => ['nullable', 'string'],
             'routing.address.full_address'                          => ['nullable', 'string'],
-            'routing.address.delivery_fee'                          => ['nullable', 'numeric'],
+            // 🚀 BLINDAGEM: Garante que a taxa foi processada
+            'routing.address.delivery_fee'                          => ['required_if:routing.type,delivery', 'numeric', 'min:0'],
 
             'routing.payment_method_id'                             => ['nullable', 'integer', 'exists:payment_methods,id'],
             'routing.payment_method_name'                           => ['nullable', 'string'],
@@ -136,7 +137,6 @@ class PosOrderSubmitRequest extends FormRequest
         $items = $this->input('items', []);
         $financials = $this->input('financials', []);
 
-        // 🚀 SALVAGUARDA DE ORDER_ID: Garante que o root order_id exista se o frontend mandou apenas escondido no routing
         $rootOrderId = $this->input('order_id');
         if (empty($rootOrderId)) {
             $rootOrderId = $routing['order_id'] ?? $routing['existing_order_id'] ?? $routing['id'] ?? null;
@@ -191,8 +191,8 @@ class PosOrderSubmitRequest extends FormRequest
             }
         }
 
-        // 🚀 SALVAGUARDA DELIVERY: Se mandou address_id mas esqueceu o address.id, clona para passar na validação estrita
         if (isset($routing['type']) && $routing['type'] === 'delivery') {
+            // Se o frontend mandar o address solto, nós o estruturamos.
             if (!empty($routing['address_id']) && empty($routing['address']['id'])) {
                 if (!isset($routing['address']) || !is_array($routing['address'])) {
                     $routing['address'] = [];

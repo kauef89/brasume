@@ -104,7 +104,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
 import { useToast } from 'primevue/usetoast';
 import { formatPhone, formatCurrency, getInitials } from '@/Utils/formatters';
@@ -134,6 +134,31 @@ const customerAddresses = computed(() => {
 const activeAddresses = computed(() => {
     return customerAddresses.value.filter(a => a.is_active !== false && a.is_active !== 0 && a.is_active !== '0');
 });
+
+// 🚀 MEMÓRIA REATIVA: Rastreador de novos endereços
+const knownAddressIds = ref(activeAddresses.value.map(a => String(a.id)));
+
+watch(activeAddresses, (newAddresses) => {
+    if (!newAddresses || newAddresses.length === 0) return;
+
+    const currentIds = newAddresses.map(a => String(a.id));
+    const addedIds = currentIds.filter(id => !knownAddressIds.value.includes(id));
+
+    if (addedIds.length > 0) {
+        // Endereço novo acabou de chegar! Pula nele e seleciona instantaneamente
+        const newAddr = newAddresses.find(a => String(a.id) === addedIds[addedIds.length - 1]);
+        if (newAddr) {
+            emit('select-address', newAddr);
+        }
+    } else if (!props.address && newAddresses.length > 0) {
+        // Fallback: se não tiver nada ativo (primeiro carregamento), pega o padrão ou o primeiro
+        const defaultAddr = newAddresses.find(a => a.is_default) || newAddresses[0];
+        emit('select-address', defaultAddr);
+    }
+
+    // Sincroniza a memória com o estado atual
+    knownAddressIds.value = currentIds;
+}, { deep: true, immediate: true });
 
 const isReadyToApply = computed(() => Boolean(props.customer && props.address));
 

@@ -122,7 +122,8 @@
 
             </div>
 
-            <div class="h-32 shrink-0 w-full pointer-events-none"></div>
+            <!-- 🚀 Spacer de rolagem que obedece a ilha dinâmica do Customer App -->
+            <div class="shrink-0 w-full pointer-events-none" :style="{ height: 'var(--app-footer-height, 120px)' }"></div>
         </div>
     </div>
 </template>

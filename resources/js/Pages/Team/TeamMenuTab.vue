@@ -43,7 +43,8 @@
                 <p class="text-xs mt-1 text-center max-w-xs">Não localizamos itens para a sua busca ou não há produtos disponíveis.</p>
             </div>
 
-            <div class="h-32 shrink-0 w-full pointer-events-none"></div>
+            <!-- 🚀 Spacer de rolagem que obedece a ilha dinâmica do App da Equipe -->
+            <div class="shrink-0 w-full pointer-events-none" :style="{ height: 'var(--app-footer-height, 120px)' }"></div>
         </div>
     </div>
 </template>

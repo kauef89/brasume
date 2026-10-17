@@ -254,19 +254,26 @@ class OrderPaymentService
         Log::info("OrderPaymentService acionado para o TXID: {$txid}");
 
         $order = DB::transaction(function () use ($txid, $amount, $endToEndId) {
-            $order = Order::with(['customer.user', 'items'])->where('txid', $txid)->first();
+
+            // 🚀 Tenta achar via coluna nativa ou caso o frontend tenha injetado via payments pivot JSON
+            $order = Order::with(['customer.user', 'items', 'payments'])
+                ->where('txid', $txid)
+                ->orWhere('payment_intent_methods', 'like', "%\"txid\":\"{$txid}\"%")
+                ->first();
 
             if (!$order) {
-                throw new Exception("Pedido com TXID {$txid} não foi encontrado no banco de dados.");
+                // Última tentativa: busca por uma tentativa prévia salva na tabela de pagamentos
+                $payment = \App\Models\Payment::where('txid', $txid)->with('order')->first();
+                if ($payment && $payment->order) {
+                    $order = $payment->order;
+                } else {
+                    throw new Exception("Pedido com TXID {$txid} não foi encontrado no banco de dados.");
+                }
             }
 
-            if ($order->payment_status === 'paid' || $order->status === 'preparing') {
+            if ($order->payment_status === 'paid') {
                 return $order;
             }
-
-            $paymentMethod = PaymentMethod::where('engine_type', 'bank_api')->first();
-            $methodId = $paymentMethod ? $paymentMethod->id : null;
-            $methodName = $paymentMethod ? $paymentMethod->name : 'Pix Sicredi';
 
             $shift = CashShift::where('status', 'open')->latest()->first();
 
@@ -274,19 +281,35 @@ class OrderPaymentService
                 throw new Exception('Operação negada: Nenhum turno de caixa aberto. Por favor, abra o caixa antes de receber pagamentos.');
             }
 
-            $orderPayment = $order->payments()->create([
-                'payment_method_id' => $methodId,
-                'cash_shift_id'     => $shift->id,
-                'amount'            => $amount,
-                'method'            => $methodName
-            ]);
+            $orderPayment = $order->payments()->where('txid', $txid)->first();
+            $paymentMethod = PaymentMethod::where('name', 'like', '%PIX%')->orWhere('engine_type', 'bank_api')->first();
+
+            if ($orderPayment) {
+                $orderPayment->update([
+                    'status' => 'paid',
+                    'is_paid' => true,
+                    'transaction_id' => $endToEndId,
+                    'cash_shift_id' => $shift->id
+                ]);
+            } else {
+                $orderPayment = $order->payments()->create([
+                    'payment_method_id' => $paymentMethod ? $paymentMethod->id : null,
+                    'cash_shift_id'     => $shift->id,
+                    'amount'            => $amount,
+                    'method'            => $paymentMethod ? $paymentMethod->name : 'PIX',
+                    'status'            => 'paid',
+                    'is_paid'           => true,
+                    'txid'              => $txid,
+                    'transaction_id'    => $endToEndId
+                ]);
+            }
 
             Transaction::create([
                 'bank_account_id'  => $shift->bank_account_id,
                 'cash_shift_id'    => $shift->id,
                 'order_id'         => $order->id,
                 'payment_id'       => $orderPayment->id,
-                'payment_method_id'=> $methodId,
+                'payment_method_id'=> $orderPayment->payment_method_id,
                 'type'             => 'in',
                 'category'         => 'order_sale',
                 'amount'           => $amount,
@@ -299,13 +322,16 @@ class OrderPaymentService
                 if ($item->status === 'cancelled') continue;
                 $item->update(['paid_qty' => $item->quantity]);
 
-                $orderPayment->items()->attach($item->id, [
-                    'quantity' => $item->quantity,
-                    'amount'   => (float) $item->total_price
+                $orderPayment->items()->syncWithoutDetaching([
+                    $item->id => [
+                        'quantity' => $item->quantity,
+                        'amount'   => (float) $item->total_price
+                    ]
                 ]);
             }
 
             $order->payment_status = 'paid';
+            $order->payment_intent_status = 'paid';
 
             if ($order->type === 'table') {
                 $order->status = 'closed';

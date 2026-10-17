@@ -23,6 +23,8 @@ class OperationsDashboardService
         $shift = CashShift::where('status', 'open')->latest('opened_at')->first();
         $shiftStart = $shift ? $shift->opened_at : now()->startOfDay();
 
+        $terminalStatuses = ['closed', 'cancelled', 'completed', 'delivered', 'merged'];
+
         $orders = Order::with([
                     "items.modifiers", "items.subItems.modifiers", "items.product.category",
                     "items.kitchen", "items.product.kitchen",
@@ -32,10 +34,10 @@ class OperationsDashboardService
                     "fiscalDocument",
                     "diningTable"
                 ])
-                ->where(function ($query) use ($shiftStart) {
-                    $query->whereNotIn("status", ["closed", "cancelled"])
-                            ->orWhere(function ($subQuery) use ($shiftStart) {
-                                $subQuery->whereIn("status", ["closed", "cancelled"])
+                ->where(function ($query) use ($shiftStart, $terminalStatuses) {
+                    $query->whereNotIn("status", $terminalStatuses)
+                            ->orWhere(function ($subQuery) use ($shiftStart, $terminalStatuses) {
+                                $subQuery->whereIn("status", $terminalStatuses)
                                         ->where('updated_at', '>=', $shiftStart);
                             });
                 })
