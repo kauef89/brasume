@@ -6,10 +6,31 @@
                 <span>{{ $formatCurrency(subtotal) }}</span>
             </div>
 
-            <div v-if="orderType === 'delivery' && isRoutingValid" class="flex justify-between text-xs text-surface-muted font-medium">
+            <!-- LINHA DA TAXA DE ENTREGA (DELIVERY) -->
+            <div v-if="orderType === 'delivery'" class="flex justify-between items-center text-xs text-surface-muted font-medium">
                 <span>Taxa de Entrega</span>
-                <span v-if="deliveryFee === 0" class="text-success-smart">Grátis</span>
-                <span v-else>+ {{ $formatCurrency(deliveryFee) }}</span>
+
+                <!-- 1. Sem endereço indicado: botão de ação -->
+                <button
+                    v-if="!hasAddress"
+                    type="button"
+                    @click="$emit('add-address')"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 transition-all cursor-pointer outline-none active:scale-95"
+                    title="Clique para selecionar ou cadastrar o endereço de entrega"
+                >
+                    <i class="pi pi-map-marker text-[10px]"></i>
+                    <span>Adicionar endereço</span>
+                </button>
+
+                <!-- 2. Com endereço indicado e taxa zerada: Frete Grátis -->
+                <span v-else-if="deliveryFee === 0" class="text-success-smart font-bold">
+                    Grátis
+                </span>
+
+                <!-- 3. Com endereço e taxa calculada -->
+                <span v-else class="text-surface-text font-bold">
+                    + {{ $formatCurrency(deliveryFee) }}
+                </span>
             </div>
 
             <!-- LINHA DA TAXA DE SERVIÇO DINÂMICA -->
@@ -93,6 +114,7 @@ import CouponPickerModal from "./CouponPickerModal.vue";
 const props = defineProps({
     subtotal: { type: Number, required: true },
     deliveryFee: { type: Number, default: 0 },
+    hasAddress: { type: Boolean, default: false },
     serviceFee: { type: Number, default: 0 },
     serviceTaxPercentage: { type: Number, default: 0 },
     showServiceFeeRow: { type: Boolean, default: false },
@@ -103,10 +125,9 @@ const props = defineProps({
     isRoutingValid: { type: Boolean, default: false },
     canSubmit: { type: Boolean, default: false },
     appliedCouponName: { type: String, default: null },
-    customerId: { type: [Number, null], default: null },
 });
 
-const emit = defineEmits(["checkout", "apply-coupon", "remove-coupon", "toggle-coupon-form"]);
+const emit = defineEmits(['checkout', 'add-address', 'open-coupons', 'remove-coupon']);
 
 const showCouponModal = ref(false);
 

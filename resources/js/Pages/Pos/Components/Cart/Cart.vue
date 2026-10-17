@@ -142,6 +142,7 @@
                 v-show="isWaiterMode || (!isRoutingProcessOpen && !showEstimatorConfig)"
                 :subtotal="cartSubtotal"
                 :delivery-fee="deliveryFee"
+                :has-address="hasDeliveryAddress"
                 :service-fee="serviceFee"
                 :service-tax-percentage="serviceTaxPercentage"
                 :show-service-fee-row="hasServiceTaxGlobal"
@@ -153,6 +154,7 @@
                 :can-submit="canSubmit"
                 :applied-coupon-name="appliedCouponName"
                 :is-customer-mode="false"
+                @add-address="openDeliveryRouting"
                 @apply-coupon="applyCoupon($event, cartSubtotal)"
                 @remove-coupon="removeCoupon"
                 @checkout="processCheckout"
@@ -262,6 +264,23 @@ watch(
     },
     { immediate: true }
 );
+
+const hasDeliveryAddress = computed(() => {
+    const meta = orderMetadata.value || {};
+    const edit = props.editOrderData || {};
+    return Boolean(
+        meta.address?.id ||
+        meta.address_id ||
+        meta.address?.street_id ||
+        (meta.address?.street && String(meta.address.street).trim().length > 0) ||
+        edit.address?.id ||
+        edit.address_id
+    );
+});
+
+const openDeliveryRouting = () => {
+    isRoutingProcessOpen.value = true;
+};
 
 watch(() => props.editOrderData, (editData) => {
     if (editData) {

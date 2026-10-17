@@ -3,7 +3,7 @@
         :is="mode === 'inline' ? 'div' : AdaptiveModal"
         v-model:visible="isVisible"
         class="flex flex-col h-full w-full"
-        :class="mode === 'inline' ? 'absolute inset-0 bg-surface-2 p-6 animate-in fade-in slide-in-from-right-5 duration-200' : ''"
+        :class="mode === 'inline' ? 'absolute inset-0 bg-surface-2 p-6 animate-in fade-in slide-from-right-5 duration-200' : ''"
     >
         <!-- CABEÇALHO ADAPTATIVO -->
         <div class="flex items-center gap-3 mb-6 shrink-0" :class="mode === 'inline' ? '' : 'mt-2 justify-center flex-col text-center'">
@@ -14,8 +14,8 @@
 
             <div class="flex flex-col" :class="mode === 'inline' ? '' : 'items-center'">
                 <h2 class="text-xl font-black text-surface-text leading-tight">{{ title }}</h2>
-                <span class="text-[10px] font-black uppercase tracking-widest text-surface-muted mt-0.5" v-if="itemName">
-                    {{ itemName }}
+                <span class="text-[10px] font-black uppercase tracking-widest text-surface-muted mt-0.5" v-if="displayItemName">
+                    {{ displayItemName }}
                 </span>
             </div>
         </div>
@@ -23,20 +23,22 @@
         <!-- FORMULÁRIO ROLÁVEL -->
         <div class="flex flex-col gap-4 flex-1 overflow-y-auto hide-scrollbar pr-0.5 pb-4">
 
-            <!-- Opções Pré-definidas de Motivo -->
+            <!-- Opções Pré-definidas de Motivo com SelectableCard -->
             <div class="flex flex-col gap-2">
-                <label class="text-[10px] font-black text-surface-muted uppercase tracking-widest">Selecione o Motivo</label>
-                <div class="grid grid-cols-2 gap-2">
-                    <button
+                <label class="text-[10px] font-black text-surface-muted uppercase tracking-widest">
+                    Selecione o Motivo
+                </label>
+                <div class="flex flex-col gap-2">
+                    <SelectableCard
                         v-for="r in reasons"
                         :key="r"
-                        type="button"
-                        @click="form.reason = r"
-                        class="p-3 rounded-xl font-medium text-xs transition-all border outline-none text-left cursor-pointer leading-snug"
-                        :class="form.reason === r ? 'bg-primary-500 border-primary-500 text-white shadow-md' : 'bg-surface-1 border-surface-border text-surface-text hover:border-primary-400'"
-                    >
-                        {{ r }}
-                    </button>
+                        :title="r"
+                        :is-selected="form.reason === r"
+                        :color="cardColor"
+                        :show-checkmark="true"
+                        icon="pi-comment"
+                        @select="form.reason = r"
+                    />
                 </div>
             </div>
 
@@ -80,15 +82,18 @@
                             {{ form.lostItems.length === orderItems.length ? 'Desmarcar Tudo' : 'Marcar Tudo' }}
                         </button>
                     </div>
-                    <div class="flex flex-col gap-2 max-h-[160px] overflow-y-auto hide-scrollbar pr-1">
-                        <div v-for="item in orderItems" :key="item.id" @click="toggleLossItem(item.id)" class="flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer" :class="form.lostItems.includes(item.id) ? 'bg-orange-500/10 border-orange-500/30' : 'bg-surface-2 border-surface-border'">
-                            <div class="w-5 h-5 rounded flex items-center justify-center border transition-colors shrink-0" :class="form.lostItems.includes(item.id) ? 'bg-orange-500 border-orange-500 text-white' : 'bg-surface-1 border-surface-muted text-transparent'">
-                                <i class="pi pi-check text-[10px]"></i>
-                            </div>
-                            <div class="flex flex-col min-w-0 flex-1">
-                                <span class="font-bold text-xs text-surface-text truncate">{{ item.quantity }}x {{ item.product_name }}</span>
-                            </div>
-                        </div>
+                    <div class="flex flex-col gap-2 max-h-[180px] overflow-y-auto hide-scrollbar pr-1">
+                        <SelectableCard
+                            v-for="item in orderItems"
+                            :key="getItemId(item)"
+                            :title="getItemTitle(item)"
+                            :subtitle="getItemSubtitle(item)"
+                            :is-selected="form.lostItems.includes(getItemId(item))"
+                            color="warning"
+                            :show-checkmark="true"
+                            icon="pi-box"
+                            @select="toggleLossItem(getItemId(item))"
+                        />
                     </div>
                 </div>
             </div>
@@ -124,9 +129,10 @@
 </template>
 
 <script setup>
-import SecureActionButton from '@/Components/UI/SecureActionButton.vue';
 import { ref, computed, watch } from 'vue';
+import SecureActionButton from '@/Components/UI/SecureActionButton.vue';
 import AdaptiveModal from '@/Components/UI/AdaptiveModal.vue';
+import SelectableCard from '@/Components/UI/SelectableCard.vue';
 
 const props = defineProps({
     visible: Boolean,
@@ -154,10 +160,27 @@ watch(() => props.visible, (isOpen) => {
 
 const isOrderContext = computed(() => props.actionType === 'cancel_order');
 
-// Ações fiscais que acionam cancelamento de NFC-e na SEFAZ
 const isFiscalAction = computed(() => ['cancel_order', 'reactivate', 'correct_payment'].includes(props.actionType));
 
 const reasonLength = computed(() => (form.value.reason || '').trim().length);
+
+const cardColor = computed(() => {
+    if (['cancel', 'cancel_order'].includes(props.actionType)) return 'red';
+    if (['rollback_payment', 'correct_payment'].includes(props.actionType)) return 'warning';
+    if (props.actionType === 'reactivate') return 'primary';
+    return 'primary';
+});
+
+const displayItemName = computed(() => {
+    if (props.itemName) return props.itemName;
+    if (props.itemToProcess) {
+        return props.itemToProcess.name
+            || props.itemToProcess.product_name
+            || props.itemToProcess.product?.name
+            || null;
+    }
+    return null;
+});
 
 const orderItems = computed(() => {
     if (isOrderContext.value && props.itemToProcess?.items) {
@@ -166,23 +189,58 @@ const orderItems = computed(() => {
     return [];
 });
 
+const getItemId = (item) => {
+    return item?.id ?? item?.item_id ?? item?.cartId ?? null;
+};
+
+const getItemTitle = (item) => {
+    if (!item) return 'Item';
+    const name = item.name
+        || item.product_name
+        || item.product?.name
+        || item.title
+        || 'Item';
+
+    const qty = item.qty
+        ?? item.quantity
+        ?? item.base_qty
+        ?? 1;
+
+    return `${qty}x ${name}`;
+};
+
+const getItemSubtitle = (item) => {
+    if (!item) return null;
+    if (item.notes && item.notes.trim()) return item.notes;
+    if (item.observation && item.observation.trim()) return item.observation;
+    if (Array.isArray(item.structuredModifiers) && item.structuredModifiers.length > 0) {
+        return item.structuredModifiers.map(m => m.name || m).filter(Boolean).join(', ');
+    }
+    return null;
+};
+
 watch(() => form.value.isLoss, (newVal) => {
     if (newVal && isOrderContext.value && orderItems.value.length > 0) {
-        form.value.lostItems = orderItems.value.map(i => i.id);
+        form.value.lostItems = orderItems.value.map(i => getItemId(i)).filter(Boolean);
     } else {
         form.value.lostItems = [];
     }
 });
 
 const toggleLossItem = (id) => {
+    if (!id) return;
     const idx = form.value.lostItems.indexOf(id);
     if (idx > -1) form.value.lostItems.splice(idx, 1);
     else form.value.lostItems.push(id);
 };
 
 const toggleAllItems = () => {
-    if (form.value.lostItems.length === orderItems.value.length) form.value.lostItems = [];
-    else form.value.lostItems = orderItems.value.map(i => i.id);
+    const allIds = orderItems.value.map(i => getItemId(i)).filter(Boolean);
+    if (form.value.lostItems.length === allIds.length) {
+        form.value.lostItems = [];
+    } else {
+        form.value.lostItems = [...allIds];
+    }
 };
 
 const title = computed(() => {
@@ -210,7 +268,6 @@ const iconColors = computed(() => {
 
 const showLossOptions = computed(() => ['cancel', 'cancel_order', 'swap'].includes(props.actionType));
 
-// Todos os motivos agora respeitam estritamente a exigência legal de >= 15 caracteres da SEFAZ
 const reasons = computed(() => {
     if (props.actionType === 'reactivate') {
         return [

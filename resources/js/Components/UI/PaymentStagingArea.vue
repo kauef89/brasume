@@ -1,9 +1,9 @@
 <template>
-    <div class="flex flex-col gap-6 w-full bg-surface-3 p-6 rounded-3xl">
+    <div class="flex flex-col gap-6 w-full">
 
         <!-- PAGAMENTOS JÁ ADICIONADOS -->
-        <div v-if="stagedPayments && stagedPayments.length > 0" class="flex flex-col gap-2">
-            <div v-for="(p, idx) in stagedPayments" :key="idx" class="flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+        <div v-if="stagedPayments && stagedPayments.length > 0" class="flex flex-col gap-1">
+            <div v-for="(p, idx) in stagedPayments" :key="idx" class="flex items-center justify-between animate-in fade-in slide-in-from-top-2  bg-surface-3 pl-2 rounded-xl">
                 <div class="flex flex-col">
                     <span class="font-medium text-stone-800 dark:text-stone-200">{{ p.method_name }}</span>
                     <span v-if="p.change_target" class="text-xs font-medium text-orange-500 mt-0.5">
@@ -14,7 +14,7 @@
                     <span class="font-black text-lg" :class="p.engine_type === 'internal_loyalty' ? 'text-primary-500' : 'text-stone-900 dark:text-white'">
                         {{ $formatCurrency(p.amount) }}
                     </span>
-                    <Button icon="pi pi-trash" variant="text" severity="danger" rounded class="w-8 h-8 p-0" @click="$emit('remove-payment', idx)" />
+                    <Button icon="pi pi-trash" variant="text" severity="danger" rounded class="w-8 h-8 p-0 hover:bg-danger-500" @click="$emit('remove-payment', idx)" />
                 </div>
             </div>
         </div>
@@ -99,24 +99,41 @@
                 </div>
             </div>
 
-            <!-- FORMAS DE PAGAMENTO -->
-            <div v-else class="grid grid-cols-3 gap-2 pt-3 border-t-2 border-surface-border/50 mt-1">
+            <!-- FORMAS DE PAGAMENTO: BOTÕES ESTILO KEYPAD PDV -->
+            <div v-else class="grid grid-cols-2 gap-2 pt-3 border-t-2 border-surface-border/50 mt-1">
                 <button
                     v-for="method in availableMethods"
                     :key="method.id"
                     @click="handleMethodClick(method)"
                     :disabled="isMethodDisabled(method)"
-                    class="p-2.5 px-3 rounded-xl flex flex-row items-center justify-start gap-3 transition-all text-left border"
+                    type="button"
+                    class="group relative p-2 rounded-2xl flex flex-row items-center justify-center gap-1.5 transition-all text-center outline-none select-none active:scale-[0.97]"
                     :class="[
-                        method.colorClass || 'border-stone-100 dark:border-stone-800 bg-surface-1 text-stone-600 dark:text-stone-300 hover:border-primary-500 hover:bg-primary-50 hover:text-primary-700',
-                        { 'opacity-50 cursor-not-allowed': isMethodDisabled(method), 'cursor-pointer': !isMethodDisabled(method) }
+                        isMethodDisabled(method)
+                            ? 'opacity-40 bg-primary-500/50 grayscale text-surface-muted cursor-not-allowed'
+                            : 'border-surface-border bg-primary-500/10 text-surface-text hover:bg-primary-500/30 cursor-pointer'
                     ]"
                 >
-                    <i :class="['pi', method.icon, method.iconColor || 'text-xl', 'shrink-0']"></i>
+                    <!-- Ícone em container suave -->
+                    <div
+                        class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors"
+                        :class="[
+                            isMethodDisabled(method)
+                                ? 'bg-surface-2 text-surface-muted'
+                                : 'bg-black/10 text-surface-text group-hover:bg-primary-500/10 group-hover:text-primary-200'
+                        ]"
+                    >
+                        <i :class="['pi text-base', method.icon || 'pi-credit-card']"></i>
+                    </div>
 
-                    <div class="flex flex-col items-start min-w-0 flex-1 leading-tight">
-                        <span class="font-black text-[11px] uppercase tracking-wider truncate w-full">{{ method.name }}</span>
-                        <span v-if="method.subtitle" class="text-[9px] font-medium opacity-75 truncate w-full mt-0.5">{{ method.subtitle }}</span>
+                    <!-- Textos centralizados com foco em legibilidade rápida -->
+                    <div class="flex flex-col items-center min-w-0 w-full leading-tight">
+                        <span class="font-black text-xs uppercase tracking-wide truncate w-full">
+                            {{ method.name }}
+                        </span>
+                        <span v-if="method.subtitle" class="text-[9px] font-medium text-surface-muted truncate w-full mt-0.5">
+                            {{ method.subtitle }}
+                        </span>
                     </div>
                 </button>
             </div>

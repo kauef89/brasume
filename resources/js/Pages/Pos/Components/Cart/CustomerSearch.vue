@@ -146,6 +146,7 @@ const selectCustomer = (customer) => {
     query.value = "";
     emit("update:modelValue", customer);
     emit("customer-selected", customer);
+    emit("selected", customer); // 🚀 Alias retrocompatível
 };
 
 const useSimpleId = () => {
@@ -155,6 +156,7 @@ const useSimpleId = () => {
     query.value = "";
     emit("update:modelValue", simpleName);
     emit("customer-selected", simpleName);
+    emit("selected", simpleName); // 🚀 Alias retrocompatível
 };
 
 const clearSelection = () => {

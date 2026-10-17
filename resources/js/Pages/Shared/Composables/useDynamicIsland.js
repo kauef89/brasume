@@ -13,7 +13,7 @@ export function useDynamicIsland(props, emit) {
     let isUpdating = false;
 
     // Identidade visual idêntica para todas as telas (blur e cor de superfície unificados)
-    const baseIslandClass = "fixed bottom-6 left-1/2 z-[70] backdrop-blur-md bg-surface-1/40 flex items-center justify-center overflow-hidden max-w-[calc(100vw-2rem)] select-none will-change-[width,height,border-radius]";
+    const baseIslandClass = "fixed bottom-6 left-1/2 z-[70] backdrop-blur-md bg-surface-1/70 border border-white/5 dark:border-white/5 shadow-[0_18px_40px_rgba(0,0,0,0.8)] flex items-center justify-center max-w-[calc(100vw-2rem)] select-none will-change-[width,height,border-radius]";
 
     // Formato da cápsula: rounded-3xl para 2 linhas e rounded-full para linha única
     const shapeIslandClass = computed(() => {

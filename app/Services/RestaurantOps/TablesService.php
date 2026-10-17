@@ -30,27 +30,57 @@ class TablesService
         }
 
         return DB::transaction(function () use ($sourceTable, $targetTableId) {
-            // Trava as duas mesas para evitar double booking/race conditions
+            // Trava as duas mesas para evitar race conditions
             $sourceTable = DiningTable::where('id', $sourceTable->id)->lockForUpdate()->firstOrFail();
             $targetTable = DiningTable::where('id', $targetTableId)->lockForUpdate()->firstOrFail();
 
-            $orders = Order::where('dining_table_id', $sourceTable->id)
+            // 1. Impede mover para uma mesa que já está ocupada
+            if ($targetTable->status === 'occupied') {
+                throw ValidationException::withMessages([
+                    'target_table_id' => "A mesa {$targetTable->name} já está ocupada.",
+                ]);
+            }
+
+            // 2. Busca pedidos ativos associados à mesa de origem (por ID ou número)
+            $orders = Order::where(function ($query) use ($sourceTable) {
+                    $query->where('dining_table_id', $sourceTable->id)
+                          ->orWhere('table_number', $sourceTable->name);
+                })
                 ->whereNotIn('status', ['closed', 'cancelled', 'completed', 'delivered'])
                 ->where('payment_status', '!=', 'paid')
                 ->lockForUpdate()
                 ->get();
 
-            $updatePayload = [
-                'table_number' => $targetTable->name,
-                'dining_table_id' => $targetTable->id
-            ];
+            if ($orders->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'target_table_id' => "Nenhuma comanda ativa encontrada na mesa {$sourceTable->name}.",
+                ]);
+            }
 
+            // 3. Atualiza os pedidos transferindo a titularidade e o nome padrão
             foreach ($orders as $order) {
+                $updatePayload = [
+                    'table_number'    => $targetTable->name,
+                    'dining_table_id' => $targetTable->id,
+                ];
+
+                // Se o nome do cliente for genérico da mesa anterior, renomeia para a nova mesa
+                $oldDefaultNames = [
+                    $sourceTable->name,
+                    "Mesa {$sourceTable->name}",
+                    "Mesa " . ltrim($sourceTable->name, '0'),
+                ];
+
+                if (!$order->customer_name || in_array($order->customer_name, $oldDefaultNames)) {
+                    $updatePayload['customer_name'] = "Mesa {$targetTable->name}";
+                }
+
                 $order->update($updatePayload);
 
                 DB::afterCommit(fn () => broadcast(new OrderUpdated($order->fresh())));
             }
 
+            // 4. Alterna os estados das mesas
             $sourceTable->update(['status' => 'available']);
             $targetTable->update(['status' => 'occupied']);
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Pos;
 
+use App\Models\CompanySetting;
 use Illuminate\Foundation\Http\FormRequest;
 
 class CloseShiftRequest extends FormRequest
@@ -13,7 +14,7 @@ class CloseShiftRequest extends FormRequest
 
     public function rules(): array
     {
-        $setting = \App\Models\CompanySetting::getCached() ?? \App\Models\CompanySetting::first();
+        $setting = CompanySetting::getCached() ?? CompanySetting::first();
         $requireAttendance = (bool) ($setting?->require_shift_attendance ?? false);
 
         return [
@@ -39,15 +40,29 @@ class CloseShiftRequest extends FormRequest
     {
         $attendees = $this->input('attendees');
 
+        // Decodifica caso venha como string JSON
         if (is_string($attendees)) {
             $decoded = json_decode($attendees, true);
-            if (json_last_error() === JSON_ERROR_NONE) {
-                $this->merge(['attendees' => $decoded]);
-            } else {
-                $this->merge(['attendees' => []]);
-            }
+            $attendees = (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) ? $decoded : [];
         } elseif (!is_array($attendees)) {
-            $this->merge(['attendees' => []]);
+            $attendees = [];
         }
+
+        // Normaliza extraindo apenas o ID inteiro, suportando objetos {id: 1}, {user_id: 1} ou inteiros diretos
+        $normalized = [];
+        foreach ($attendees as $attendee) {
+            if (is_array($attendee)) {
+                $id = $attendee['id'] ?? $attendee['user_id'] ?? null;
+                if ($id !== null && is_numeric($id)) {
+                    $normalized[] = (int) $id;
+                }
+            } elseif (is_numeric($attendee)) {
+                $normalized[] = (int) $attendee;
+            }
+        }
+
+        $this->merge([
+            'attendees' => array_values(array_unique($normalized)),
+        ]);
     }
 }

@@ -50,7 +50,7 @@
         />
     </div>
 
-    <!-- PAINEL DIREITO: PAGAMENTO -->
+    <!-- PAINEL DIREITO: PAGAMENTO E SUBPAINÉIS EMBUTIDOS -->
     <div class="w-full md:w-[400px] lg:w-[480px] shrink-0 flex flex-col bg-surface-2 rounded-4xl overflow-hidden min-h-0 relative">
       <Transition name="fade-slide" mode="out-in">
 
@@ -100,12 +100,12 @@
                 @remove-coupon="handleRemoveCheckoutCoupon"
             />
 
-            <div class="p-6 bg-surface-2 border-t border-surface-border shrink-0 z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.02)]">
+            <div class="p-6 shrink-0 z-10">
                 <Button
                     label="Confirmar Recebimento"
                     icon="pi pi-check-circle"
-                    class="w-full h-16 text-xl font-black shadow-md border-none outline-none transition-colors"
-                    :class="canSubmitCheckout ? 'bg-success-500 hover:bg-success-600 text-white cursor-pointer' : 'bg-surface-3 text-surface-muted cursor-not-allowed'"
+                    class="w-full h-16 text-xl rounded-full! font-black border-none outline-none transition-colors"
+                    :class="canSubmitCheckout ? 'bg-success-500 hover:bg-success-500 text-white cursor-pointer' : 'bg-surface-3 text-surface-muted cursor-not-allowed'"
                     :disabled="!canSubmitCheckout"
                     @click="processPayment"
                 />
@@ -126,13 +126,46 @@
         />
 
       </Transition>
+
+      <!-- SUBPAINEL EMBUTIDO: VINCULAR CLIENTE -->
+      <Transition name="fade-slide">
+        <div
+            v-if="isLinkCustomerModalVisible"
+            class="absolute inset-0 bg-surface-2 z-30 flex flex-col p-6"
+        >
+            <div class="flex items-center justify-between pb-4 mb-4 border-b border-surface-border/50 shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-primary-500/10 text-primary-500 flex items-center justify-center font-bold">
+                        <i class="pi pi-user-plus text-base"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-base text-surface-text leading-tight">Identificar Cliente</h3>
+                        <p class="text-xs text-surface-muted">Vincule um cadastro ou nome avulso à comanda</p>
+                    </div>
+                </div>
+
+                <button
+                    @click="isLinkCustomerModalVisible = false"
+                    type="button"
+                    class="w-9 h-9 rounded-full bg-surface-3 hover:bg-surface-4 text-surface-muted hover:text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer"
+                    title="Fechar"
+                >
+                    <i class="pi pi-times text-xs"></i>
+                </button>
+            </div>
+
+            <div class="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
+                <CustomerSearch
+                    order-type="counter"
+                    @customer-selected="linkCustomer"
+                    @create-new="openNewCustomerModal"
+                />
+            </div>
+        </div>
+      </Transition>
     </div>
 
-    <!-- Modais -->
-    <Dialog v-model:visible="isLinkCustomerModalVisible" modal header="Identificar Cliente" class="w-[450px]" :draggable="false">
-      <CustomerSearch @selected="customerToLink = $event; linkCustomer();" @new-customer="openNewCustomerModal" />
-    </Dialog>
-
+    <!-- Modais Auxiliares -->
     <NewCustomerModal v-model:visible="isNewCustomerModalVisible" :initial-name="newCustomerInitialName" @save="handleSaveNewCustomer" />
 
     <OperationReasonModal
@@ -152,7 +185,6 @@ import { router, usePage } from "@inertiajs/vue3";
 import { useToast } from "primevue/usetoast";
 
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
 
 import PosTeleportButton from "@/Components/UI/PosTeleportButton.vue";
 import CheckoutItemsList from "@/Pages/Pos/Components/Checkout/CheckoutItemsList.vue";
@@ -556,18 +588,40 @@ const printBill = () => {
     });
 };
 
-const linkCustomer = () => {
+const linkCustomer = (selected = null) => {
+    if (selected) {
+        customerToLink.value = selected;
+    }
+
+    const currentCustomer = customerToLink.value;
+    const orderId = liveOrder.value?.id || props.order?.id;
+
+    if (!orderId) {
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'ID da comanda não identificado.', life: 3000 });
+        return;
+    }
+
+    if (!currentCustomer) {
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Selecione um cliente válido.', life: 3000 });
+        return;
+    }
+
     const payload = {
-        customer_id: typeof customerToLink.value === 'object' ? customerToLink.value.id : null,
-        customer_name: typeof customerToLink.value === 'object' ? customerToLink.value.name : customerToLink.value,
+        customer_id: typeof currentCustomer === 'object' ? currentCustomer?.id : null,
+        customer_name: typeof currentCustomer === 'object' ? currentCustomer?.name : currentCustomer,
         coupon_code: appliedCheckoutCoupon.value
     };
-    router.post(route('operations.orders.link-customer', liveOrder.value.id), payload, {
+
+    router.post(route('operations.orders.link-customer', orderId), payload, {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
             isLinkCustomerModalVisible.value = false;
+            customerToLink.value = null;
             toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Cliente vinculado!', life: 3000 });
+        },
+        onError: (err) => {
+            toast.add({ severity: 'error', summary: 'Atenção', detail: Object.values(err)[0] || 'Falha ao vincular cliente.', life: 4000 });
         }
     });
 };

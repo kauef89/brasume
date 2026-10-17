@@ -1,5 +1,5 @@
 <template>
-    <div class="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col gap-6 hide-scrollbar">
+    <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-6 hide-scrollbar">
 
         <!-- 🚨 BANNER DE CAIXA FECHADO COM ATALHO DE ABERTURA -->
         <div v-if="!$page.props.hasOpenShift" class="p-4 rounded-2xl bg-danger-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-danger-600 dark:text-danger-400 animate-in fade-in shrink-0">

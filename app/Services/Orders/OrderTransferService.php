@@ -5,6 +5,7 @@ namespace App\Services\Orders;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\DiningTable;
+use App\Models\CompanySetting;
 use App\Events\OrderUpdated;
 use App\Events\DiningTableUpdated;
 use App\Services\RestaurantOps\TablesService;
@@ -15,11 +16,13 @@ class OrderTransferService
     public function execute(array $data): void
     {
         DB::transaction(function () use ($data) {
-            $sourceOrder = Order::findOrFail($data['source_order_id']);
+            $sourceOrder = Order::lockForUpdate()->findOrFail($data['source_order_id']);
             $itemIds = $data['item_ids'];
 
+            // 1. Busca e valida os itens principais
             $mainItems = OrderItem::where('order_id', $sourceOrder->id)
                 ->whereIn('id', $itemIds)
+                ->lockForUpdate()
                 ->get();
 
             if ($mainItems->isEmpty()) {
@@ -30,47 +33,58 @@ class OrderTransferService
                 if ($item->paid_qty > 0) {
                     throw new \Exception("Não é possível transferir '{$item->product_name}' pois o item já possui pagamentos vinculados.");
                 }
+
+                // Impede transferir um subitem/adicional sem o seu item principal
+                if ($item->parent_item_id && !in_array($item->parent_item_id, $itemIds)) {
+                    throw new \Exception("Não é possível transferir o adicional '{$item->product_name}' sem transferir o prato principal.");
+                }
             }
 
+            // Captura os filhos imediatos de itens compostos/combos
             $childItems = OrderItem::where('order_id', $sourceOrder->id)
                 ->whereIn('parent_item_id', $mainItems->pluck('id'))
+                ->lockForUpdate()
                 ->get();
 
-            $transferValue = (float) $mainItems->sum('total_price');
+            // 2. Resolve ou localiza a comanda de destino
+            $destOrder = $this->resolveDestinationOrder($data, $sourceOrder);
 
-            // 1. Resolve ou localiza a comanda de destino
-            $destOrder = $this->resolveDestinationOrder($data);
+            // Trava para evitar transferência para a mesma comanda
+            if ($sourceOrder->id === $destOrder->id) {
+                throw new \Exception("A comanda de destino não pode ser a mesma de origem.");
+            }
 
-            // 2. Transfere fisicamente os itens para o pedido de destino
+            // 3. Transfere os itens para a comanda de destino
             $allItemsToTransfer = $mainItems->pluck('id')->merge($childItems->pluck('id'));
             OrderItem::whereIn('id', $allItemsToTransfer)->update(['order_id' => $destOrder->id]);
 
-            // 3. Recalcula a comanda de origem
+            // 4. Recalcula a comanda de origem
             $this->recalculateOrderTotals($sourceOrder);
 
-            // Verifica se ainda restam itens ativos na comanda de origem
+            // Verifica itens ativos restantes
             $remainingActiveItems = $sourceOrder->items()
                 ->where('status', '!=', 'cancelled')
                 ->count();
 
             if ($remainingActiveItems === 0) {
-                // 🚀 Em vez de 'cancelled', marcamos como 'merged' (transferido), registrando histórico
+                // Marca como 'cancelled' para ser tratado como inativo em todo o ecossistema
                 $sourceOrder->update([
-                    'status' => 'merged',
-                    'notes'  => trim(($sourceOrder->notes ? $sourceOrder->notes . ' | ' : '') . "Itens transferidos para {$destOrder->customer_name} (#{$destOrder->id})"),
+                    'status'        => 'cancelled',
+                    'cancel_reason' => "Transferência total para {$destOrder->customer_name} (#{$destOrder->id})",
+                    'notes'         => trim(($sourceOrder->notes ? $sourceOrder->notes . ' | ' : '') . "Itens transferidos para {$destOrder->customer_name} (#{$destOrder->id})"),
                 ]);
 
-                // Se a mesa de origem não tiver mais nenhum pedido ativo, libera a mesa física
+                // Libera a mesa física de origem
                 $this->freeTableIfEmpty($sourceOrder);
             }
 
-            // 4. Recalcula a comanda de destino
-            $this->recalculateOrderTotals($destOrder);
+            // 5. Recalcula a comanda de destino herdando a taxa de serviço se aplicável
+            $this->recalculateOrderTotals($destOrder, $sourceOrder);
 
             // Garante que a mesa de destino fique marcada como ocupada
             $this->occupyDestinationTable($destOrder);
 
-            // 5. Transmissão em tempo real para os terminais
+            // 6. Transmissão em tempo real
             try {
                 broadcast(new OrderUpdated($sourceOrder->fresh(['items', 'payments'])));
                 broadcast(new OrderUpdated($destOrder->fresh(['items', 'payments'])));
@@ -78,7 +92,7 @@ class OrderTransferService
         });
     }
 
-    private function recalculateOrderTotals(Order $order): void
+    private function recalculateOrderTotals(Order $order, ?Order $sourceOrderForTax = null): void
     {
         $subtotal = (float) $order->items()
             ->where('status', '!=', 'cancelled')
@@ -87,9 +101,16 @@ class OrderTransferService
         $deliveryFee = (float) ($order->delivery_fee ?? 0);
         $discount    = (float) ($order->discount ?? 0);
 
-        // Mantém a taxa de serviço proporcional se houver
+        // Calcula taxa de serviço proporcional ou herdada
         $serviceFee = 0.00;
-        if ((float) $order->service_fee > 0 && $subtotal > 0) {
+        $setting = CompanySetting::getCached() ?? CompanySetting::first();
+        $hasServiceTax = (bool) ($setting?->has_service_tax ?? false);
+        $serviceTaxTable = (bool) ($setting?->service_tax_table ?? true);
+
+        if ($hasServiceTax && $order->type === 'table' && $serviceTaxTable && $subtotal > 0) {
+            $taxRate = ((float) ($setting?->service_tax_percentage ?? 10.0)) / 100;
+            $serviceFee = round($subtotal * $taxRate, 2);
+        } elseif ((float) $order->service_fee > 0 && $subtotal > 0) {
             $oldSubtotal = (float) $order->subtotal > 0 ? (float) $order->subtotal : $subtotal;
             $rate = (float) $order->service_fee / $oldSubtotal;
             $serviceFee = round($subtotal * $rate, 2);
@@ -108,17 +129,17 @@ class OrderTransferService
         }
     }
 
-    private function resolveDestinationOrder(array $data): Order
+    private function resolveDestinationOrder(array $data, Order $sourceOrder): Order
     {
         if ($data['destination_type'] === 'table') {
             $intent = $data['destination_order_intent'] ?? null;
 
             // Se o usuário selecionou uma comanda específica existente
             if (is_numeric($intent)) {
-                $destOrder = Order::findOrFail((int) $intent);
+                $destOrder = Order::lockForUpdate()->findOrFail((int) $intent);
 
-                if (in_array($destOrder->status, ['closed', 'cancelled', 'merged'])) {
-                    throw new \Exception("A comanda de destino (#{$destOrder->id}) já está finalizada. Selecione outra comanda ou abra uma nova.");
+                if (in_array($destOrder->status, ['closed', 'cancelled', 'merged', 'completed'])) {
+                    throw new \Exception("A comanda de destino (#{$destOrder->id}) já está finalizada.");
                 }
 
                 return $destOrder;
@@ -142,14 +163,16 @@ class OrderTransferService
             $tableId = $table->id;
             $tableName = $table->name;
 
-            // 🚀 Se a intenção NÃO for criar uma subconta isolada, reaproveita a comanda ativa da mesa
+            // Se NÃO for criar uma subconta isolada, reaproveita a comanda ativa existente
             if ($intent !== 'new_subaccount') {
                 $existingActiveOrder = Order::where(function ($q) use ($table) {
                         $q->where('dining_table_id', $table->id)
                           ->orWhere('table_number', $table->name);
                     })
+                    ->where('id', '!=', $sourceOrder->id)
                     ->whereNotIn('status', ['closed', 'cancelled', 'merged', 'completed'])
                     ->latest('id')
+                    ->lockForUpdate()
                     ->first();
 
                 if ($existingActiveOrder) {
@@ -157,12 +180,13 @@ class OrderTransferService
                 }
             }
 
-            // Caso a mesa esteja livre ou tenha sido solicitado subconta, cria a comanda de destino
+            // Cria a comanda preservando o turno de caixa (cash_shift_id)
             $customerName = ($intent === 'new_subaccount' && !empty($data['new_subaccount_name']))
                 ? trim($data['new_subaccount_name'])
                 : "Mesa " . $tableName;
 
             return Order::create([
+                "cash_shift_id"   => $sourceOrder->cash_shift_id,
                 "dining_table_id" => (int) $tableId,
                 "table_number"    => $tableName,
                 "customer_name"   => $customerName,
@@ -174,13 +198,14 @@ class OrderTransferService
                 "delivery_fee"    => 0,
                 "service_fee"     => 0,
                 "total"           => 0,
-                "employee_id"     => auth()->id(),
+                "employee_id"     => auth()->id() ?? $sourceOrder->employee_id,
             ]);
         }
 
         $type = ($data['destination_order_intent'] ?? '') === 'new_delivery' ? 'delivery' : 'counter';
 
         return Order::create([
+            "cash_shift_id"  => $sourceOrder->cash_shift_id,
             "customer_name"  => "Novo " . ucfirst($type),
             "type"           => $type,
             "status"         => "pending",
@@ -190,7 +215,7 @@ class OrderTransferService
             "delivery_fee"   => 0,
             "service_fee"    => 0,
             "total"          => 0,
-            "employee_id"    => auth()->id(),
+            "employee_id"    => auth()->id() ?? $sourceOrder->employee_id,
         ]);
     }
 
@@ -212,7 +237,6 @@ class OrderTransferService
 
         if (!$hasOtherActive) {
             $table->update(['status' => 'available']);
-            app(TablesService::class)->split($table);
 
             try {
                 broadcast(new DiningTableUpdated($table->fresh()));

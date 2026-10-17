@@ -40,22 +40,26 @@
                 <div
                     v-for="addr in activeAddresses"
                     :key="addr.id"
-                    @click="$emit('select-address', addr)"
-                    class="p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between"
+                    @click="selectAndConfirm(addr)"
+                    class="p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between group active:scale-[0.99]"
                     :class="address?.id === addr.id
                         ? 'bg-primary-500/10 border-primary-500 shadow-sm'
-                        : 'bg-surface-3/50 border-surface-border/60 hover:bg-surface-3'"
+                        : 'bg-surface-3/50 border-surface-border/60 hover:bg-surface-3 hover:border-primary-500/40'"
                 >
                     <div class="flex flex-col min-w-0 pr-3">
-                        <span class="text-sm font-bold text-surface-text leading-tight truncate">{{ addr.full_address || addr.street?.name || addr.street }}</span>
+                        <span class="text-sm font-bold text-surface-text leading-tight truncate">
+                            {{ addr.full_address || addr.street?.name || addr.street }}
+                        </span>
                         <span class="text-xs text-surface-muted mt-0.5">
                             {{ addr.neighborhood?.name || addr.neighborhood || 'Bairro' }} — Taxa: {{ $formatCurrency(addr.delivery_fee ?? addr.neighborhood?.delivery_fee ?? 0) }}
                         </span>
-                        <span v-if="addr.reference" class="text-[11px] text-surface-muted/70 italic mt-0.5 truncate">Ref: {{ addr.reference }}</span>
+                        <span v-if="addr.reference" class="text-[11px] text-surface-muted/70 italic mt-0.5 truncate">
+                            Ref: {{ addr.reference }}
+                        </span>
                     </div>
 
                     <div class="flex items-center gap-2 shrink-0">
-                        <!-- 🗑️ BOTÃO DE INATIVAR COM A LIXEIRA -->
+                        <!-- Lixeira com proteção contra clique de seleção -->
                         <button
                             type="button"
                             @click.stop="handleDeactivateAddress(addr)"
@@ -65,11 +69,14 @@
                             <i class="pi pi-trash text-xs"></i>
                         </button>
 
+                        <!-- Indicador de Seleção / Ação Direta -->
                         <div
-                            class="w-6 h-6 rounded-full flex items-center justify-center border"
-                            :class="address?.id === addr.id ? 'bg-primary-500 border-primary-500 text-white' : 'border-surface-border'"
+                            class="w-7 h-7 rounded-full flex items-center justify-center border transition-all"
+                            :class="address?.id === addr.id
+                                ? 'bg-primary-500 border-primary-500 text-white shadow-sm'
+                                : 'border-surface-border text-surface-muted group-hover:border-primary-500/50 group-hover:text-primary-500'"
                         >
-                            <i v-if="address?.id === addr.id" class="pi pi-check text-[10px] font-black"></i>
+                            <i :class="address?.id === addr.id ? 'pi pi-check' : 'pi pi-arrow-right'" class="text-[10px] font-black"></i>
                         </div>
                     </div>
                 </div>
@@ -88,17 +95,6 @@
                 </button>
             </div>
         </div>
-
-        <!-- APLICAÇÃO FINAL -->
-        <button
-            type="button"
-            :disabled="!isReadyToApply"
-            @click="confirmDelivery"
-            class="w-full h-12 bg-primary-500 hover:bg-primary-600 text-white font-black text-xs uppercase tracking-widest rounded-full transition-all flex items-center justify-center gap-2 border-none cursor-pointer disabled: grayscale opacity-40"
-        >
-            <i class="pi pi-check text-xs"></i>
-            <span>Confirmar Rota de Entrega</span>
-        </button>
 
     </div>
 </template>
@@ -130,12 +126,21 @@ const customerAddresses = computed(() => {
     return fresh?.addresses || props.customer.addresses || [];
 });
 
-// Filtra apenas os endereços ativos (is_active !== false e !== 0)
 const activeAddresses = computed(() => {
     return customerAddresses.value.filter(a => a.is_active !== false && a.is_active !== 0 && a.is_active !== '0');
 });
 
-// 🚀 MEMÓRIA REATIVA: Rastreador de novos endereços
+// Ação Direta: Seleciona e Aplica no mesmo clique
+const selectAndConfirm = (addr) => {
+    emit('select-address', addr);
+    emit('apply', {
+        type: 'delivery',
+        customer: props.customer,
+        address: addr
+    });
+};
+
+// Memória Reativa: Quando um novo endereço é cadastrado, já aplica direto
 const knownAddressIds = ref(activeAddresses.value.map(a => String(a.id)));
 
 watch(activeAddresses, (newAddresses) => {
@@ -145,42 +150,25 @@ watch(activeAddresses, (newAddresses) => {
     const addedIds = currentIds.filter(id => !knownAddressIds.value.includes(id));
 
     if (addedIds.length > 0) {
-        // Endereço novo acabou de chegar! Pula nele e seleciona instantaneamente
         const newAddr = newAddresses.find(a => String(a.id) === addedIds[addedIds.length - 1]);
-        if (newAddr) {
-            emit('select-address', newAddr);
-        }
+        if (newAddr) selectAndConfirm(newAddr);
     } else if (!props.address && newAddresses.length > 0) {
-        // Fallback: se não tiver nada ativo (primeiro carregamento), pega o padrão ou o primeiro
+        // Seleciona o padrão e já valida a rota imediatamente
         const defaultAddr = newAddresses.find(a => a.is_default) || newAddresses[0];
-        emit('select-address', defaultAddr);
+        selectAndConfirm(defaultAddr);
     }
 
-    // Sincroniza a memória com o estado atual
     knownAddressIds.value = currentIds;
 }, { deep: true, immediate: true });
-
-const isReadyToApply = computed(() => Boolean(props.customer && props.address));
-
-const confirmDelivery = () => {
-    if (!isReadyToApply.value) return;
-    emit('apply', {
-        type: 'delivery',
-        customer: props.customer,
-        address: props.address
-    });
-};
 
 const handleDeactivateAddress = (addr) => {
     const addressName = addr.full_address || addr.street?.name || addr.street || 'este endereço';
     if (!confirm(`Deseja realmente inativar ${addressName}?`)) return;
 
-    // Se o endereço inativado for o atualmente selecionado no rascunho, desmarca-o
     if (props.address?.id === addr.id) {
         emit('select-address', null);
     }
 
-    // Caso 1: Endereço temporário em memória
     if (addr.is_temporary || String(addr.id).startsWith('temp_')) {
         const idx = props.customer.addresses?.findIndex(a => a.id === addr.id);
         if (idx !== undefined && idx > -1) {
@@ -190,7 +178,6 @@ const handleDeactivateAddress = (addr) => {
         return;
     }
 
-    // Caso 2: Endereço persistido no banco de dados
     const customerId = props.customer.id;
     router.post(route('operations.customers.addresses.deactivate', [customerId, addr.id]), {}, {
         preserveState: true,

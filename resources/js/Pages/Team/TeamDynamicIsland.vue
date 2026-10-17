@@ -4,8 +4,13 @@
         :class="[baseIslandClass, shapeIslandClass]"
         :style="islandStyle"
     >
-        <!-- Container isolado de layout -->
-        <div ref="contentRef" class="w-max h-max flex items-center justify-center shrink-0 p-1.5">
+        <!-- Container isolado de layout e recorte -->
+        <!-- 🚀 Adicionado 'overflow-hidden' e ':class="shapeIslandClass"' -->
+        <div
+            ref="contentRef"
+            class="w-max h-max flex items-center justify-center shrink-0 p-1.5 overflow-hidden"
+            :class="shapeIslandClass"
+        >
 
             <!-- 1. MODO CONFIGURADOR -->
             <div
