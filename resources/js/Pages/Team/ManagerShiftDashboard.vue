@@ -53,7 +53,7 @@
                     <div class="bg-surface-2 p-4 rounded-2xl border border-surface-border flex items-center justify-between shadow-sm">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-xl bg-primary-500/10 text-primary-600 flex items-center justify-center shrink-0">
-                                <i class="pi pi-motorcycle text-sm font-black"></i>
+                                <i class="pi pi-truck text-sm font-black"></i>
                             </div>
                             <div class="flex flex-col">
                                 <span class="font-bold text-surface-text text-sm leading-tight">Delivery</span>

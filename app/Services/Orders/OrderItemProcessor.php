@@ -39,7 +39,6 @@ class OrderItemProcessor
     {
         $isReplacement = !empty($itemData["replaces_item_id"]);
 
-        // 🛡️ ENCAMINHAMENTO CIRÚRGICO: Se estiver substituindo um subitem de combo
         if ($isReplacement) {
             $oldItem = OrderItem::with(['modifiers', 'subItems.modifiers'])->find($itemData["replaces_item_id"]);
             if ($oldItem && !empty($oldItem->parent_item_id)) {
@@ -51,11 +50,19 @@ class OrderItemProcessor
             }
         }
 
-        $productId = $itemData["id"] ?? null;
+        // 🚀 Suporta tanto 'id' quanto 'product_id' vindos do payload
+        $productId = $itemData["product_id"] ?? $itemData["id"] ?? null;
         $productModel = $productId ? $this->getProduct((int)$productId) : null;
-        $productName = $itemData["name"] ?? 'Produto';
+
+        // 🚀 O nome canonical vem do banco de dados (Product Model), eliminando a perda do nome
+        $resolvedName = $productModel?->name
+            ?? $productModel?->title
+            ?? $itemData["name"]
+            ?? $itemData["product_name"]
+            ?? 'Produto';
+
         if (!empty($itemData["isTakeaway"])) {
-            $productName .= " (Viagem)";
+            $resolvedName .= " (Viagem)";
         }
 
         $notes = !empty($itemData["notes"]) ? trim((string) $itemData["notes"]) : null;
@@ -64,13 +71,13 @@ class OrderItemProcessor
         }
 
         $hasComboItems = !empty($itemData["comboItems"]) && is_array($itemData["comboItems"]);
-        $qty = (float) ($itemData["qty"] ?? 1);
-        $unitPrice = (float) ($itemData["price"] ?? 0);
+        $qty = (float) ($itemData["qty"] ?? ($itemData["quantity"] ?? 1));
+        $unitPrice = (float) ($itemData["price"] ?? ($itemData["unit_price"] ?? ($productModel?->price ?? 0)));
 
         $mainOrderItem = $order->items()->create([
             "parent_item_id"    => null,
             "product_id"        => $productId,
-            "product_name"      => $productName,
+            "product_name"      => $resolvedName,
             "quantity"          => $qty,
             "unit_price"        => $unitPrice,
             "total_price"       => round($unitPrice * $qty, 2),
@@ -83,11 +90,15 @@ class OrderItemProcessor
             "production_status" => 'pending',
         ]);
 
+        // 🚀 Garante a relação Eloquent hidratada em memória para todo o ciclo de vida do PDV
+        if ($productModel) {
+            $mainOrderItem->setRelation('product', $productModel);
+        }
+
         if ($productModel) {
             $this->inventoryService->deductStock($productModel, $qty);
         }
 
-        // 🚀 Delega com segurança ao ComboItemProcessor nativo
         if (!empty($itemData["structuredModifiers"]) && is_array($itemData["structuredModifiers"])) {
             $this->comboProcessor->attachModifiers($mainOrderItem, $itemData["structuredModifiers"], $qty);
         }
@@ -149,7 +160,7 @@ class OrderItemProcessor
             'operator_id'   => auth()->id(),
             'authorizer_id' => auth()->id(),
             'reason'        => $itemData["auth_reason"] ?? 'Edição de Item',
-            'context'       => ['old_item_id' => $oldItem->id, 'new_product' => $itemData["name"], 'is_loss' => $itemData["is_loss"] ?? false]
+            'context'       => ['old_item_id' => $oldItem->id, 'new_product' => $itemData["name"] ?? 'Produto', 'is_loss' => $itemData["is_loss"] ?? false]
         ]);
     }
 }

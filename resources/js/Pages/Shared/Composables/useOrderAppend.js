@@ -61,21 +61,22 @@ export function useOrderAppend(draftRouting, cartSubtotal, initialOrdersRef = nu
         return Array.isArray(methods) ? methods : [];
     });
 
-    // 🚀 INFLA O ÚLTIMO PAGAMENTO PARA COBRIR O NOVO VALOR
-    const autoScaledPaymentIntents = computed(() => {
-        const baseMethods = [...preExistingPaymentIntents.value];
-        if (baseMethods.length === 0) return [];
+    // 🚀 INFLA O ÚLTIMO PAGAMENTO PARA COBRIR EXATAMENTE O SALDO A PAGAR
+        const autoScaledPaymentIntents = computed(() => {
+            const baseMethods = [...preExistingPaymentIntents.value];
+            if (baseMethods.length === 0) return [];
 
-        // Pega o último método usado e soma a ele o valor dos novos itens
-        const lastMethod = { ...baseMethods[baseMethods.length - 1] };
-        lastMethod.amount = Number(lastMethod.amount) + newItemsAmount.value;
+            // Soma os métodos anteriores caso haja mais de um (ex: Dinheiro + Cartão)
+            const otherMethodsSum = baseMethods.slice(0, -1).reduce((sum, m) => sum + Number(m.amount || 0), 0);
+            const lastMethod = { ...baseMethods[baseMethods.length - 1] };
 
-        // Limpa o target do troco para forçar o operador a reavaliar a nota
-        lastMethod.change_target = null;
+            // Cravamos que o último método absorva exatamente a diferença para bater com o balanceDue
+            lastMethod.amount = Math.max(0, Number((balanceDue.value - otherMethodsSum).toFixed(2)));
+            lastMethod.change_target = null;
 
-        baseMethods[baseMethods.length - 1] = lastMethod;
-        return baseMethods;
-    });
+            baseMethods[baseMethods.length - 1] = lastMethod;
+            return baseMethods;
+        });
 
     const changeAnalysis = computed(() => {
         const target = draftRouting.value?.cash_change_target

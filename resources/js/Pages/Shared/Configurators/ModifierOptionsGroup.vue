@@ -51,7 +51,7 @@
                 <div class="flex-1 min-w-0 flex flex-col justify-center pl-1">
                     <span class="font-medium text-surface-text leading-tight text-sm flex items-center gap-1.5">
                         {{ opt.name }}
-                        
+
                     </span>
                 </div>
 
@@ -75,7 +75,7 @@
                     {
                         'bg-warning-500/20 font-black border-warning-500/30 text-surface-text': helpers.isSelected(group, opt) && opt.isJoker,
                         'bg-primary-500 text-white font-bold border-primary-500 shadow-xs': helpers.isSelected(group, opt) && !opt.isJoker,
-                        'bg-warning-500/10 hover:bg-warning-500/20 text-warning-600 font-bold': !helpers.isSelected(group, opt) && !opt.isJoker && isPredicted(opt.id) && opt.is_active !== false,
+                        'bg-warning-500/10 hover:bg-warning-500/20 text-warning-400 font-bold': !helpers.isSelected(group, opt) && !opt.isJoker && isPredicted(opt.id) && opt.is_active !== false,
                         'bg-warning-500/10 hover:bg-warning-500/40 text-surface-text': !helpers.isSelected(group, opt) && opt.isJoker,
                         'bg-surface-3 text-surface-text hover:bg-surface-border/60': !helpers.isSelected(group, opt) && !opt.isJoker && !isPredicted(opt.id) && opt.is_active !== false,
                         'opacity-40 grayscale cursor-not-allowed': helpers.isDisabled(group, opt) || opt.is_active === false
@@ -84,14 +84,14 @@
                 @click="opt.is_active !== false && helpers.toggleSelection(group, opt)"
             >
                 <span class="whitespace-nowrap">{{ opt.name }}</span>
-                
+
 
                 <span v-if="group.type !== 'observation'"
                       class="text-xs font-black transition-opacity"
                       :class="{
                           'opacity-40 text-current': helpers.getEffectivePrice(group, opt) === 0,
                           'text-white': helpers.getEffectivePrice(group, opt) > 0 && helpers.isSelected(group, opt) && !opt.isJoker,
-                          'text-warning-500': helpers.getEffectivePrice(group, opt) > 0 && !helpers.isSelected(group, opt) && !opt.isJoker && isPredicted(opt.id),
+                          'text-warning-400/70': helpers.getEffectivePrice(group, opt) > 0 && !helpers.isSelected(group, opt) && !opt.isJoker && isPredicted(opt.id),
                           'text-primary-500': helpers.getEffectivePrice(group, opt) > 0 && !helpers.isSelected(group, opt) && !opt.isJoker && !isPredicted(opt.id)
                       }">
                     +{{ formatCleanCurrency(helpers.getEffectivePrice(group, opt)) }}

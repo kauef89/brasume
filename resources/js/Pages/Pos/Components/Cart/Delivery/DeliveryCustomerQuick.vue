@@ -58,6 +58,7 @@
 import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import { useToast } from 'primevue/usetoast';
+import { vMaska } from "maska/vue";
 
 const props = defineProps({
     companySettings: { type: Object, default: () => ({}) },

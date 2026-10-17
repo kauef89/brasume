@@ -217,6 +217,7 @@ import { useSecureAction } from "@/Composables/useSecureAction";
 import { useOrderFormatting } from "@/Pages/Shared/Composables/useOrderFormatting";
 import { useViewport } from "@/Composables/useViewport";
 import { useWhatsAppMessages } from "@/Composables/useWhatsAppMessages";
+import OrderPixModal from '@/Pages/Shared/OrderPixModal.vue';
 
 const props = defineProps({
     visible: Boolean,

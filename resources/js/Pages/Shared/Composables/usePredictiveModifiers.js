@@ -11,9 +11,15 @@ export function usePredictiveModifiers(explicitContext = null) {
 
     const currentContext = computed(() => {
         if (explicitContext) return explicitContext;
-        return typeof window !== 'undefined' && window.location.pathname.startsWith('/team')
-            ? 'waiter'
-            : 'customer';
+
+        if (typeof window === 'undefined') return 'customer';
+
+        const path = window.location.pathname;
+        const isInternalApp = path.startsWith('/team')
+            || path.startsWith('/pos')
+            || path.startsWith('/operations');
+
+        return isInternalApp ? 'waiter' : 'customer';
     });
 
     const isPredictiveEnabled = computed(() => {
@@ -21,7 +27,7 @@ export function usePredictiveModifiers(explicitContext = null) {
 
         if (mode === 'all') return true;
         if (mode === 'customer') return currentContext.value === 'customer';
-        if (mode === 'waiter') return currentContext.value === 'waiter';
+        if (mode === 'waiter' || mode === 'internal') return currentContext.value === 'waiter';
 
         return false;
     });

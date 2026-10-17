@@ -2,7 +2,8 @@
 
 return [
     App\Providers\AppServiceProvider::class,
-    App\Providers\Filament\CentralPanelProvider::class,
     App\Providers\Filament\AdminPanelProvider::class,
+    App\Providers\Filament\CentralPanelProvider::class,
+    App\Providers\TelescopeServiceProvider::class,
     App\Providers\TenancyServiceProvider::class,
 ];

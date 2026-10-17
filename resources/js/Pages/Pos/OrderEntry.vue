@@ -89,9 +89,9 @@
                 :order="currentOrderContext"
                 :order-type="orderType"
                 :customer="currentOrderContext?.customer || draftRouting?.customer"
-                :order-total="Number(stashedCheckoutData?.totals?.finalTotal || balanceDue || cartSubtotal || 0)"
+                :order-total="Number((isAppending ? balanceDue : stashedCheckoutData?.totals?.finalTotal) || cartSubtotal || 0)"
                 :existing-intent="currentOrderContext?.payment_intent_status"
-                :existing-methods="currentOrderContext?.payment_intent_methods"
+                :existing-methods="isAppending ? autoScaledPaymentIntents : currentOrderContext?.payment_intent_methods"
                 :payment-methods="$page.props.paymentMethods || $page.props.cashierData?.paymentMethods"
                 @cancel="activeCartSidebarView = 'cart'"
                 @confirm="handleDeliveryPaymentConfirm"
@@ -182,7 +182,7 @@ const {
 } = useCategoryManager(categoryTreeProp);
 
 const initialOrdersRef = computed(() => page.props.initialOrders || page.props.orders || []);
-const { balanceDue } = useOrderAppend(draftRouting, cartSubtotal, initialOrdersRef);
+const { balanceDue, autoScaledPaymentIntents, isAppending } = useOrderAppend(draftRouting, cartSubtotal, initialOrdersRef);
 
 const {
     isFavoritesViewActive, activeCartSidebarView, stashedCheckoutData,

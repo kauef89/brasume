@@ -11,7 +11,7 @@
                 <i class="pi pi-arrow-left text-sm font-bold"></i>
             </button>
             <div v-else class="w-10 h-10 rounded-xl bg-primary-500/10 text-primary-600 flex items-center justify-center shrink-0">
-                <i class="pi pi-motorcycle text-xl"></i>
+                <i class="pi pi-truck text-xl"></i>
             </div>
 
             <div class="flex flex-col">
@@ -32,7 +32,7 @@
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
                          :class="order?.driver_id === courier.id ? 'bg-primary-500 text-white shadow-sm' : 'bg-surface-2 border border-surface-border text-surface-muted'">
-                        <i class="pi pi-motorcycle text-sm"></i>
+                        <i class="pi pi-truck text-sm"></i>
                     </div>
                     <div class="flex flex-col flex-1">
                         <span class="font-black text-sm text-surface-text">{{ abbreviateName(courier.name) }}</span>

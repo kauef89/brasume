@@ -124,7 +124,6 @@ export function useCart() {
             }
         }
 
-        // Subitem de combo tem preço base 0
         let basePrice = 0;
         if (!isSubItemOfCombo && basePriceOverride === null) {
             basePrice = globalOrderType.value === "delivery" && product.delivery_price > 0
@@ -205,9 +204,26 @@ export function useCart() {
     };
 
     const resetDraftState = (type = 'table') => {
+        // 1. Esvazia in-place sem desvincular observadores reativos
+        if (Array.isArray(cart.value)) {
+            cart.value.splice(0, cart.value.length);
+        }
         cart.value = [];
+
         globalOrderType.value = type;
         globalDraftRouting.value = createDefaultRouting(type);
+
+        // 2. Persistência física síncrona para eliminar ressurreição por cache
+        try {
+            localStorage.setItem('pos_draft_cart', '[]');
+            localStorage.setItem('pos_draft_routing', JSON.stringify(createDefaultRouting(type)));
+            localStorage.setItem('pos_draft_type', type);
+        } catch (e) {}
+
+        // 3. Disparo de evento broadcast para telas e abas abertas
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cart-cleared'));
+        }
     };
 
     const clearCart = () => {
@@ -275,8 +291,19 @@ export function useCart() {
         orderType: globalOrderType,
         draftRouting: globalDraftRouting,
         setOrderType,
-        addToCart, updateQty, updateItemModifiers, clearCart, cartSubtotal,
-        parkedOrders, parkCurrentOrder, parkOrder: autoParkCurrent, resumeOrder, discardParkedOrder,
-        loadEditOrder, startNewOrder, autoParkCurrent, resetDraftState
+        addToCart,
+        updateQty,
+        updateItemModifiers,
+        clearCart,
+        cartSubtotal,
+        parkedOrders,
+        parkCurrentOrder,
+        parkOrder: autoParkCurrent,
+        resumeOrder,
+        discardParkedOrder,
+        loadEditOrder,
+        startNewOrder,
+        autoParkCurrent,
+        resetDraftState
     };
 }

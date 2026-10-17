@@ -153,7 +153,7 @@
                         :class="activeTab === 'driver' ? 'c-island-btn-active' : 'c-island-btn-inactive'"
                         title="Minhas Entregas"
                     >
-                        <i class="pi pi-motorcycle"></i>
+                        <i class="pi pi-truck"></i>
                     </button>
 
                     <button

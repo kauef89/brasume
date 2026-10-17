@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Customer;
 
 use App\Models\CompanySetting;
+use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -37,20 +38,22 @@ class RegisterCustomerRequest extends FormRequest
         ];
     }
 
-    public function messages(): array
+    public function withValidator($validator): void
     {
-        return [
-            'name.required'       => 'O nome completo é obrigatório.',
-            'name.min'            => 'O nome deve ter no mínimo 3 caracteres.',
-            'email.unique'        => 'Este e-mail já está em uso por outro cliente.',
-            'password.required'   => 'Crie uma senha de acesso.',
-            'password.min'        => 'A senha deve ter no mínimo 6 caracteres.',
-            'phone.required'      => 'O WhatsApp/Telefone é obrigatório.',
-            'phone.min'           => 'Forneça um número de telefone válido com DDD.',
-            'cpf.required'        => 'O CPF é obrigatório para cadastro no aplicativo.',
-            'cpf.unique'          => 'Este CPF já está cadastrado em outra conta.',
-            'birth_date.required' => 'A data de nascimento é obrigatória.',
-        ];
+        $validator->after(function ($validator) {
+            $setting = CompanySetting::getCached() ?? CompanySetting::first();
+            $birthDate = $this->input('birth_date');
+
+            // Regra: Bloquear menores se allow_minors for false
+            if ($birthDate && !($setting?->allow_minors ?? true)) {
+                try {
+                    $age = Carbon::parse($birthDate)->age;
+                    if ($age < 18) {
+                        $validator->errors()->add('birth_date', 'É necessário ter pelo menos 18 anos para se cadastrar nesta loja.');
+                    }
+                } catch (\Exception $e) {}
+            }
+        });
     }
 
     protected function prepareForValidation(): void

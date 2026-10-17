@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\Customers\CustomerRegistrationService;
 use App\Models\Customer;
+use App\Models\CompanySetting;
 use Illuminate\Support\Facades\Log;
 
 class CustomerGuestController extends Controller
@@ -17,10 +18,13 @@ class CustomerGuestController extends Controller
             'session_id' => session()->getId(),
         ]);
 
+        $settings = CompanySetting::getCached() ?? CompanySetting::first();
+        $requireWhatsapp = $settings->require_whatsapp ?? true;
+
         try {
             $data = $request->validate([
                 'name'  => 'required|string|min:2|max:255',
-                'phone' => 'required|string|min:10',
+                'phone' => $requireWhatsapp ? 'required|string|min:10' : 'nullable|string',
             ]);
             Log::info('📍 [SONDA GUEST BACKEND 2] Validação concluída com sucesso:', $data);
         } catch (\Illuminate\Validation\ValidationException $ve) {
@@ -33,7 +37,7 @@ class CustomerGuestController extends Controller
             Log::info('📍 [SONDA GUEST BACKEND 3] Guest registrado via Service. ID:', ['guest_id' => $guestId]);
 
             session(['guest_customer_id' => $guestId]);
-            session()->save(); // Força persistência imediata do cookie de sessão
+            session()->save();
 
             Log::info('📍 [SONDA GUEST BACKEND 4] Sessão guest_customer_id gravada:', [
                 'session_guest_customer_id' => session('guest_customer_id')

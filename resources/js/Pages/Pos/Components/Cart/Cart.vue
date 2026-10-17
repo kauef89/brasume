@@ -23,10 +23,13 @@
                     <button v-if="cart.length > 0" @click="toggleEstimator" class="btn-icon btn-icon-primary" :class="{ 'active': showEstimatorConfig }" title="Copiar para WhatsApp">
                         <i class="pi pi-whatsapp text-sm font-medium"></i>
                     </button>
-                    <button v-if="isRoutingValid && orderMetadata?.type === 'table'" @click="promptSubAccountName" class="btn-icon btn-icon-primary" title="Identificar Cliente">
+                    <!-- Só permite sub-conta em pedidos novos de mesa -->
+                    <button v-if="!isAppending && isRoutingValid && orderMetadata?.type === 'table'" @click="promptSubAccountName" class="btn-icon btn-icon-primary" title="Identificar Cliente">
                         <i class="pi pi-user-plus text-sm font-medium"></i>
                     </button>
-                    <SecureActionButton action-code="toggle_routing" @secure-click="isRoutingProcessOpen = !isRoutingProcessOpen" severity="primary" custom-class="btn-icon btn-icon-primary p-0 w-10 h-10 flex items-center justify-center shrink-0"  :class="{ 'active': isRoutingProcessOpen }" title="Alterar Roteamento/Destino">
+
+                    <!-- Botão de roteamento/destino: OCULTO durante append -->
+                    <SecureActionButton v-if="!isAppending" action-code="toggle_routing" @secure-click="isRoutingProcessOpen = !isRoutingProcessOpen" severity="primary" custom-class="btn-icon btn-icon-primary p-0 w-10 h-10 flex items-center justify-center shrink-0" :class="{ 'active': isRoutingProcessOpen }" title="Alterar Roteamento/Destino">
                         <i class="pi pi-sliders-h text-sm"></i>
                     </SecureActionButton>
                     <button v-if="cart.length > 0" @click="handleParkOrder" class="btn-icon btn-icon-primary" title="Pausar Pedido">
@@ -39,7 +42,7 @@
             </CartHeader>
 
             <!-- MÓDULO DE ROTEAMENTO (Mesa, Delivery, Balcão) -->
-            <div class="flex flex-col transition-all duration-300" :class="[
+            <div v-if="!isAppending" class="flex flex-col transition-all duration-300" :class="[
                 isWaiterMode ? 'bg-transparent px-4 pb-2 pt-28' : 'p-6 pt-0',
                 isRoutingProcessOpen ? 'flex-1 overflow-y-auto hide-scrollbar' : 'shrink-0'
             ]">
@@ -375,6 +378,12 @@ watch(customerPoints, () => {
         emit('toggle-gift-filter', { active: false, points: 0 });
     }
 });
+
+watch(isAppending, (appending) => {
+    if (appending) {
+        isRoutingProcessOpen.value = false;
+    }
+}, { immediate: true });
 
 const headerTitle = computed(() => {
     const appendPrefix = isAppending.value ? `[Reforço #${targetOrderId.value}] ` : '';

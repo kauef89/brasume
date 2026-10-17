@@ -18,7 +18,7 @@
             />
 
             <!-- LINHA DE MACRO-ABAS (Ingredientes, Adicionais, Observações) -->
-            <div v-if="allTabs.length > 0" class="px-6 py-3 border-b border-surface-border/50 shrink-0 bg-surface-2/60">
+            <div v-if="allTabs.length > 0" class="px-6 py-3 shrink-0 bg-surface-2/60">
                 <ModifierTabs :tabs="allTabs" v-model="activeTab" :is-team-mode="isTeamMode" />
             </div>
         </div>
@@ -110,8 +110,8 @@
         </ModifierDynamicNav>
 
         <!-- RODAPÉ DESKTOP / POS -->
-        <div v-else class="flex flex-col gap-3 shrink-0 z-20 px-6 pb-6 pt-3 border-t border-surface-border/50 bg-surface-2">
-            
+        <div v-else class="flex flex-col gap-3 shrink-0 z-20 px-6 pb-6 pt-3 bg-surface-2">
+
 
             <div class="flex gap-3 items-center w-full">
                 <QtyStepper v-model="localQuantity" :min="1" :max="maxQuantity" size="lg" />

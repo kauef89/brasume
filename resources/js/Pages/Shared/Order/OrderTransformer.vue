@@ -48,7 +48,7 @@
                     @select="selectTarget('delivery')"
                     :is-selected="targetType === 'delivery'"
                     color="red"
-                    icon="pi-motorcycle"
+                    icon="pi-truck"
                     title="Converter para Delivery"
                     subtitle="Habilita entrega e abre o preenchimento de endereço e taxa."
                 />

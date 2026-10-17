@@ -1,52 +1,53 @@
 <template>
   <div class="flex h-full max-h-full w-full bg-surface-1 p-2 gap-2 text-surface-text overflow-hidden font-sans relative">
 
+    <!-- TELEPORT PARA A DYNAMIC ISLAND -->
     <Teleport v-if="isMounted" to="#dynamic-island-portal">
-        <div class="flex items-center gap-2 h-10 md:h-12 shrink-0 mr-2">
-            <button @click="printBill" class="px-4 h-full rounded-full bg-surface-1 border border-surface-border text-[10px] md:text-xs font-black text-surface-muted uppercase tracking-widest hover:text-primary-smart hover:border-primary-500/50 transition-colors flex items-center gap-2 outline-none shadow-sm cursor-pointer">
-                <i class="pi pi-print"></i>
-                <span class="hidden md:inline">Imprimir Conta</span>
-            </button>
-            <button @click="isLinkCustomerModalVisible = true" class="px-4 h-full rounded-full bg-surface-1 border border-surface-border text-[10px] md:text-xs font-black text-surface-muted uppercase tracking-widest hover:text-primary-smart hover:border-primary-500/50 transition-colors flex items-center gap-2 outline-none shadow-sm cursor-pointer">
-                <i class="pi pi-user-plus"></i>
-                <span class="hidden md:inline">Vincular Cliente</span>
-            </button>
-
-            <button @click="handleManualClose" class="w-10 md:w-12 h-full rounded-full bg-surface-2 border border-surface-border text-surface-text hover:bg-surface-3 transition-colors flex items-center justify-center outline-none shadow-sm cursor-pointer" title="Fechar">
-                <i class="pi pi-times font-black"></i>
-            </button>
+        <div class="flex items-center gap-2 shrink-0 mr-2">
+            <PosTeleportButton
+                icon="pi-print"
+                label="Imprimir Conta"
+                color="surface"
+                @click="printBill"
+            />
+            <PosTeleportButton
+                icon="pi-user-plus"
+                label="Vincular Cliente"
+                color="surface"
+                @click="isLinkCustomerModalVisible = true"
+            />
         </div>
     </Teleport>
 
     <!-- PAINEL ESQUERDO: LISTAGEM DE ITENS COM ROLAGEM INDEPENDENTE -->
     <div class="flex-1 flex flex-col h-full max-h-full bg-surface-2 rounded-4xl overflow-hidden min-h-0">
-    <CheckoutHeader
-        class="shrink-0"
-        :title="orderDestinationTitle"
-        :order-label="`Pagamento #${liveOrder.id}`"
-        :subtitle="headerSubtitle"
-        :is-all-selected="isAllSelected"
-        v-model:is-grouped="isGrouped"
-        v-model:search-query="itemSearchQuery"
-        @toggle-all="toggleAllSelections"
-        @go-back="handleManualClose"
-    />
+        <CheckoutHeader
+            class="shrink-0"
+            :title="orderDestinationTitle"
+            :order-label="`Pagamento #${liveOrder.id}`"
+            :subtitle="headerSubtitle"
+            :is-all-selected="isAllSelected"
+            v-model:is-grouped="isGrouped"
+            v-model:search-query="itemSearchQuery"
+            @toggle-all="toggleAllSelections"
+            @go-back="handleManualClose"
+        />
 
-    <CheckoutItemsList
-        class="flex-1 min-h-0 overflow-y-auto"
-        :display-items="displayItems"
-        :is-all-selected="isAllSelected"
-        :order-payments="liveOrder.payments || []"
-        :search-query="itemSearchQuery"
-        @rollback-payment="handleRollbackPayment"
-        @increment="increment"
-        @decrement="decrement"
-        @divide-item="handleDivideItem"
-        @toggle-select="handleToggleSelect"
-        @toggle-all="toggleAllSelections"
-        @quick-add="handleQuickAdd"
-        @quick-cancel="handleQuickCancel"
-    />
+        <CheckoutItemsList
+            class="flex-1 min-h-0 overflow-y-auto"
+            :display-items="displayItems"
+            :is-all-selected="isAllSelected"
+            :order-payments="liveOrder.payments || []"
+            :search-query="itemSearchQuery"
+            @rollback-payment="handleRollbackPayment"
+            @increment="increment"
+            @decrement="decrement"
+            @divide-item="handleDivideItem"
+            @toggle-select="handleToggleSelect"
+            @toggle-all="toggleAllSelections"
+            @quick-add="handleQuickAdd"
+            @quick-cancel="handleQuickCancel"
+        />
     </div>
 
     <!-- PAINEL DIREITO: PAGAMENTO -->
@@ -127,7 +128,7 @@
       </Transition>
     </div>
 
-<!-- Modais -->
+    <!-- Modais -->
     <Dialog v-model:visible="isLinkCustomerModalVisible" modal header="Identificar Cliente" class="w-[450px]" :draggable="false">
       <CustomerSearch @selected="customerToLink = $event; linkCustomer();" @new-customer="openNewCustomerModal" />
     </Dialog>
@@ -153,6 +154,7 @@ import { useToast } from "primevue/usetoast";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 
+import PosTeleportButton from "@/Components/UI/PosTeleportButton.vue";
 import CheckoutItemsList from "@/Pages/Pos/Components/Checkout/CheckoutItemsList.vue";
 import CheckoutPaymentPanel from "@/Pages/Pos/Components/Checkout/CheckoutPaymentPanel.vue";
 import CheckoutPostPaymentPanel from "@/Pages/Pos/Components/Checkout/CheckoutPostPaymentPanel.vue";
@@ -286,7 +288,16 @@ const totalAlreadyPaid = computed(() => {
     return (liveOrder.value?.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
 });
 
-// 🚀 Detecta se o pedido foi 100% baixado em Perda ou 100% em Cupom de Desconto
+const pendingOriginalBalance = computed(() => {
+    if (['delivery', 'counter', 'pickup'].includes(liveOrder.value?.type)) {
+        const orderTotal = Number(liveOrder.value?.total || 0);
+        if (orderTotal > 0 && orderTotal > totalAlreadyPaid.value) {
+           return Math.max(0, orderTotal - totalAlreadyPaid.value);
+        }
+    }
+    return 0;
+});
+
 const isZeroRevenueOrder = computed(() => {
     const o = liveOrder.value || {};
     const subtotal = Number(o.subtotal || 0);
@@ -294,12 +305,10 @@ const isZeroRevenueOrder = computed(() => {
     const discountVal = Math.max(Number(o.discount || 0), Number(appliedCheckoutDiscount.value || 0));
     const effectiveTotal = Math.max(0, subtotal + delivery - discountVal);
 
-    // 1. 100% de desconto por cupom (total do faturamento zerado)
     if (effectiveTotal <= 0.01) {
         return true;
     }
 
-    // 2. 100% com método de Perda / Quebra (engine_type === 'loss')
     const payments = Array.isArray(o.payments) && o.payments.length > 0
         ? o.payments
         : (stagedPayments.value || []);
@@ -342,7 +351,6 @@ const handleApplyCheckoutCoupon = async (code) => {
 
         appliedCheckoutCoupon.value = response.data.code;
 
-        // Puxa o cálculo oficial do backend simulando o applyCoupon no composable
         const type = response.data.type;
         const val = Number(response.data.value || 0);
 
@@ -370,11 +378,10 @@ const handleRemoveCheckoutCoupon = () => {
 };
 
 const intendedPaymentTotal = computed(() => {
-    const rawTotal = selectedItemsValue.value + (feesAndDiscounts.value * selectionRatio.value);
+    const currentSelectionTotal = selectedItemsValue.value + (feesAndDiscounts.value * selectionRatio.value);
     const paidDeduction = unallocatedPaid.value * selectionRatio.value;
 
-    // 🚀 NOVO: Abate o valor do cupom do total da conta!
-    const finalAmount = rawTotal - paidDeduction - appliedCheckoutDiscount.value;
+    const finalAmount = (currentSelectionTotal + (isAllSelected.value ? pendingOriginalBalance.value : 0)) - paidDeduction - appliedCheckoutDiscount.value;
 
     return Math.max(0, Number((finalAmount).toFixed(2)));
 });
@@ -442,13 +449,11 @@ const handleRollbackPayment = (payment) => {
 };
 
 const handleConfirmAction = (authData) => {
-    // 🚀 Tratamento de ações a nível de Conta Inteira (Reativar / Corrigir Tudo)
     if (authActionType.value === 'reactivate' || authActionType.value === 'correct_payment') {
         confirmCancellation(authData);
         return;
     }
 
-    // Fluxo para Estorno Unitário de um Pagamento já existe
     if (authActionType.value === 'rollback_payment') {
         const payment = itemToProcess.value;
         if (!payment || !payment.id) {
@@ -489,7 +494,7 @@ const handleConfirmAction = (authData) => {
                     fromList.payments = (fromList.payments || []).filter(p => p.id !== payment.id);
                     if (fromList.items) fromList.items.forEach(i => { i.paid_qty = 0; });
                     fromList.payment_status = 'pending';
-                    fromList.status = 'pending'; // Força a visualização pendente
+                    fromList.status = 'pending';
                 }
 
                 reactiveItems.value.forEach(item => {
@@ -516,7 +521,6 @@ const handleConfirmAction = (authData) => {
             }
         });
     } else {
-        // Fluxo de Estorno de Item isolado
         const targetItem = itemToProcess.value;
         const targetId = targetItem?._parent_ref?.id || targetItem?.id;
         if (!targetId) {

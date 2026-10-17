@@ -39,13 +39,20 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
                         || pageResp.props.flash?.order?.id
                         || payload.order_id;
 
+                    // 🚀 Esvazia a referência local do carrinho passada ao composable
+                    if (cartRef && cartRef.value && Array.isArray(cartRef.value)) {
+                        cartRef.value.splice(0, cartRef.value.length);
+                        cartRef.value = [];
+                    }
+
+                    // 🚀 Limpa o storage global e o localStorage
                     resetDraftState();
 
                     const resultData = { order: { id: createdOrderId }, id: createdOrderId };
 
                     const isPayNow = payload.frontend_intent === 'pay_now'
-                                  || payload.intent === 'pay_now'
-                                  || payload.routing?.payment_intent_status === 'pay_now';
+                                    || payload.intent === 'pay_now'
+                                    || payload.routing?.payment_intent_status === 'pay_now';
 
                     if (isPayNow && createdOrderId) {
                         window.dispatchEvent(new CustomEvent('pos-open-checkout', { detail: { orderId: createdOrderId } }));
@@ -70,16 +77,20 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
         const meta = checkoutData?.meta || {};
         const currentType = meta.type || 'table';
 
-        // 🚀 O pulo do gato: Identificação direta se estamos anexando a algo existente
+        // 🚀 O pulo do gato: Intercepta o ID diretamente da URL se o state falhar
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlOrderId = urlParams.get('append_to_order');
+
         const rawMetaOrderId = unref(meta.order_id) || unref(meta.existing_order_id) || unref(meta.id) || unref(checkoutData?.order_id) || unref(checkoutData?.append_to_order);
         const rawEditOrderId = unref(editOrderId);
-        const resolvedOrderId = rawMetaOrderId || rawEditOrderId || null;
+
+        // Agora o resolvedOrderId é blindado
+        const resolvedOrderId = rawMetaOrderId || rawEditOrderId || urlOrderId || null;
 
         const tableId = meta.table?.id || meta.dining_table_id || meta.table_id || null;
         const tableName = meta.table?.name || meta.table_number || '';
         const addressId = meta.address?.id || meta.address_id || null;
 
-        // Validações exclusivas para "Criação de Comanda"
         if (!resolvedOrderId) {
             if (currentType === 'table' && !tableId) {
                 toast.add({ severity: 'warn', summary: 'Mesa Obrigatória', detail: 'Selecione uma mesa válida para lançar o pedido.', life: 4500 });
@@ -156,17 +167,18 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
             is_internal_operation: true
         };
 
-        // 🚀 ROTEAMENTO: Escolhe a Rota Dedicada
         const endpointUrl = resolvedOrderId
             ? route('operations.orders.append', resolvedOrderId)
             : route('operations.orders.store');
 
-        if (resolvedOrderId) {
-            payload.order_id = resolvedOrderId; // Previne warnings em rotinas internas
-        }
+    if (resolvedOrderId) {
+                payload.order_id = resolvedOrderId;
+            }
 
-        return executeSubmit(payload, endpointUrl);
-    };
+            console.log("📍 [SONDA FRONTEND] Disparando requisição POST para:", endpointUrl, payload);
 
-    return { submitOrder };
+            return executeSubmit(payload, endpointUrl);
+        };
+
+        return { submitOrder };
 }

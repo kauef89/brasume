@@ -8,7 +8,7 @@
         <!-- CABEÇALHO DINÂMICO -->
         <div class="flex flex-col items-center justify-center gap-3 shrink-0 mb-4 md:mb-6">
             <div class="w-14 h-14 rounded-full bg-primary-500/10 text-primary-600 flex items-center justify-center">
-                <i class="pi text-2xl" :class="isCounter ? 'pi-shopping-bag' : 'pi-motorcycle'"></i>
+                <i class="pi text-2xl" :class="isCounter ? 'pi-shopping-bag' : 'pi-truck'"></i>
             </div>
             <div class="flex flex-col items-center text-center">
                 <h2 class="text-xl font-black text-surface-text leading-tight">
@@ -22,7 +22,7 @@
 
         <div class="flex flex-col gap-4 flex-1 overflow-y-auto hide-scrollbar">
             <!-- VALOR TOTAL DO PEDIDO -->
-            <div class="bg-surface-1 p-4 rounded-xl flex justify-between items-center border border-surface-border shrink-0">
+            <div class="flex justify-between items-center shrink-0">
                 <span class="text-xs font-black text-surface-muted uppercase tracking-wider">Total</span>
                 <span class="text-2xl font-black text-primary-smart">{{ $formatCurrency(orderTotal || 0) }}</span>
             </div>
@@ -52,7 +52,7 @@
                     :status="processingMode === 'pay_on_delivery' ? processingStatus : 'idle'"
                     :show-checkmark="true"
                     color="primary"
-                    icon="pi-motorcycle"
+                    icon="pi-truck"
                     title="Pagar na Entrega (Motoboy)"
                     subtitle="Compor o pagamento para o motoboy levar troco ou máquina."
                 />

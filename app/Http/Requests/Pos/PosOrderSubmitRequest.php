@@ -2,9 +2,12 @@
 
 namespace App\Http\Requests\Pos;
 
+use App\Models\CompanySetting;
 use App\Models\DiningTable;
+use App\Models\Order;
 use App\Models\PaymentMethod;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class PosOrderSubmitRequest extends FormRequest
 {
@@ -15,11 +18,21 @@ class PosOrderSubmitRequest extends FormRequest
 
     public function rules(): array
     {
+        $orderId = $this->input('order_id');
+        $isAppend = !empty($orderId);
+        $type = data_get($this->all(), 'routing.type', 'table');
+
         return [
             'source'   => ['required', 'string', 'in:pos_app,cashier,team_app,kiosk,customer_app,customer_app_table'],
-            'order_id' => ['nullable', 'integer', 'exists:orders,id'],
+            'order_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('orders', 'id')->where(function ($query) {
+                    $query->whereNotIn('status', ['cancelled', 'completed']);
+                }),
+            ],
 
-            // 1. ITENS PRINCIPAIS
+            // 1. ITENS DO CARRINHO
             'items'                                                 => ['required', 'array', 'min:1'],
             'items.*.cartId'                                        => ['nullable', 'numeric'],
             'items.*.id'                                            => ['required'],
@@ -36,7 +49,7 @@ class PosOrderSubmitRequest extends FormRequest
             'items.*.isCombo'                                       => ['nullable', 'boolean'],
             'items.*.is_reward'                                     => ['nullable', 'boolean'],
 
-            // Modificadores do Item Principal
+            // Modificadores
             'items.*.structuredModifiers'                           => ['nullable', 'array'],
             'items.*.structuredModifiers.*.id'                      => ['nullable'],
             'items.*.structuredModifiers.*.name'                    => ['required', 'string'],
@@ -45,7 +58,7 @@ class PosOrderSubmitRequest extends FormRequest
             'items.*.structuredModifiers.*.group_id'                => ['nullable', 'integer'],
             'items.*.structuredModifiers.*.is_joker'                => ['nullable', 'boolean'],
 
-            // Subitens de Combo
+            // Combos
             'items.*.comboItems'                                    => ['nullable', 'array'],
             'items.*.comboItems.*.id'                               => ['nullable'],
             'items.*.comboItems.*.product_id'                       => ['nullable'],
@@ -61,62 +74,45 @@ class PosOrderSubmitRequest extends FormRequest
             'items.*.comboItems.*.structuredModifiers.*.qty'        => ['required', 'numeric'],
             'items.*.comboItems.*.structuredModifiers.*.group_id'   => ['nullable', 'integer'],
 
-            // 2. ROTEAMENTO E LOGÍSTICA
+            // 2. ROTEAMENTO
             'routing'                                               => ['required', 'array'],
             'routing.type'                                          => ['required', 'string', 'in:table,counter,delivery'],
             'routing.notes'                                         => ['nullable', 'string'],
-            'routing.identifier'                                    => ['nullable', 'string'],
+            'routing.identifier'                                    => [
+                Rule::requiredIf(!$isAppend && $type === 'counter' && empty(data_get($this->all(), 'routing.customer.id'))),
+                'nullable',
+                'string',
+                'max:100'
+            ],
 
-            'routing.id'                                            => ['nullable', 'integer'],
-            'routing.order_id'                                      => ['nullable', 'integer'],
-            'routing.existing_order_id'                             => ['nullable', 'integer'],
-
-            // MESA
+            // Mesa (obrigatória apenas se não for append ou se for troca explícita)
             'routing.table'                                         => ['nullable', 'array'],
-            'routing.table.id'                                      => ['required_if:routing.type,table', 'nullable', 'integer', 'exists:dining_tables,id'],
-            'routing.table.name'                                    => ['required_if:routing.type,table', 'nullable', 'string'],
-            'routing.dining_table_id'                               => ['required_if:routing.type,table', 'nullable', 'integer', 'exists:dining_tables,id'],
+            'routing.table.id'                                      => [Rule::requiredIf(!$isAppend && $type === 'table'), 'nullable', 'integer', 'exists:dining_tables,id'],
+            'routing.dining_table_id'                               => [Rule::requiredIf(!$isAppend && $type === 'table'), 'nullable', 'integer', 'exists:dining_tables,id'],
             'routing.table_id'                                      => ['nullable', 'integer', 'exists:dining_tables,id'],
             'routing.table_number'                                  => ['nullable', 'string'],
 
+            // Cliente
             'routing.customer'                                      => ['nullable', 'array'],
             'routing.customer.id'                                   => ['nullable'],
             'routing.customer.name'                                 => ['nullable', 'string', 'max:255'],
             'routing.customer.phone'                                => ['nullable', 'string', 'max:20'],
             'routing.customer.cpf'                                  => ['nullable', 'string'],
-            'routing.customer_id'                                   => ['nullable'],
-            'routing.customer_name'                                 => ['nullable', 'string'],
-            'routing.customer_phone'                                => ['nullable', 'string', 'max:20'],
 
+            // Endereço (Delivery)
             'routing.address_id'                                    => ['nullable'],
             'routing.address'                                       => ['nullable', 'array'],
-            // 🚀 CORREÇÃO CRÍTICA: Não permite endereço nulo se for delivery! Deve existir no DB.
-            'routing.address.id'                                    => ['required_if:routing.type,delivery', 'integer', 'exists:addresses,id'],
-            'routing.address.street_id'                             => ['nullable'],
-            'routing.address.street'                                => ['nullable'],
-            'routing.address.number'                                => ['nullable'],
-            'routing.address.no_number'                             => ['nullable', 'boolean'],
-            'routing.address.neighborhood_id'                       => ['nullable'],
-            'routing.address.neighborhood'                          => ['nullable'],
-            'routing.address.complement'                            => ['nullable', 'string'],
-            'routing.address.reference'                             => ['nullable', 'string'],
-            'routing.address.nickname'                              => ['nullable', 'string'],
-            'routing.address.full_address'                          => ['nullable', 'string'],
-            // 🚀 BLINDAGEM: Garante que a taxa foi processada
-            'routing.address.delivery_fee'                          => ['required_if:routing.type,delivery', 'numeric', 'min:0'],
+            'routing.address.id'                                    => [Rule::requiredIf(!$isAppend && $type === 'delivery'), 'nullable', 'integer', 'exists:addresses,id'],
+            'routing.address.delivery_fee'                          => [Rule::requiredIf(!$isAppend && $type === 'delivery'), 'nullable', 'numeric', 'min:0'],
 
+            // Pagamento
             'routing.payment_method_id'                             => ['nullable', 'integer', 'exists:payment_methods,id'],
             'routing.payment_method_name'                           => ['nullable', 'string'],
             'routing.payment_engine'                                => ['nullable', 'string'],
             'routing.change_target'                                 => ['nullable', 'numeric'],
             'routing.cash_change_target'                            => ['nullable', 'numeric'],
-
             'routing.payment_intent_status'                         => ['nullable', 'string'],
             'routing.payment_intent_methods'                        => ['nullable', 'array'],
-            'routing.payment_intent_methods.*.method_id'            => ['nullable', 'integer'],
-            'routing.payment_intent_methods.*.method_name'          => ['nullable', 'string'],
-            'routing.payment_intent_methods.*.amount'               => ['nullable', 'numeric'],
-            'routing.payment_intent_methods.*.change_target'        => ['nullable', 'numeric'],
 
             // 3. FINANCEIRO
             'financials'                                            => ['required', 'array'],
@@ -125,10 +121,47 @@ class PosOrderSubmitRequest extends FormRequest
             'financials.serviceFee'                                 => ['required', 'numeric'],
             'financials.discount'                                   => ['required', 'numeric'],
             'financials.finalTotal'                                 => ['required', 'numeric', 'min:0'],
-            'financials.coupon_code'                                => ['nullable', 'string'],
-            'financials.coupon_id'                                  => ['nullable', 'integer'],
-            'financials.cashback_discount'                          => ['nullable', 'numeric'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'order_id.exists'             => 'A comanda informada não existe, já foi concluída ou foi cancelada.',
+            'routing.identifier.required' => 'Para pedidos de Balcão, informe o nome do cliente ou selecione um cadastro.',
+            'routing.table.id.required'   => 'Selecione uma mesa válida para o lançamento.',
+            'routing.address.id.required' => 'Selecione um endereço cadastrado para entrega.',
+        ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $setting = CompanySetting::getCached() ?? CompanySetting::first();
+            $isDelivery = data_get($this->all(), 'routing.type') === 'delivery';
+            $isCash = data_get($this->all(), 'routing.payment_engine') === 'cash'
+                   || data_get($this->all(), 'routing.payment_engine') === 'money';
+
+            $finalTotal = (float) data_get($this->all(), 'financials.finalTotal', 0);
+            $changeTarget = (float) (data_get($this->all(), 'routing.change_target') ?? data_get($this->all(), 'routing.cash_change_target', 0));
+
+            // Valida teto de troco no Delivery conforme PosSchema
+            if ($isDelivery && $isCash && $changeTarget > $finalTotal) {
+                $hasLimit = (bool) ($setting?->has_max_change_limit ?? false);
+                $maxChange = (float) ($setting?->max_change_amount ?? 0);
+
+                if ($hasLimit && $maxChange > 0) {
+                    $calculatedChange = $changeTarget - $finalTotal;
+                    if ($calculatedChange > $maxChange) {
+                        $maxFormatted = number_format($maxChange, 2, ',', '.');
+                        $validator->errors()->add(
+                            'routing.change_target',
+                            "O troco solicitado (R$ " . number_format($calculatedChange, 2, ',', '.') . ") excede o limite operacional de R$ {$maxFormatted} permitido pelo caixa."
+                        );
+                    }
+                }
+            }
+        });
     }
 
     protected function prepareForValidation(): void
@@ -137,12 +170,14 @@ class PosOrderSubmitRequest extends FormRequest
         $items = $this->input('items', []);
         $financials = $this->input('financials', []);
 
-        $rootOrderId = $this->input('order_id');
-        if (empty($rootOrderId)) {
-            $rootOrderId = $routing['order_id'] ?? $routing['existing_order_id'] ?? $routing['id'] ?? null;
-            if ($rootOrderId) {
-                $this->merge(['order_id' => (int) $rootOrderId]);
-            }
+        $rootOrderId = $this->input('order_id')
+            ?? $routing['order_id']
+            ?? $routing['existing_order_id']
+            ?? $routing['id']
+            ?? null;
+
+        if ($rootOrderId) {
+            $this->merge(['order_id' => (int) $rootOrderId]);
         }
 
         if (is_array($items)) {
@@ -163,23 +198,12 @@ class PosOrderSubmitRequest extends FormRequest
         }
 
         if (isset($routing['type']) && $routing['type'] === 'table') {
-            $tableId = $routing['dining_table_id']
-                ?? $routing['table_id']
-                ?? $routing['table']['id']
-                ?? null;
-
+            $tableId = $routing['dining_table_id'] ?? $routing['table_id'] ?? $routing['table']['id'] ?? null;
             if ($tableId) {
                 $table = DiningTable::find((int) $tableId);
-                $tableIdInt = (int) $tableId;
-                $tableName = $table?->name ?? ($routing['table_number'] ?? $routing['table']['name'] ?? '');
-
-                $routing['dining_table_id'] = $tableIdInt;
-                $routing['table_id'] = $tableIdInt;
-                $routing['table_number'] = $tableName;
-                $routing['table'] = [
-                    'id'   => $tableIdInt,
-                    'name' => $tableName,
-                ];
+                $routing['dining_table_id'] = (int) $tableId;
+                $routing['table_id'] = (int) $tableId;
+                $routing['table'] = ['id' => (int) $tableId, 'name' => $table?->name ?? ''];
             }
         }
 
@@ -189,28 +213,6 @@ class PosOrderSubmitRequest extends FormRequest
             if (is_array($financials)) {
                 $financials['deliveryFee'] = 0.00;
             }
-        }
-
-        if (isset($routing['type']) && $routing['type'] === 'delivery') {
-            // Se o frontend mandar o address solto, nós o estruturamos.
-            if (!empty($routing['address_id']) && empty($routing['address']['id'])) {
-                if (!isset($routing['address']) || !is_array($routing['address'])) {
-                    $routing['address'] = [];
-                }
-                $routing['address']['id'] = $routing['address_id'];
-            }
-        }
-
-        if (isset($routing['type']) && $routing['type'] === 'counter') {
-            if (empty($routing['customer']['id']) && empty($routing['identifier'])) {
-                $routing['identifier'] = null;
-            }
-        }
-
-        if (isset($routing['cash_change_target']) && !isset($routing['change_target'])) {
-            $routing['change_target'] = $routing['cash_change_target'];
-        } elseif (isset($routing['change_target']) && !isset($routing['cash_change_target'])) {
-            $routing['cash_change_target'] = $routing['change_target'];
         }
 
         if (!empty($routing['payment_method_id'])) {

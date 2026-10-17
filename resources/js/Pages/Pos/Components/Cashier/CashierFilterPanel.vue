@@ -49,7 +49,7 @@
                 <div class="w-5 h-5 rounded border-2 flex items-center justify-center transition-colors" :class="activeTypes.includes('delivery') ? 'bg-red-500 border-red-500 text-white' : 'border-surface-border bg-surface-2 group-hover:border-red-400'">
                     <i v-if="activeTypes.includes('delivery')" class="pi pi-check text-[10px] font-medium"></i>
                 </div>
-                <div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center"><i class="pi pi-motorcycle text-sm"></i></div>
+                <div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center"><i class="pi pi-truck text-sm"></i></div>
                 <span class="font-medium text-sm text-surface-text">Delivery</span>
             </label>
         </div>

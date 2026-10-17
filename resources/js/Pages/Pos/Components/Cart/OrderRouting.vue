@@ -15,7 +15,7 @@
             >
                 <i :class="[
                     'pi text-2xl transition-transform duration-300 relative z-10',
-                    option.icon || (option.value === 'table' ? 'pi-table' : option.value === 'counter' ? 'pi-shopping-bag' : 'pi-motorcycle'),
+                    option.icon || (option.value === 'table' ? 'pi-table' : option.value === 'counter' ? 'pi-shopping-bag' : 'pi-truck'),
                 ]"></i>
 
                 <span class="font-black text-[10px] md:text-xs uppercase tracking-widest relative z-10 text-center">

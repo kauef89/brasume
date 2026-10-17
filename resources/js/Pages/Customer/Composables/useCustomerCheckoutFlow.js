@@ -57,42 +57,44 @@ export function useCustomerCheckoutFlow(props, cartContext, activeTab) {
             preserveState: true,
             preserveScroll: true,
             onSuccess: (pageResp) => {
-                isSubmitting.value = false;
+                            isSubmitting.value = false;
 
-                if (pageResp.props.flash?.error) {
-                    cart.value = backupCart;
-                    toast.add({ severity: 'error', summary: 'Erro no Pedido', detail: pageResp.props.flash.error, life: 5000 });
-                    return;
-                }
+                            if (pageResp.props.flash?.error) {
+                                cart.value = backupCart;
+                                toast.add({ severity: 'error', summary: 'Erro no Pedido', detail: pageResp.props.flash.error, life: 5000 });
+                                return;
+                            }
 
-                const returnedOrderId = pageResp.props.flash?.order_id || pageResp.props.order_id || pageResp.props.order?.id;
-                const returnedPixData = pageResp.props.flash?.pix_data || pageResp.props.pix_data || pageResp.props.order?.pix_data;
-                const methodType = checkoutState.selectedMethod?.engine_type || (returnedPixData ? 'bank_api' : 'local');
+                            const returnedOrderId = pageResp.props.flash?.order_id || pageResp.props.order_id || pageResp.props.order?.id;
+                            const returnedPixData = pageResp.props.flash?.pix_data || pageResp.props.pix_data || pageResp.props.order?.pix_data;
+                            const methodType = checkoutState.selectedMethod?.engine_type || (returnedPixData ? 'bank_api' : 'local');
 
-                if (methodType === 'bank_api' || returnedPixData) {
-                    if (returnedPixData) {
-                        activeOrderId.value = returnedOrderId;
-                        activePixData.value = returnedPixData;
-                        checkoutState.step = 'pix';
+                            // 🚀 Como o pedido já foi gravado no banco, limpa o carrinho imediatamente.
+                            // Isso evita que itens persistam se o cliente fechar a aba ou pagar direto no app bancário.
+                            clearCart();
+                            removeCoupon();
 
-                        sessionStorage.setItem('customer_active_pix_order_id', String(returnedOrderId));
-                        sessionStorage.setItem('customer_active_pix_data', JSON.stringify(returnedPixData));
+                            if (methodType === 'bank_api' || returnedPixData) {
+                                if (returnedPixData) {
+                                    activeOrderId.value = returnedOrderId;
+                                    activePixData.value = returnedPixData;
+                                    checkoutState.step = 'pix';
 
-                        sessionStorage.removeItem('customer_pending_checkout');
-                        sessionStorage.removeItem('customer_checkout_saved_state');
-                    } else {
-                        clearCart();
-                        isCheckoutModalVisible.value = false;
-                        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Não foi possível carregar o QR Code. Tente novamente.', life: 5000 });
-                    }
-                } else {
-                    clearCart();
-                    removeCoupon();
-                    isCheckoutModalVisible.value = false;
-                    activeTab.value = isTableMode.value ? 'orders' : 'home';
-                    toast.add({ severity: 'success', summary: 'Pedido Recebido!', detail: 'O seu pedido já está sendo preparado!', life: 4000 });
-                }
-            },
+                                    sessionStorage.setItem('customer_active_pix_order_id', String(returnedOrderId));
+                                    sessionStorage.setItem('customer_active_pix_data', JSON.stringify(returnedPixData));
+
+                                    sessionStorage.removeItem('customer_pending_checkout');
+                                    sessionStorage.removeItem('customer_checkout_saved_state');
+                                } else {
+                                    isCheckoutModalVisible.value = false;
+                                    toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Não foi possível carregar o QR Code. Tente novamente.', life: 5000 });
+                                }
+                            } else {
+                                isCheckoutModalVisible.value = false;
+                                activeTab.value = isTableMode.value ? 'orders' : 'home';
+                                toast.add({ severity: 'success', summary: 'Pedido Recebido!', detail: 'O seu pedido já está sendo preparado!', life: 4000 });
+                            }
+                        },
             onError: (errors) => {
                 isSubmitting.value = false;
                 cart.value = backupCart;

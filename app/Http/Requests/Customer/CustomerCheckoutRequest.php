@@ -377,44 +377,68 @@ class CustomerCheckoutRequest extends FormRequest
     {
         $validator->after(function ($validator) {
             $setting = CompanySetting::getCached() ?? CompanySetting::first();
+            $subtotal = (float) $this->input('financials.subtotal', 0);
             $finalTotal = (float) $this->input('financials.finalTotal', 0);
 
-            if ($finalTotal > 0) {
-                $hasMethod = !empty($this->input('routing.payment_method_id'));
-                $hasMultiMethods = !empty($this->input('routing.payment_intent_methods'));
-                if (!$hasMethod && !$hasMultiMethods) {
+            // 1. RESTRAÇÃO DE LOJA FECHADA INDETERMINADA
+            if ((bool) ($setting?->is_closed_indefinitely ?? false)) {
+                $validator->errors()->add('general', 'A loja está temporariamente fechada para novos pedidos no momento.');
+                return;
+            }
+
+            // 2. RESTRAÇÃO DE APPEND NO APP DO CLIENTE
+            $appendToOrderId = $this->input('append_to_order');
+            if ($appendToOrderId) {
+                if (!($setting?->customer_can_append_orders ?? true)) {
+                    $validator->errors()->add('append_to_order', 'Adições de itens a pedidos em andamento não estão liberadas nesta loja.');
+                }
+
+                $targetOrder = \App\Models\Order::find($appendToOrderId);
+                if (!$targetOrder || in_array($targetOrder->status, ['cancelled', 'completed', 'delivered'])) {
+                    $validator->errors()->add('append_to_order', 'O pedido original já foi concluído ou não aceita mais novos itens.');
+                }
+            }
+
+            // 3. REGRAS DE RESGATE DE CASHBACK (MARKETING SCHEMA)
+            $cashbackUsed = (float) $this->input('routing.cashback_discount', 0);
+            if ($cashbackUsed > 0 && ($setting?->loyalty_is_active ?? false)) {
+                $minRedeem = (float) ($setting->loyalty_min_redeem_value ?? 0);
+                if ($minRedeem > 0 && $subtotal < $minRedeem) {
+                    $minFormatted = number_format($minRedeem, 2, ',', '.');
                     $validator->errors()->add(
-                        'routing.payment_method_id',
-                        'Por favor, selecione a forma de pagamento (PIX, Cartão ou Dinheiro) antes de enviar o pedido.'
+                        'routing.cashback_discount',
+                        "O consumo mínimo para utilizar saldo de cashback é de R$ {$minFormatted}."
                     );
                 }
-            }
 
-            $isGuest = !auth()->check();
-            if ($isGuest) {
-                $restricted = $setting->guest_restricted_payments ?? true;
-                $engine = $this->input('routing.payment_engine');
-                if ($restricted && $engine !== 'bank_api') {
-                    $validator->errors()->add('routing.payment_method_id', 'Por medida de segurança, visitantes só podem pagar online (PIX). Faça login para liberar outras formas de pagamento.');
+                $maxRedeemValue = (float) ($setting->loyalty_max_redeem_value ?? 0);
+                $maxRedeemType = $setting->loyalty_max_redeem_type ?? 'fixed';
+
+                if ($maxRedeemValue > 0) {
+                    $allowedMax = $maxRedeemType === 'percentage'
+                        ? round(($subtotal * ($maxRedeemValue / 100)), 2)
+                        : $maxRedeemValue;
+
+                    if ($cashbackUsed > ($allowedMax + 0.05)) {
+                        $allowedFormatted = number_format($allowedMax, 2, ',', '.');
+                        $validator->errors()->add(
+                            'routing.cashback_discount',
+                            "O valor máximo de cashback permitido para este pedido é de R$ {$allowedFormatted}."
+                        );
+                    }
                 }
             }
 
-            $isDelivery = $this->input('routing.type') === 'delivery';
-            $isCash = ($this->input('routing.payment_engine') === 'money');
-            $changeTarget = (float) ($this->input('routing.change_target') ?? $this->input('routing.cash_change_target', 0));
-
-            if ($isDelivery && $isCash && $changeTarget > $finalTotal) {
-                $hasLimit = (bool) ($setting->has_max_change_limit ?? false);
-                $maxChange = (float) ($setting->max_change_amount ?? 0);
-                if ($hasLimit && $maxChange > 0) {
-                    $calculatedChange = $changeTarget - $finalTotal;
-                    if ($calculatedChange > $maxChange) {
-                        $maxFormatted = number_format($maxChange, 2, ',', '.');
-                        $validator->errors()->add(
-                            'routing.change_target',
-                            "O troco solicitado ultrapassa o limite máximo de R$ {$maxFormatted} permitido para entregas."
-                        );
-                    }
+            // 4. RESTRIÇÃO PARA VISITANTE (GUEST MODE)
+            $isGuest = !auth()->check();
+            if ($isGuest && $finalTotal > 0) {
+                $restricted = $setting?->guest_restricted_payments ?? true;
+                $engine = $this->input('routing.payment_engine');
+                if ($restricted && $engine !== 'bank_api') {
+                    $validator->errors()->add(
+                        'routing.payment_method_id',
+                        'Por medida de segurança, visitantes só podem pagar online (PIX). Faça login para liberar outras formas de pagamento.'
+                    );
                 }
             }
         });

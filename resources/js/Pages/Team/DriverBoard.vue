@@ -50,7 +50,7 @@
                                 type="button"
                                 class="flex-1 h-11 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer shadow-sm active:scale-98"
                             >
-                                <i class="pi pi-motorcycle text-xs"></i>
+                                <i class="pi pi-truck text-xs"></i>
                                 <span>Sair p/ Entrega</span>
                             </button>
 
@@ -137,7 +137,7 @@
                                 type="button"
                                 class="flex-1 h-11 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer shadow-sm active:scale-98"
                             >
-                                <i class="pi pi-motorcycle text-xs"></i>
+                                <i class="pi pi-truck text-xs"></i>
                                 <span>Sair p/ Entrega</span>
                             </button>
 

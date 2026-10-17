@@ -13,11 +13,25 @@ class OpenShiftRequest extends FormRequest
 
     public function rules(): array
     {
+        $setting = \App\Models\CompanySetting::getCached() ?? \App\Models\CompanySetting::first();
+        $requireAttendance = (bool) ($setting?->require_shift_attendance ?? false);
+
         return [
-            'amount'      => ['required', 'numeric', 'min:0'],
-            'observation' => ['nullable', 'string', 'max:500'],
-            'details'     => ['nullable'],
-            'attendees'   => ['nullable', 'array'],
+            'amount'          => ['required', 'numeric', 'min:0'],
+            'retained_amount' => ['nullable', 'numeric', 'min:0'],
+            'observation'     => ['nullable', 'string', 'max:500'],
+            'pin'             => ['nullable', 'string'],
+            'details'         => ['nullable'],
+            'attendees'       => [$requireAttendance ? 'required' : 'nullable', 'array', $requireAttendance ? 'min:1' : 'min:0'],
+            'attendees.*'     => ['integer', 'exists:users,id'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'attendees.required' => 'É obrigatório selecionar os colaboradores escalados para fechar o turno.',
+            'attendees.min'      => 'Vincule ao menos um colaborador ativo no turno.',
         ];
     }
 

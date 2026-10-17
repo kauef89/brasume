@@ -88,7 +88,7 @@
             </div>
 
             <div class="relative">
-                <i class="pi fa-id-card absolute left-4 top-1/2 -translate-y-1/2 text-surface-muted text-sm pointer-events-none"></i>
+                <i class="pi pi-id-card absolute left-4 top-1/2 -translate-y-1/2 text-surface-muted text-sm pointer-events-none"></i>
                 <input
                     type="text"
                     :value="customerDocument"

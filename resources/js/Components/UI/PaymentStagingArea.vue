@@ -34,7 +34,7 @@
                 <button
                     type="button"
                     @click="handleSetRemaining"
-                    class="px-5 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer border"
+                    class="px-5 rounded-full font-black text-xs uppercase tracking-wider transition-all cursor-pointer border"
                     :class="!activeDivisor
                         ? 'bg-surface-2 text-surface-text border-surface-border shadow-sm'
                         : 'bg-transparent text-surface-muted border-transparent hover:text-surface-text'"

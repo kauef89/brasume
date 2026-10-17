@@ -7,7 +7,7 @@ export function useTeamSubmit(state) {
     const toast = useToast();
     const isSubmittingOrder = ref(false);
     const isOrderSuccess = ref(false);
-    const { draftRouting } = useCart();
+    const { draftRouting, clearCart, resetDraftState } = useCart();
 
     const resolveProductId = (productId, id) => {
         for (const candidate of [productId, id]) {
@@ -29,6 +29,7 @@ export function useTeamSubmit(state) {
         }
 
         state.clearCart();
+        clearCart();
 
         const resolvedTableId = Number(table.dining_table_id || table.id);
 
@@ -67,7 +68,6 @@ export function useTeamSubmit(state) {
     };
 
     const customHandleMenuAction = (actionId, order) => {
-        // 🛡️ Garante a recuperação da comanda mesmo se o evento não passar o objeto
         const targetOrder = order || state.selectedOrderContext?.value;
         if (!targetOrder) return;
 
@@ -82,6 +82,7 @@ export function useTeamSubmit(state) {
             if (state.contextMenuVisible) state.contextMenuVisible.value = false;
             if (state.showOrderActionsSheet) state.showOrderActionsSheet.value = false;
             state.clearCart();
+            clearCart();
 
             const routingPayload = {
                 order_id: null,
@@ -117,22 +118,17 @@ export function useTeamSubmit(state) {
                 state.activeTab.value = 'menu';
             });
 
-            void(0)
-
         } else if (actionId === 'add_items') {
-            // 🛑 1. FECHA TODOS OS MODAIS E SHEETS PARA EVITAR RETENÇÃO DE MEMÓRIA
             if (state.contextMenuVisible) state.contextMenuVisible.value = false;
             if (state.showOrderActionsSheet) state.showOrderActionsSheet.value = false;
             state.clearCart();
-
-            const orderTitle = targetOrder.type === 'table' ? `Mesa ${targetOrder.table_number}` : (targetOrder.customer_name || `Comanda #${targetOrder.id}`);
+            clearCart();
 
             const resolvedAddressId = targetOrder.address_id
                 || targetOrder.address?.id
                 || targetOrder.deliveryAddress?.id
                 || null;
 
-            // 🛑 2. PAYLOAD HIGIENIZADO (APENAS TIPOS PRIMITIVOS E ESSENCIAIS)
             const routingPayload = {
                 id: targetOrder.id,
                 order_id: targetOrder.id,
@@ -162,13 +158,10 @@ export function useTeamSubmit(state) {
                 localStorage.setItem('pos_draft_type', targetOrder.type || 'table');
             } catch (e) {}
 
-            // 🛑 3. QUEBRA DA PILHA SÍNCRONA: Aguarda a desmontagem do menu de contexto
             nextTick(() => {
                 state.cartComponentKey.value++;
                 state.activeTab.value = 'menu';
             });
-
-            void(0)
 
         } else {
             state.handleMenuAction(actionId, targetOrder);
@@ -280,11 +273,26 @@ export function useTeamSubmit(state) {
                 isOrderSuccess.value = true;
 
                 if (state.isAllowanceMode) state.isAllowanceMode.value = false;
-                state.clearCart();
+
+                // 1. Esvaziamento in-place do carrinho do TeamApp
+                if (state.cart && state.cart.value && Array.isArray(state.cart.value)) {
+                    state.cart.value.splice(0, state.cart.value.length);
+                    state.cart.value = [];
+                }
+                if (typeof state.clearCart === 'function') state.clearCart();
+
+                // 2. Limpeza do singleton useCart e expurgo do localStorage
+                clearCart();
+                resetDraftState();
+
                 state.cartRoutingValid.value = false;
                 state.cartRoutingMeta.value = null;
                 if (draftRouting) draftRouting.value = null;
-                localStorage.removeItem('pos_draft_routing');
+
+                try {
+                    localStorage.removeItem('pos_draft_routing');
+                    localStorage.setItem('pos_draft_cart', '[]');
+                } catch (e) {}
 
                 state.cartComponentKey.value++;
 
@@ -386,7 +394,12 @@ export function useTeamSubmit(state) {
     };
 
     return {
-        isSubmittingOrder, isOrderSuccess, handleCreateOrderOnTable,
-        customHandleMenuAction, handleSendOrder, triggerCheckout, customHandleItemDuplicate
+        isSubmittingOrder,
+        isOrderSuccess,
+        handleCreateOrderOnTable,
+        customHandleMenuAction,
+        handleSendOrder,
+        triggerCheckout,
+        customHandleItemDuplicate
     };
 }

@@ -64,6 +64,9 @@ export function useOrderWorkspace(cartContext, favoritesContext, editOrderData) 
         const resolvedAddressId = rawAddress.id || rawMeta.address_id || null;
 
         return {
+            ...rawMeta,
+            order_id: rawMeta.order_id || rawMeta.id || resolvedOrderId.value || null,
+            existing_order_id: rawMeta.existing_order_id || resolvedOrderId.value || null,
             type: rawMeta.type || orderType.value || 'table',
             dining_table_id: resolvedTableId,
             table_id: resolvedTableId,
@@ -99,6 +102,7 @@ export function useOrderWorkspace(cartContext, favoritesContext, editOrderData) 
 
         const safePayload = {
             ...rawPayload,
+            order_id: resolvedOrderId.value || rawPayload.order_id || null,
             meta: cleanMeta,
             totals: rawPayload.totals || {}
         };
@@ -114,8 +118,11 @@ export function useOrderWorkspace(cartContext, favoritesContext, editOrderData) 
 
     const handleInlinePaymentConfirm = (intentData) => {
         const targetOrderId = resolvedOrderId.value;
+        const hasCartItems = (cart.value && cart.value.length > 0) || !!stashedCheckoutData.value;
 
-        if (targetOrderId) {
+        // Caso 1: Existe pedido carregado MAS NÃO HÁ itens no carrinho nem no checkout retido.
+        // Trata-se de uma troca avulsa de método de pagamento da comanda já existente.
+        if (targetOrderId && !hasCartItems) {
             return new Promise((resolve, reject) => {
                 router.post(route('operations.orders.update-delivery-payment', targetOrderId), intentData, {
                     preserveScroll: true,
@@ -129,26 +136,36 @@ export function useOrderWorkspace(cartContext, favoritesContext, editOrderData) 
                     onError: reject
                 });
             });
-        } else {
-            if (!stashedCheckoutData.value) {
-                return Promise.reject(new Error('Nenhum dado de pedido retido para checkout.'));
-            }
-
-            stashedCheckoutData.value.meta.payment_intent_status = intentData.payment_intent_status;
-            stashedCheckoutData.value.meta.payment_intent_methods = intentData.payment_intent_methods;
-            stashedCheckoutData.value.frontend_intent = intentData.intent || intentData.payment_intent_status;
-
-            if (Array.isArray(intentData.payment_intent_methods)) {
-                const cashMethod = intentData.payment_intent_methods.find(m => m.change_target);
-                if (cashMethod) {
-                    stashedCheckoutData.value.meta.change_target = cashMethod.change_target;
-                }
-            }
-
-            const submissionPromise = submitOrder(stashedCheckoutData.value);
-            activeCartSidebarView.value = 'cart';
-            return submissionPromise;
         }
+
+        // Caso 2: Existem itens no carrinho (seja pedido novo ou append em pedido existente).
+        if (!stashedCheckoutData.value) {
+            return Promise.reject(new Error('Nenhum dado de pedido retido para checkout.'));
+        }
+
+        if (targetOrderId) {
+            stashedCheckoutData.value.order_id = targetOrderId;
+            if (!stashedCheckoutData.value.meta) {
+                stashedCheckoutData.value.meta = {};
+            }
+            stashedCheckoutData.value.meta.order_id = targetOrderId;
+            stashedCheckoutData.value.meta.existing_order_id = targetOrderId;
+        }
+
+        stashedCheckoutData.value.meta.payment_intent_status = intentData.payment_intent_status;
+        stashedCheckoutData.value.meta.payment_intent_methods = intentData.payment_intent_methods;
+        stashedCheckoutData.value.frontend_intent = intentData.intent || intentData.payment_intent_status;
+
+        if (Array.isArray(intentData.payment_intent_methods)) {
+            const cashMethod = intentData.payment_intent_methods.find(m => m.change_target);
+            if (cashMethod) {
+                stashedCheckoutData.value.meta.change_target = cashMethod.change_target;
+            }
+        }
+
+        const submissionPromise = submitOrder(stashedCheckoutData.value);
+        activeCartSidebarView.value = 'cart';
+        return submissionPromise;
     };
 
     return {
