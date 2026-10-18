@@ -50,18 +50,21 @@ class OrderItemProcessor
             }
         }
 
-        // 🚀 Suporta tanto 'id' quanto 'product_id' vindos do payload
+        // Suporta 'id' ou 'product_id' vindos do payload
         $productId = $itemData["product_id"] ?? $itemData["id"] ?? null;
         $productModel = $productId ? $this->getProduct((int)$productId) : null;
 
-        // 🚀 O nome canonical vem do banco de dados (Product Model), eliminando a perda do nome
+        // O nome canônico vem do banco (Product Model), evitando perda de nomenclatura
         $resolvedName = $productModel?->name
             ?? $productModel?->title
             ?? $itemData["name"]
             ?? $itemData["product_name"]
             ?? 'Produto';
 
-        if (!empty($itemData["isTakeaway"])) {
+        // Detecção e aplicação uniforme de takeaway
+        $isTakeaway = (bool) (!empty($itemData["isTakeaway"]) || !empty($itemData["is_takeaway"]));
+
+        if ($isTakeaway && !str_contains($resolvedName, '(Viagem)')) {
             $resolvedName .= " (Viagem)";
         }
 
@@ -86,16 +89,13 @@ class OrderItemProcessor
             "notes"             => $notes,
             "user_name"         => auth()->user()?->name ?? 'Sistema',
             "is_combo_item"     => $hasComboItems,
+            "is_takeaway"       => $isTakeaway,
             "status"            => 'active',
             "production_status" => 'pending',
         ]);
 
-        // 🚀 Garante a relação Eloquent hidratada em memória para todo o ciclo de vida do PDV
         if ($productModel) {
             $mainOrderItem->setRelation('product', $productModel);
-        }
-
-        if ($productModel) {
             $this->inventoryService->deductStock($productModel, $qty);
         }
 

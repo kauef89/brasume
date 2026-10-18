@@ -67,11 +67,10 @@ class OrderTransferService
                 ->count();
 
             if ($remainingActiveItems === 0) {
-                // Marca como 'cancelled' para ser tratado como inativo em todo o ecossistema
+                // Comanda de origem agora recebe o status elegante de transferência
                 $sourceOrder->update([
-                    'status'        => 'cancelled',
-                    'cancel_reason' => "Transferência total para {$destOrder->customer_name} (#{$destOrder->id})",
-                    'notes'         => trim(($sourceOrder->notes ? $sourceOrder->notes . ' | ' : '') . "Itens transferidos para {$destOrder->customer_name} (#{$destOrder->id})"),
+                    'status' => 'transferred',
+                    'notes'  => trim(($sourceOrder->notes ? $sourceOrder->notes . ' | ' : '') . "Itens transferidos para {$destOrder->customer_name} (#{$destOrder->id})"),
                 ]);
 
                 // Libera a mesa física de origem
@@ -138,8 +137,8 @@ class OrderTransferService
             if (is_numeric($intent)) {
                 $destOrder = Order::lockForUpdate()->findOrFail((int) $intent);
 
-                if (in_array($destOrder->status, ['closed', 'cancelled', 'merged', 'completed'])) {
-                    throw new \Exception("A comanda de destino (#{$destOrder->id}) já está finalizada.");
+                if (in_array($destOrder->status, ['closed', 'cancelled', 'merged', 'completed', 'transferred'])) {
+                    throw new \Exception("A comanda de destino (#{$destOrder->id}) já está finalizada ou transferida.");
                 }
 
                 return $destOrder;

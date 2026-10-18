@@ -55,6 +55,9 @@ class ComboItemProcessor
             $subPrice = (float) ($cItem["price"] ?? 0);
             $subNotes = !empty($cItem["notes"]) ? trim((string) $cItem["notes"]) : null;
 
+            // Herda a flag de viagem do combo pai caso não venha explícita no subitem
+            $isTakeaway = (bool) ($parentItem->is_takeaway || !empty($cItem["isTakeaway"]) || !empty($cItem["is_takeaway"]));
+
             $subOrderItem = $order->items()->create([
                 "parent_item_id"    => $parentItem->id,
                 "is_combo_item"     => true,
@@ -67,6 +70,7 @@ class ComboItemProcessor
                 "prep_time_minutes" => $childProductModel?->prep_time_minutes,
                 "notes"             => $subNotes,
                 "user_name"         => auth()->user()?->name ?? 'Sistema',
+                "is_takeaway"       => $isTakeaway,
                 "status"            => 'active',
                 "production_status" => 'pending',
             ]);
@@ -129,7 +133,7 @@ class ComboItemProcessor
             'cancel_reason'     => 'Substituído por alteração de ingredientes'
         ]);
 
-        // 2. Calcula novo valor: base de subitem é 0, cobrando apenas modificadores adicionais
+        // 2. Calcula novo valor
         $productId = $itemData["id"] ?? $oldChild->product_id;
         $productModel = $productId ? $this->getProduct((int)$productId) : null;
         $productName = $itemData["name"] ?? $oldChild->product_name;
@@ -141,7 +145,9 @@ class ComboItemProcessor
         $notes = !empty($itemData["notes"]) ? trim((string) $itemData["notes"]) : null;
         $notes = trim(($notes ? $notes . " " : "") . "*** MODIFICAÇÃO DE ITEM DO COMBO ***");
 
-        // 3. Cria o novo subitem com parent_item_id preservado
+        $isTakeaway = (bool) ($parentCombo?->is_takeaway || $oldChild->is_takeaway || !empty($itemData["isTakeaway"]) || !empty($itemData["is_takeaway"]));
+
+        // 3. Cria o novo subitem com parent_item_id e flag is_takeaway preservados
         $newChild = $order->items()->create([
             "parent_item_id"    => $oldChild->parent_item_id,
             "is_combo_item"     => true,
@@ -154,6 +160,7 @@ class ComboItemProcessor
             "prep_time_minutes" => $productModel?->prep_time_minutes ?? $oldChild->prep_time_minutes,
             "notes"             => $notes,
             "user_name"         => auth()->user()?->name ?? 'Sistema',
+            "is_takeaway"       => $isTakeaway,
             "status"            => 'active',
             "production_status" => 'pending',
         ]);
@@ -166,7 +173,7 @@ class ComboItemProcessor
             $this->attachModifiers($newChild, $itemData["structuredModifiers"], $qty);
         }
 
-        // 4. Ajuste atômico da diferença de preço na conta e no combo pai
+        // 4. Ajuste da diferença de preço na conta e no combo pai
         $priceDelta = round($newTotalPrice - $oldChildPrice, 2);
 
         if ($priceDelta != 0) {
@@ -207,9 +214,9 @@ class ComboItemProcessor
             $orderItem->modifiers()->create([
                 "modifier_option_id" => $optionId,
                 "modifier_group_id"  => $groupId,
-                "name"               => trim((string) $mod["name"]),
-                "quantity"           => $modQty * $qtyMultiplier,
-                "price"              => (float) ($mod["price"] ?? 0),
+                "name"                => trim((string) $mod["name"]),
+                "quantity"            => $modQty * $qtyMultiplier,
+                "price"               => (float) ($mod["price"] ?? 0),
             ]);
 
             if ($optionId) {

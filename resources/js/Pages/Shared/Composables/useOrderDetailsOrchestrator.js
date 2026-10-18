@@ -175,15 +175,30 @@ export function useOrderDetailsOrchestrator(props, activeItemsGrouped) {
     };
 
     const handleExecuteTransfer = (payload) => {
-        router.post(route('operations.transfer-items'), payload, {
-            preserveState: false,
-            onSuccess: () => {
-                isTransferModalVisible.value = false;
-                activeSidebarView.value = 'menu';
-                selectedItemIds.value = [];
-            }
-        });
-    };
+            router.post(route('operations.transfer-items'), payload, {
+                preserveState: true,
+                preserveScroll: true,
+                onSuccess: (page) => {
+                    isTransferModalVisible.value = false;
+                    activeSidebarView.value = 'menu';
+                    selectedItemIds.value = [];
+
+                    // Agora o frontend reconhece se a comanda foi transferida
+                    if (page.props.order && ['cancelled', 'merged', 'transferred'].includes(page.props.order.status)) {
+                        const returnRoute = route().current('team.*') ? route('team.index') : route('operations.index');
+
+                        toast.add({ severity: 'success', summary: 'Mesa Transferida', detail: 'A comanda original foi encerrada.', life: 3000 });
+                        router.visit(returnRoute);
+                    } else {
+                        toast.add({ severity: 'success', summary: 'Transferência Concluída', detail: 'Os itens selecionados foram movidos.', life: 3000 });
+                    }
+                },
+                onError: (errors) => {
+                    const message = Object.values(errors)[0] || 'Falha ao transferir os itens.';
+                    toast.add({ severity: 'error', summary: 'Transferência Recusada', detail: message, life: 5000 });
+                }
+            });
+        };
 
     const handleTransformation = (payload) => {
         router.post(route('operations.orders.transform', props.order.id), payload, {

@@ -233,6 +233,9 @@ const liveOrder = computed(() => {
     return {
         ...base,
         ...fromList,
+        customer: base.customer || fromList.customer,
+        address: base.address || fromList.address,
+        diningTable: base.diningTable || fromList.diningTable,
         items,
         payments
     };
@@ -410,12 +413,17 @@ const handleRemoveCheckoutCoupon = () => {
 };
 
 const intendedPaymentTotal = computed(() => {
-    const currentSelectionTotal = selectedItemsValue.value + (feesAndDiscounts.value * selectionRatio.value);
-    const paidDeduction = unallocatedPaid.value * selectionRatio.value;
+    // Se o pedido tiver itens discriminados, a base é a soma dos itens selecionados + taxas proporcionais.
+    // Se for um pedido legado ou externo sem itens listados, usa o saldo pendente do pedido como fallback.
+    const baseTotal = orderTotalItemsValue.value > 0
+        ? (selectedItemsValue.value + (feesAndDiscounts.value * selectionRatio.value))
+        : pendingOriginalBalance.value;
 
-    const finalAmount = (currentSelectionTotal + (isAllSelected.value ? pendingOriginalBalance.value : 0)) - paidDeduction - appliedCheckoutDiscount.value;
+    const paidDeduction = unallocatedPaid.value * (orderTotalItemsValue.value > 0 ? selectionRatio.value : 1);
 
-    return Math.max(0, Number((finalAmount).toFixed(2)));
+    const finalAmount = baseTotal - paidDeduction - appliedCheckoutDiscount.value;
+
+    return Math.max(0, Number(finalAmount.toFixed(2)));
 });
 
 const {

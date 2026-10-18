@@ -25,9 +25,9 @@ class PosCheckoutService
      */
     protected function assertOrderCanBeMutated(Order $order, bool $allowIfPaid = false): void
     {
-        $isClosed = in_array($order->status, ['closed', 'cancelled', 'completed', 'delivered', 'merged'], true);
+        $isClosed = in_array($order->status, ['closed', 'cancelled', 'completed', 'delivered', 'merged', 'transferred'], true);
         if ($isClosed) {
-            throw new \Exception("Ação Recusada: O Pedido #{$order->id} já se encontra finalizado ou cancelado.");
+            throw new \Exception("Ação Recusada: O Pedido #{$order->id} já se encontra finalizado, cancelado ou transferido.");
         }
 
         if (!$allowIfPaid && $order->payment_status === 'paid') {
@@ -38,7 +38,12 @@ class PosCheckoutService
     public function getCheckoutData(Order $order): array
     {
         $relations = ['items.modifiers', 'items.subItems.modifiers'];
-        if (method_exists($order, 'customer')) $relations[] = 'customer';
+
+        // 🚀 AQUI: Forçando a seleção dos campos de fidelidade do cliente!
+        if (method_exists($order, 'customer')) {
+            $relations['customer'] = fn($query) => $query->select('id', 'name', 'cpf', 'phone', 'loyalty_points', 'loyalty_points_expires_at');
+        }
+
         if (method_exists($order, 'address')) $relations[] = 'address';
         if (method_exists($order, 'payments')) $relations[] = 'payments.items';
         if (method_exists($order, 'diningTable')) $relations[] = 'diningTable';
@@ -188,7 +193,7 @@ class PosCheckoutService
                 $newMod->save();
             }
 
-            // 🚀 Clona todos os subitens se for um combo inteiro
+            // Clona todos os subitens se for um combo inteiro
             foreach ($originalItem->subItems as $subItem) {
                 $newSub = $subItem->replicate([
                     'id',

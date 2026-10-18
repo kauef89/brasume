@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests\Pos;
 
+use App\Models\Address;
 use App\Models\CompanySetting;
 use App\Models\DiningTable;
-use App\Models\Order;
 use App\Models\PaymentMethod;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -85,7 +85,7 @@ class PosOrderSubmitRequest extends FormRequest
                 'max:100'
             ],
 
-            // Mesa (obrigatória apenas se não for append ou se for troca explícita)
+            // Mesa
             'routing.table'                                         => ['nullable', 'array'],
             'routing.table.id'                                      => [Rule::requiredIf(!$isAppend && $type === 'table'), 'nullable', 'integer', 'exists:dining_tables,id'],
             'routing.dining_table_id'                               => [Rule::requiredIf(!$isAppend && $type === 'table'), 'nullable', 'integer', 'exists:dining_tables,id'],
@@ -99,9 +99,9 @@ class PosOrderSubmitRequest extends FormRequest
             'routing.customer.phone'                                => ['nullable', 'string', 'max:20'],
             'routing.customer.cpf'                                  => ['nullable', 'string'],
 
-            // Endereço (Delivery)
+            // Endereço (Delivery flexibilizado)
             'routing.address_id'                                    => ['nullable'],
-            'routing.address'                                       => ['nullable', 'array'],
+            'routing.address'                                       => ['nullable'], // Não força array para aceitar id direto
             'routing.address.id'                                    => [Rule::requiredIf(!$isAppend && $type === 'delivery'), 'nullable', 'integer', 'exists:addresses,id'],
             'routing.address.delivery_fee'                          => [Rule::requiredIf(!$isAppend && $type === 'delivery'), 'nullable', 'numeric', 'min:0'],
 
@@ -130,7 +130,8 @@ class PosOrderSubmitRequest extends FormRequest
             'order_id.exists'             => 'A comanda informada não existe, já foi concluída ou foi cancelada.',
             'routing.identifier.required' => 'Para pedidos de Balcão, informe o nome do cliente ou selecione um cadastro.',
             'routing.table.id.required'   => 'Selecione uma mesa válida para o lançamento.',
-            'routing.address.id.required' => 'Selecione um endereço cadastrado para entrega.',
+            'routing.address.id.required' => 'Selecione um endereço cadastrado para a entrega.',
+            'routing.address.required'    => 'Informe o endereço de entrega do pedido.',
         ];
     }
 
@@ -145,7 +146,7 @@ class PosOrderSubmitRequest extends FormRequest
             $finalTotal = (float) data_get($this->all(), 'financials.finalTotal', 0);
             $changeTarget = (float) (data_get($this->all(), 'routing.change_target') ?? data_get($this->all(), 'routing.cash_change_target', 0));
 
-            // Valida teto de troco no Delivery conforme PosSchema
+            // Valida teto de troco no Delivery conforme CompanySetting
             if ($isDelivery && $isCash && $changeTarget > $finalTotal) {
                 $hasLimit = (bool) ($setting?->has_max_change_limit ?? false);
                 $maxChange = (float) ($setting?->max_change_amount ?? 0);
@@ -171,15 +172,15 @@ class PosOrderSubmitRequest extends FormRequest
         $financials = $this->input('financials', []);
 
         $rootOrderId = $this->input('order_id')
-            ?? $routing['order_id']
-            ?? $routing['existing_order_id']
-            ?? $routing['id']
-            ?? null;
+            ?? ($routing['order_id'] ?? null)
+            ?? ($routing['existing_order_id'] ?? null)
+            ?? ($routing['id'] ?? null);
 
         if ($rootOrderId) {
             $this->merge(['order_id' => (int) $rootOrderId]);
         }
 
+        // 1. Normalização de itens compostos / combos
         if (is_array($items)) {
             foreach ($items as &$item) {
                 if (!empty($item['comboItems']) && is_array($item['comboItems'])) {
@@ -197,8 +198,9 @@ class PosOrderSubmitRequest extends FormRequest
             $this->merge(['items' => $items]);
         }
 
+        // 2. Normalização de Mesa
         if (isset($routing['type']) && $routing['type'] === 'table') {
-            $tableId = $routing['dining_table_id'] ?? $routing['table_id'] ?? $routing['table']['id'] ?? null;
+            $tableId = $routing['dining_table_id'] ?? ($routing['table_id'] ?? ($routing['table']['id'] ?? null));
             if ($tableId) {
                 $table = DiningTable::find((int) $tableId);
                 $routing['dining_table_id'] = (int) $tableId;
@@ -207,7 +209,49 @@ class PosOrderSubmitRequest extends FormRequest
             }
         }
 
-        if (isset($routing['type']) && $routing['type'] !== 'delivery') {
+        // 3. Normalização Polimórfica de Endereço (Delivery)
+        if (isset($routing['type']) && $routing['type'] === 'delivery') {
+            $rawAddress = $routing['address'] ?? null;
+            $rawAddressId = $routing['address_id'] ?? null;
+
+            if (is_numeric($rawAddress)) {
+                // Front mandou routing.address = 14 (inteiro puro)
+                $addressModel = Address::with(['neighborhood', 'street'])->find((int) $rawAddress);
+                $fee = (float) ($addressModel?->neighborhood?->delivery_fee ?? ($financials['deliveryFee'] ?? 0));
+
+                $routing['address_id'] = (int) $rawAddress;
+                $routing['address'] = [
+                    'id'           => (int) $rawAddress,
+                    'delivery_fee' => $fee,
+                    'street'       => $addressModel?->street?->name ?? ($addressModel?->street ?? ''),
+                    'number'       => $addressModel?->number ?? '',
+                ];
+            } elseif (is_array($rawAddress)) {
+                // Front mandou routing.address = { id: 14, ... }
+                $addrId = $rawAddress['id'] ?? ($rawAddressId ?? null);
+                if ($addrId && is_numeric($addrId)) {
+                    $routing['address_id'] = (int) $addrId;
+                    $routing['address']['id'] = (int) $addrId;
+
+                    if (!isset($routing['address']['delivery_fee'])) {
+                        $addressModel = Address::with('neighborhood')->find((int) $addrId);
+                        $routing['address']['delivery_fee'] = (float) ($addressModel?->neighborhood?->delivery_fee ?? ($financials['deliveryFee'] ?? 0));
+                    }
+                }
+            } elseif ($rawAddressId && is_numeric($rawAddressId)) {
+                // Front mandou routing.address_id = 14
+                $addressModel = Address::with(['neighborhood', 'street'])->find((int) $rawAddressId);
+                $fee = (float) ($addressModel?->neighborhood?->delivery_fee ?? ($financials['deliveryFee'] ?? 0));
+
+                $routing['address_id'] = (int) $rawAddressId;
+                $routing['address'] = [
+                    'id'           => (int) $rawAddressId,
+                    'delivery_fee' => $fee,
+                    'street'       => $addressModel?->street?->name ?? ($addressModel?->street ?? ''),
+                    'number'       => $addressModel?->number ?? '',
+                ];
+            }
+        } elseif (isset($routing['type']) && $routing['type'] !== 'delivery') {
             $routing['address'] = null;
             $routing['address_id'] = null;
             if (is_array($financials)) {
@@ -215,6 +259,7 @@ class PosOrderSubmitRequest extends FormRequest
             }
         }
 
+        // 4. Resolução do motor de pagamento
         if (!empty($routing['payment_method_id'])) {
             $paymentMethod = PaymentMethod::find((int) $routing['payment_method_id']);
             if ($paymentMethod) {

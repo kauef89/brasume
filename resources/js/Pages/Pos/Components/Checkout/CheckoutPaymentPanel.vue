@@ -64,7 +64,7 @@
             </div>
         </div>
 
-        <!-- 🚀 STAGING AREA INTEGRADA COM DIVISOR E VALOR SUGERIDO (Sem slot duplicado) -->
+        <!-- 🚀 STAGING AREA INTEGRADA COM DIVISOR E VALOR SUGERIDO -->
         <PaymentStagingArea
             :class="{ 'opacity-40 pointer-events-none': !$page.props.hasOpenShift }"
             :available-methods="mappedMethods"
@@ -73,7 +73,7 @@
             :suggested-amount="suggestedAmount"
             :active-divisor="activeDivisor"
             :allow-change-target="false"
-            @divide="$emit('divide', $event)"
+            @divide="$emit('divide',$event)"
             @clear-divisor="$emit('clear-divisor')"
             @add-payment="handleAddPayment"
             @remove-payment="handleRemovePayment"
@@ -185,12 +185,28 @@ const mappedMethods = computed(() => {
         const balance = customerBalanceReais.value;
         const alreadyStaged = props.stagedPayments.some(p => p.engine_type === 'internal_loyalty');
 
+        // Regra de resgate mínimo
+        const minRedeem = Number(props.companySettings?.loyalty_min_redeem_value || 0);
+        const isSubtotalEligible = props.orderSubtotal >= minRedeem;
+
         let subtitle = 'Sem saldo';
         if (!hasCustomer) subtitle = 'Vincule o cliente';
         else if (alreadyStaged) subtitle = 'Já aplicado';
+        else if (balance > 0 && !isSubtotalEligible) subtitle = `Mín. pedido: ${formatCurrency(minRedeem)}`;
         else if (balance > 0) subtitle = `Saldo: ${formatCurrency(balance)}`;
 
-        const isDisabled = !hasCustomer || balance <= 0 || alreadyStaged || props.pendingToStage <= 0;
+        // Trava o botão se as condições não forem atendidas
+        const isDisabled = !hasCustomer || balance <= 0 || alreadyStaged || !isSubtotalEligible || props.pendingToStage <= 0;
+
+        // O teto respeita a regra de fixed/percentage
+        const maxVal = Number(props.companySettings?.loyalty_max_redeem_value || 0);
+        const maxType = props.companySettings?.loyalty_max_redeem_type || 'fixed';
+        const maxCap = maxVal > 0
+            ? (maxType === 'percentage' ? (props.orderSubtotal * maxVal) / 100 : maxVal)
+            : Infinity;
+
+        // O valor máximo aplicado é o menor entre: Saldo, Teto ou Valor Pendente do Pedido
+        const maxAllowed = Math.min(balance, maxCap, props.pendingToStage);
 
         methods.unshift({
             id: 'cashback',
@@ -201,7 +217,7 @@ const mappedMethods = computed(() => {
             is_cash: false,
             engine_type: 'internal_loyalty',
             disabled: isDisabled,
-            max_value: balance,
+            max_value: maxAllowed,
             colorClass: 'border-primary-500/40 bg-primary-500/5 text-primary-700 dark:text-primary-400 hover:bg-primary-500/10 hover:border-primary-500/60'
         });
     }
