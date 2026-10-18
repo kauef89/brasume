@@ -99,7 +99,7 @@
         <CouponPickerModal
             v-model="showCouponModal"
             :subtotal="subtotal"
-            :customer-id="customerId"
+            :customer-id="activeCustomerId"
             @apply="handleApplyFromModal"
         />
     </footer>
@@ -125,11 +125,23 @@ const props = defineProps({
     isRoutingValid: { type: Boolean, default: false },
     canSubmit: { type: Boolean, default: false },
     appliedCouponName: { type: String, default: null },
+    // 🚀 Declaração do ID e do objeto cliente para eliminar o aviso do Vue
+    customerId: { type: [Number, String, null], default: null },
+    customer: { type: Object, default: null },
 });
 
-const emit = defineEmits(['checkout', 'add-address', 'open-coupons', 'remove-coupon']);
+const emit = defineEmits([
+    'checkout',
+    'add-address',
+    'open-coupons',
+    'remove-coupon',
+    'apply-coupon',
+    'toggle-coupon-form'
+]);
 
 const showCouponModal = ref(false);
+
+const activeCustomerId = computed(() => props.customerId ?? props.customer?.id ?? null);
 
 const shouldDisplayServiceFee = computed(() => props.showServiceFeeRow || props.serviceFee > 0);
 

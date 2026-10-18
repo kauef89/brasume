@@ -19,6 +19,7 @@ use App\Http\Controllers\Tenant\Operations\ProductionController;
 use App\Http\Controllers\Tenant\Operations\InventoryMovementController;
 use App\Http\Controllers\Tenant\Operations\TableController;
 use App\Http\Controllers\Tenant\Operations\WmsRestockController;
+use App\Http\Controllers\Tenant\Operations\ScheduleController;
 
 use App\Http\Controllers\Tenant\RestaurantOps\KdsProductionController;
 use App\Http\Controllers\Tenant\RestaurantOps\ShiftAttendanceController;
@@ -45,12 +46,16 @@ Route::prefix("operations")->group(function () {
     Route::post("/orders", [OrderCreationController::class, "store"])->name("operations.orders.store");
     Route::get("/orders/{order}", [OrderController::class, "show"])->name("operations.orders.show");
     Route::post("/orders/{order}/toggle-rating", [OrderController::class, "toggleRating"])->name("operations.orders.toggle-rating");
-
-    Route::post('/operations/orders/{order}/append', [OrderAppendController::class, 'store'])->name('operations.orders.append');
-
+    Route::post('/orders/{order}/append', [OrderAppendController::class, 'store'])->name('operations.orders.append');
     Route::post("/orders/{order}/status", [OrderStatusController::class, "update"])->name("operations.orders.update-status");
     Route::post("/orders/{order}/cancel", [OrderStatusController::class, "cancel"])->name("operations.orders.cancel");
     Route::post("/orders/{order}/cancel-item", [OrderStatusController::class, "cancelItem"])->name("operations.orders.cancel-item");
+
+    // Módulo de Gestão de Escalas (Lei 5x2)
+    // Redireciona qualquer chamada legada ou link direto para a aba SPA correspondente dentro do PDV
+    Route::get('/schedules', fn () => redirect()->to('/pos/schedules' . (request()->getQueryString() ? '?' . request()->getQueryString() : '')))->name('operations.schedules.index');
+    Route::post('/schedules/batch', [ScheduleController::class, 'batchSave'])->name('operations.schedules.batch');
+    Route::post('/schedules/clone', [ScheduleController::class, 'cloneWeek'])->name('operations.schedules.clone');
 
     // Logística & Delivery
     Route::post("/orders/{order}/transform", [OrderLogisticsController::class, "transform"])->name("operations.orders.transform");
@@ -67,7 +72,7 @@ Route::prefix("operations")->group(function () {
     Route::post("/tables/{table}/join", [TableController::class, "join"])->name("operations.tables.join");
     Route::post("/tables/{table}/split", [TableController::class, "split"])->name("operations.tables.split");
 
-    // Comanda do Salão / Balcão (OrderBillController)
+    // Comanda do Salão / Balcão
     Route::get("/orders/{order}/checkout", [OrderBillController::class, "show"])->name("operations.checkout");
     Route::post("/orders/{order}/items", [OrderBillController::class, "addItem"])->name("operations.orders.items.store");
     Route::post("/orders/{order}/quick-add", [OrderBillController::class, "quickAdd"])->name("operations.quick-add");
@@ -81,7 +86,7 @@ Route::prefix("operations")->group(function () {
     Route::post("/orders/{order}/pay", [CheckoutPaymentController::class, "processPayment"])->name("operations.orders.pay");
     Route::delete("/orders/{order}/payments/{payment}", [CheckoutPaymentController::class, "destroyPayment"])->name("operations.orders.payments.destroy");
     Route::post("/orders/{order}/emit-nfce", [CheckoutFiscalController::class, "emitNfce"])->name("operations.orders.emit-nfce");
-    Route::post('/operations/orders/{order}/generate-pix', [CheckoutPaymentController::class, 'generatePix'])->name('operations.orders.generate-pix');
+    Route::post('/orders/{order}/generate-pix', [CheckoutPaymentController::class, 'generatePix'])->name('operations.orders.generate-pix');
     Route::post("/orders/{order}/finalize-receipt", [CheckoutFiscalController::class, "finalizeReceipt"])->name("operations.finalize-receipt");
     Route::post("/orders/{order}/print-conference", [CheckoutFiscalController::class, "printConference"])->name("operations.print-conference");
     Route::delete("/orders/{order}/payments/{payment}/rollback", [CashierController::class, 'rollbackPayment'])->name('operations.orders.payments.rollback');
@@ -100,12 +105,11 @@ Route::prefix("operations")->group(function () {
     Route::post("/inventory/batch-adjust", [InventoryMovementController::class, "batchAdjust"])->name("operations.inventory.batch-adjust");
     Route::post("/inventory/{product}/adjust", [InventoryMovementController::class, "adjust"])->name("operations.inventory.adjust");
 
-    // Ações do KDS
+    // KDS
     Route::get("/kds", fn () => redirect()->route('kds.index'))->name("operations.kds");
     Route::post("/kds/items/{item}/status", [KdsProductionController::class, "updateStatus"])->name("operations.kds.update-status");
     Route::post("/kds/items/{item}/loss", [KdsProductionController::class, "registerLoss"])->name("operations.kds.register-loss");
     Route::post("/kds/items/{item}/cancel", [KdsProductionController::class, "cancelItem"])->name("operations.kds.cancel-item");
-    // 🚀 IMPRESSÃO EM LOTE REGISTRADA ANTES DO PARÂMETRO {item}
     Route::post("/kds/items/bulk-print", [KdsProductionController::class, "bulkPrint"])->name("operations.kds.bulk-print");
     Route::post("/kds/items/{item}/print", [KdsProductionController::class, "printItem"])->name("operations.kds.print-item");
 
@@ -120,10 +124,10 @@ Route::prefix("operations")->group(function () {
     Route::post("/checklists/{checklist}/tasks", [ChecklistApiController::class, "storeTask"])->name("operations.checklists.tasks.store");
     Route::put("/checklists/tasks/{task}", [ChecklistApiController::class, "updateTask"])->name("operations.checklists.tasks.update");
     Route::delete("/checklists/tasks/{task}", [ChecklistApiController::class, "destroyTask"])->name("operations.checklists.tasks.destroy");
-    Route::get('/operations/checklists/search-inventory', [ChecklistApiController::class, 'searchInventoryItems'])->name('operations.checklists.search-inventory');
+    Route::get('/checklists/search-inventory', [ChecklistApiController::class, 'searchInventoryItems'])->name('operations.checklists.search-inventory');
 
     // Impressoras
-    Route::get('/printers', [PrintQueueController::class, 'index'])->name('operations.printers.index');
+    Route::get('/printers', [PrintQueueController::class, "index"])->name('operations.printers.index');
     Route::post('/printers/retry', [PrintQueueController::class, 'retryJobs'])->name('operations.printers.retry');
     Route::post('/printers/retry-all-failed', [PrintQueueController::class, 'retryAllFailed'])->name('operations.printers.retry-all');
     Route::post('/printers/dismiss', [PrintQueueController::class, 'dismissJobs'])->name('operations.printers.dismiss');
@@ -135,7 +139,6 @@ Route::prefix("operations")->group(function () {
     Route::get("/shopping-list", [ProcurementController::class, "index"])->name("operations.shopping-list");
     Route::post("/shopping-list/remove", [ProcurementController::class, "removeItem"])->name("operations.shopping-list.remove");
     Route::post("/shopping-list/approve", [ProcurementController::class, "approve"])->name("operations.shopping-list.approve");
-
     Route::get("/production-board", [ProductionController::class, "index"])->name("operations.production-board");
     Route::post("/production-board/status", [ProductionController::class, "updateStatus"])->name("operations.production-board.status");
     Route::post("/production-board/finish", [ProductionController::class, "finish"])->name("operations.production-board.finish");

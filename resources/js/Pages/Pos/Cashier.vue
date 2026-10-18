@@ -370,7 +370,11 @@ const openShiftView = (type) => {
     shiftActionType.value = type;
 
     if (type === 'open') {
-        stagedAttendees.value = [];
+        // 🚀 Pré-carrega a equipe a partir da escala 5x2 programada para hoje
+        stagedAttendees.value = props.todayScheduledAttendees?.length > 0
+            ? [...props.todayScheduledAttendees]
+            : [];
+
         leftView.value = 'attendance';
         rightView.value = 'empty';
     } else {

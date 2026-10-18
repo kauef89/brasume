@@ -136,6 +136,16 @@
                     <span class="font-black uppercase tracking-widest text-xs">Preparando Conta...</span>
                 </div>
             </div>
+
+            <!-- 🚀 ABA NOVA: GESTÃO DE ESCALAS 5x2 -->
+            <div v-if="activeTab === 'schedules'" class="h-full w-full animate-in slide-in-from-bottom-4 duration-300">
+                <ScheduleBoard
+                    :start-date="$page.props.scheduleStartDate || $page.props.startDate"
+                    :employees="$page.props.employees"
+                    :slots="$page.props.slots"
+                    :initial-schedules="$page.props.initialSchedules"
+                />
+            </div>
         </main>
 
         <!-- 🔔 TOASTS DE ALERTA DE IMPRESSÃO (CANTO INFERIOR DIREITO) -->
@@ -153,7 +163,7 @@
 
 <script setup>
 import axios from 'axios';
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import { useToast } from 'primevue/usetoast';
 
@@ -174,6 +184,9 @@ import ShoppingList from '@/Pages/Shared/SupplyChain/ShoppingList.vue';
 import Printers from '@/Pages/Operations/Printers/Printers.vue';
 import KdsBoard from '@/Pages/Operations/KdsBoard.vue';
 import PrintAlertNotice from '@/Components/UI/PrintAlertNotice.vue';
+
+// 🚀 IMPORT PREGUIÇOSO DO NOVO MÓDULO PARA NÃO PESAR O PDV (Lazy Loading)
+const ScheduleBoard = defineAsyncComponent(() => import('@/Pages/Operations/Schedules/ScheduleBoard.vue'));
 
 import { usePosTerminalLock } from '@/Pages/Pos/Composables/usePosTerminalLock';
 import { usePosSync } from '@/Pages/Pos/Composables/usePosSync';
@@ -196,7 +209,7 @@ const resolveInitialTab = () => {
         const parts = window.location.pathname.split('/').filter(Boolean);
         if (parts.length > 1 && parts[0] === 'pos') {
             const urlTab = parts[1];
-            const validTabs = ['new', 'pos', 'orders', 'customers', 'shift', 'tasks', 'availability', 'production', 'purchases', 'printers', 'checkout'];
+            const validTabs = ['new', 'pos', 'orders', 'customers', 'shift', 'tasks', 'availability', 'production', 'purchases', 'printers', 'checkout', 'schedules'];
             if (validTabs.includes(urlTab)) return urlTab === 'pos' ? 'new' : urlTab;
         }
     }
@@ -263,7 +276,6 @@ const checkShiftIntegrity = () => {
 };
 
 const goToCheckout = async (target) => {
-    // 🛡️ Extrai o ID com segurança (seja número, string ou objeto { id: 1538 })
     const orderId = (typeof target === 'object' && target !== null) ? (target.id || target.orderId) : target;
     if (!orderId) return;
 
@@ -272,7 +284,6 @@ const goToCheckout = async (target) => {
     window.history.pushState({ tab: 'checkout' }, '', `/pos/orders?checkout=${orderId}`);
 
     try {
-        // 🚀 Removemos o 'X-Inertia' para acionar o return response()->json($payload) do controller
         const response = await axios.get(route('operations.checkout', orderId), {
             headers: {
                 'Accept': 'application/json'
@@ -312,40 +323,39 @@ const handleTabChange = (e) => {
     let targetTab = e.detail;
     if (targetTab === 'operations') targetTab = 'orders';
     if (targetTab === 'pos') targetTab = 'new';
+    if (targetTab.includes('schedules')) targetTab = 'schedules';
 
     if (activeTab.value === 'checkout' && targetTab !== 'checkout') {
         checkoutData.value = null;
     }
 
     activeTab.value = targetTab;
+
+    // 🚀 A rota agora é sempre mantida sob a SPA do /pos
     const newUrl = targetTab === 'new' ? '/pos/new' : `/pos/${targetTab}`;
+
     if (window.location.pathname !== newUrl && !window.location.pathname.includes(newUrl)) {
         window.history.pushState({ tab: targetTab }, '', newUrl);
     }
 };
 
-// 🛡️ AUTO-RESET E PRIVACIDADE DE CAIXA POR INATIVIDADE (60 segundos)
 usePosIdleTimer({
-    timeout: 60000, // 1 minuto
+    timeout: 60000,
     isEnabled: () => {
-        // 1. Cenário Checkout: está na aba checkout E o pedido já foi pago/liquidado
         const isFinishedCheckout = activeTab.value === 'checkout' &&
             (checkoutData.value?.order?.payment_status === 'paid' ||
              checkoutData.value?.order?.status === 'closed' ||
              checkoutData.value?.order?.status === 'completed');
 
-        // 2. Cenário Turno/Caixa: está na aba de conferência de turno/valores
         const isShiftView = activeTab.value === 'shift';
 
         return isFinishedCheckout || isShiftView;
     },
     onIdle: () => {
-        // Cenário 1: Fecha o checkout concluído e prepara nova venda
         if (activeTab.value === 'checkout') {
             closeCheckout();
             activeTab.value = 'new';
         }
-        // Cenário 2: Oculta valores financeiros do caixa e volta ao cardápio de atendimento
         else if (activeTab.value === 'shift') {
             activeTab.value = 'new';
             const newUrl = '/pos/new';
@@ -396,7 +406,6 @@ const handleOpenCheckoutEvent = (e) => {
 const { initPosSync } = usePosSync(activeTab, checkoutData);
 initPosSync();
 
-// 🚀 RECEPTOR EM TEMPO REAL: Alertas de Falha de Impressão (Todas as Origens)
 useTenantEcho().listenChannel('operations', '.print.alert', (data) => {
     printAlerts.value.push(data);
 });

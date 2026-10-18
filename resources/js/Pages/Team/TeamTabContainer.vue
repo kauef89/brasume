@@ -55,7 +55,10 @@
 
         <!-- 📊 ABA: GESTOR -->
         <div v-if="activeTab === 'manager'" class="flex-1 overflow-hidden flex flex-col min-h-0 animate-in fade-in">
-            <ManagerShiftDashboard />
+            <ManagerShiftDashboard
+                :current-shift="$page.props.managerData?.shift_status === 'open' ? $page.props.managerData.shift_model : null"
+                :manager-data="$page.props.managerData"
+            />
         </div>
 
         <!-- 🖥️ NOVO: ABA: TERMINAIS (FROTA) -->

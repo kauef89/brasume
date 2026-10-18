@@ -114,7 +114,7 @@ const navItems = [
     { id: 'compras', label: 'Compras', icon: 'pi pi-shopping-bag', action: 'purchases', isSpaTab: true, defaultVisible: false },
     { id: 'spooler', label: 'Spooler', icon: 'pi pi-print', action: 'printers', isSpaTab: true, defaultVisible: false },
     { id: 'ajustes', label: 'Ajustes', icon: 'pi pi-cog', action: 'settings', isSpaTab: true, defaultVisible: false },
-];
+    { id: 'escalas', label: 'Escala', icon: 'pi pi-calendar-clock', action: 'schedules', isSpaTab: true, defaultVisible: false },];
 
 const isCurrent = (action) => {
     return props.modelValue === action;

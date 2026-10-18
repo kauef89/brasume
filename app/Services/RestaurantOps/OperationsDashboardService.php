@@ -246,25 +246,43 @@ class OperationsDashboardService
 
     public function getManagerShiftSummary(?User $user): ?array
     {
-        if (!$user || !$user->hasAnyRole(['admin', 'gerente', 'manager'])) return null;
+        // Garante que só quem é da diretoria/gerência veja os dados
+        if (!$user || !$user->hasAnyRole(['admin', 'gerente', 'manager', 'owner'])) return null;
 
-        $shift = CashShift::where('status', 'open')->latest('opened_at')->first();
+        // Pega o turno aberto... ou, se estiver fechado, pega o último turno!
+        $shift = CashShift::where('status', 'open')->latest('opened_at')->first()
+              ?? CashShift::latest('closed_at')->first();
+
         if (!$shift) return null;
 
-        $closedOrders = Order::where('created_at', '>=', $shift->opened_at)->where('status', 'closed')->get();
+        $referenceDate = $shift->opened_at;
+        $endDate = $shift->closed_at ?? now();
+
+        $closedOrders = Order::whereBetween('created_at', [$referenceDate, $endDate])
+            ->whereIn('status', ['closed', 'completed'])
+            ->get();
+
         $revenue = $closedOrders->sum('total');
         $count = $closedOrders->count();
 
+        // 🚀 Conta os pedidos e soma os valores corretamenta para o dashboard
+        $deliveryOrders = $closedOrders->where('type', 'delivery');
+        $tableOrders = $closedOrders->where('type', 'table');
+        $counterOrders = $closedOrders->where('type', 'counter');
+
         return [
+            'shift_status'  => $shift->status,
             'revenue'       => $revenue,
             'order_count'   => $count,
             'avg_ticket'    => $count > 0 ? $revenue / $count : 0,
+            'expected_cash' => $shift->closing_balance_expected ?? $shift->opening_balance ?? 0,
             'by_type'       => [
-                'delivery'  => $closedOrders->where('type', 'delivery')->sum('total'),
-                'table'     => $closedOrders->where('type', 'table')->sum('total'),
-                'counter'   => $closedOrders->where('type', 'counter')->sum('total'),
+                'delivery'  => ['amount' => $deliveryOrders->sum('total'), 'count' => $deliveryOrders->count()],
+                'table'     => ['amount' => $tableOrders->sum('total'), 'count' => $tableOrders->count()],
+                'counter'   => ['amount' => $counterOrders->sum('total'), 'count' => $counterOrders->count()],
             ],
             'shift_start'   => $shift->opened_at->format('H:i'),
+            'shift_model'   => $shift->toArray() // Manda o shift inteiro para a view
         ];
     }
 }

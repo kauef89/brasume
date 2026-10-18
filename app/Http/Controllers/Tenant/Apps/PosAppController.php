@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Tenant\Apps;
 
 use App\Services\Marketing\CrmService;
+use App\Services\RestaurantOps\ScheduleService;
 
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
@@ -20,13 +21,15 @@ use App\Services\RestaurantOps\ShiftAttendanceService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Carbon\Carbon;
 
 class PosAppController extends Controller
 {
     public function index(
         Request $request,
         OperationsMenuService $menuService,
-        OperationsDashboardService $opsService
+        OperationsDashboardService $opsService,
+        ScheduleService $scheduleService
     ): Response {
         $rawTab = $request->route('tab', 'new');
         $activeTab = in_array($rawTab, ['pos', 'new', '']) ? 'new' : $rawTab;
@@ -55,6 +58,7 @@ class PosAppController extends Controller
             'bankAccounts' => BankAccount::where('is_active', true)->orderBy('name')->get(),
             'users' => $attendanceService->getShiftUsersData(),
             'currentAttendees' => $attendanceService->getCurrentAttendees($shift),
+            'todayScheduledAttendees' => $scheduleService->getTodayScheduledAttendees(),
             'ordersHistory' => function () use ($shift) {
                 if (!$shift || !$shift->opened_at) return [];
 
@@ -98,13 +102,20 @@ class PosAppController extends Controller
             'printJobs' => PrintJob::latest('id')->limit(50)->get()->toArray(),
         ];
 
-        // 🚀 Com 'latestCostHistory' no with, os custos vêm em uma única query agregada
         $data['catalog'] = fn () => Product::with(['category', 'latestCostHistory'])
             ->where('status', '!=', 'archived')
             ->orderBy('name')
             ->get();
 
         $data['crmData'] = fn () => app(CrmService::class)->getDashboardData();
+
+        // 🚀 Escala 5x2 (Closures nativas compatíveis)
+        $scheduleStartDate = $request->query('start_date', Carbon::now()->startOfWeek()->format('Y-m-d'));
+
+        $data['scheduleStartDate'] = $scheduleStartDate;
+        $data['employees'] = fn () => $scheduleService->getWeeklySchedule($scheduleStartDate)['employees'];
+        $data['slots'] = fn () => $scheduleService->getWeeklySchedule($scheduleStartDate)['slots'];
+        $data['initialSchedules'] = fn () => $scheduleService->getWeeklySchedule($scheduleStartDate)['schedules'];
 
         return Inertia::render('Pos/PosApp', $data);
     }
