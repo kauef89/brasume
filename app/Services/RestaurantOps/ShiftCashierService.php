@@ -9,13 +9,16 @@ use App\Models\Payment;
 use App\Models\Transaction;
 use App\Models\BankAccount;
 use App\Models\Printer;
+use App\Models\DiningTable;
+use App\Models\User;
 use App\Events\ShiftClosed;
 use App\Services\Printing\Documents\ShiftClosureReport;
 use App\Services\Printing\PrintDispatcher;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 class ShiftCashierService
 {
@@ -60,6 +63,55 @@ class ShiftCashierService
         });
     }
 
+    public function validateAndCleanOrdersBeforeClose(): void
+    {
+        // 1. Limpeza automática de pedidos vazios ou zerados
+        $abandonedOrders = Order::whereNotIn('status', ['closed', 'cancelled'])
+            ->where(function ($q) {
+                $q->whereDoesntHave('items', fn ($iq) => $iq->where('status', '!=', 'cancelled'))
+                  ->orWhere(fn ($sub) => $sub->where('total', '<=', 0.01)->whereDoesntHave('payments'));
+            })
+            ->get();
+
+        foreach ($abandonedOrders as $abandoned) {
+            $abandoned->update([
+                'status' => 'cancelled',
+                'payment_status' => 'cancelled',
+            ]);
+
+            if ($abandoned->dining_table_id) {
+                $hasOtherActive = Order::where('dining_table_id', $abandoned->dining_table_id)
+                    ->where('id', '!=', $abandoned->id)
+                    ->whereNotIn('status', ['closed', 'cancelled'])
+                    ->exists();
+
+                if (!$hasOtherActive) {
+                    DiningTable::where('id', $abandoned->dining_table_id)->update(['status' => 'free']);
+                }
+            }
+        }
+
+        // 2. Verificação de comandas pendentes de pagamento
+        $blockingOrders = Order::whereNotIn('status', ['closed', 'cancelled'])
+            ->whereHas('items', fn ($iq) => $iq->where('status', '!=', 'cancelled'))
+            ->where(fn ($q) => $q->where('payment_status', '!=', 'paid')->orWhere('total', '>', 0.01))
+            ->get();
+
+        if ($blockingOrders->isNotEmpty()) {
+            $tableNumbers = $blockingOrders->where('type', 'table')->pluck('table_number')->filter()->unique()->join(', ');
+            $otherCounts = $blockingOrders->where('type', '!=', 'table')->count();
+
+            $details = [];
+            if ($tableNumbers) $details[] = "Mesa(s): {$tableNumbers}";
+            if ($otherCounts > 0) $details[] = "{$otherCounts} pedido(s) balcão/delivery";
+
+            $detailMsg = !empty($details) ? ' (' . implode(' | ', $details) . ')' : '';
+            $msg = "Não é possível fechar o caixa com pedidos em aberto{$detailMsg}. Finalize ou cancele as contas pendentes.";
+
+            throw ValidationException::withMessages(['shift' => $msg]);
+        }
+    }
+
     public function closeShift(CashShift $shift, array $data, int $operatorId, string $operatorName): CashShift
     {
         $tenant = function_exists('tenant') ? tenant() : null;
@@ -71,23 +123,18 @@ class ShiftCashierService
                 'closing_balance_actual' => (float) ($data['amount'] ?? 0),
                 'closed_by'              => $operatorId,
                 'notes'                  => $data['notes'] ?? ($data['observation'] ?? null),
+                'accepting_orders'       => false,
             ];
-
-            if (true) {
-                $updatePayload['accepting_orders'] = false;
-            }
 
             $shift->update($updatePayload);
         });
 
-        // 🚀 TRANSMISSÃO EM TEMPO REAL: Notifica PosApp, TeamApp e CustomerApp
         try {
             broadcast(new ShiftClosed($shift));
         } catch (\Throwable $e) {
             Log::error("🚨 [ShiftCashierService] Falha ao transmitir evento ShiftClosed: " . $e->getMessage());
         }
 
-        // 🖨️ IMPRESSÃO IMEDIATA DO RELATÓRIO DE FECHAMENTO (Antes de qualquer rotina Artisan externa)
         try {
             $cashierPrinter = Printer::where('is_cashier', true)
                 ->where('is_active', true)
@@ -105,7 +152,6 @@ class ShiftCashierService
             Log::warning("⚠️ [ShiftCashierService] Falha ao imprimir relatório de fechamento do Turno #{$shift->id}: " . $e->getMessage());
         }
 
-        // Sincronização de consumo WMS
         try {
             $affected = app(\App\Services\RestaurantOps\WmsRestockService::class)->syncPendingConsumptionToShelf($shift->id);
             Log::info("📦 [WmsRestock] Consumo de prateleira consolidado no Turno #{$shift->id} ({$affected} regras atualizadas).");
@@ -113,7 +159,6 @@ class ShiftCashierService
             Log::error("🚨 [WmsRestock] Falha ao sincronizar reposição no fechamento do Turno #{$shift->id}: " . $e->getMessage());
         }
 
-        // 🧹 Limpeza de comandas abandonadas com proteção de contexto multi-tenant
         $tenantId = $tenant?->id ?? (function_exists('tenant') && tenant() ? tenant('id') : null);
         $options = ['--on-shift-close' => true];
 
@@ -126,7 +171,6 @@ class ShiftCashierService
         } catch (\Throwable $e) {
             Log::error("🚨 [ShiftCashierService] Falha ao purgar comandas no fechamento do caixa: " . $e->getMessage());
         } finally {
-            // 🛡️ BLINDAGEM DE TENANCY: Restaura o tenant caso o comando Artisan tenha resetado a conexão
             if ($tenant && (!function_exists('tenant') || !tenant())) {
                 tenancy()->initialize($tenant);
             }
@@ -166,6 +210,47 @@ class ShiftCashierService
         Log::info("💸 [ShiftCashierService] Movimentação avulsa ({$data['type']}) de R$ {$data['amount']} registrada no Turno #{$shift->id}.");
 
         return $transaction;
+    }
+
+    public function authorizeSupervisorPin(string $pin, ?User $currentUser = null): bool
+    {
+        $checkHashOrPlain = function (string $input, ?string $hashCandidate): bool {
+            if (empty($hashCandidate)) return false;
+            if (str_starts_with($hashCandidate, '$2y$') || str_starts_with($hashCandidate, '$2a$') || str_starts_with($hashCandidate, '$2b$')) {
+                try {
+                    return Hash::check($input, $hashCandidate);
+                } catch (\Throwable) {
+                    return false;
+                }
+            }
+            return hash_equals((string) $hashCandidate, (string) $input);
+        };
+
+        if ($currentUser && ($checkHashOrPlain($pin, $currentUser->pin) || $checkHashOrPlain($pin, $currentUser->password))) {
+            return true;
+        }
+
+        $managers = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['admin', 'gerente', 'manager']))->get();
+
+        foreach ($managers as $manager) {
+            if ($checkHashOrPlain($pin, $manager->pin) || $checkHashOrPlain($pin, $manager->password)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function refundAndCancelOrder(Order $order): void
+    {
+        foreach ($order->payments as $payment) {
+            $this->rollbackPayment($order, $payment->id);
+        }
+
+        $order->update([
+            'status'         => 'cancelled',
+            'payment_status' => 'cancelled',
+        ]);
     }
 
     public function rollbackPayment(Order $order, int|string $paymentId): Payment

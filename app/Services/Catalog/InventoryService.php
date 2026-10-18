@@ -310,8 +310,6 @@ class InventoryService
         }
     }
 
-    // [Os métodos adjustStock, processOrderItemStock, auditStorageLocation, triggerStockRupture e triggerStockRestored mantêm-se iguais e otimizados]
-
     public function processOrderItemStock(OrderItem $item, string $action = 'deduct'): void
     {
         $multiplier = $action === 'restore' ? -1 : 1;
@@ -407,6 +405,101 @@ class InventoryService
         });
     }
 
+    public function batchAdjust(array $items, string $reason, int $userId): array
+    {
+        $lossesCount = 0;
+        $totalLossAmount = 0.0;
+
+        DB::transaction(function () use ($items, $userId, $reason, &$lossesCount, &$totalLossAmount) {
+            foreach ($items as $entry) {
+                $product = Product::find($entry['product_id']);
+                if (!$product || !$product->track_inventory) {
+                    continue;
+                }
+
+                $locationId = !empty($entry['location_id']) ? (int) $entry['location_id'] : null;
+                $newLocationStock = (float) $entry['counted_stock'];
+
+                if ($locationId) {
+                    $pivot = DB::table('product_storage_location')
+                        ->where('product_id', $product->id)
+                        ->where('storage_location_id', $locationId)
+                        ->first();
+
+                    $oldLocationStock = $pivot ? (float) $pivot->current_stock : 0.0;
+                    $locationDelta = round($newLocationStock - $oldLocationStock, 4);
+
+                    DB::table('product_storage_location')->updateOrInsert(
+                        ['product_id' => $product->id, 'storage_location_id' => $locationId],
+                        ['current_stock' => $newLocationStock, 'updated_at' => now()]
+                    );
+
+                    $sumLocations = (float) DB::table('product_storage_location')
+                        ->where('product_id', $product->id)
+                        ->sum('current_stock');
+
+                    $loc = StorageLocation::find($locationId);
+                    $locName = $loc?->name ?? "Local #{$locationId}";
+
+                    // Registro de Kardex
+                    $this->logMovement(
+                        product: $product,
+                        type: 'adjustment',
+                        quantity: $locationDelta,
+                        newBalance: $sumLocations,
+                        description: "Balanço Mobile ({$locName}): {$reason}",
+                        locationId: $locationId
+                    );
+
+                    $product->update(['current_stock' => $sumLocations]);
+
+                    if ($locationDelta < 0) {
+                        $lossQty = abs($locationDelta);
+
+                        $lossRecord = $this->registerLoss(
+                            product: $product,
+                            qty: $lossQty,
+                            reason: "Furo de Balanço: {$locName}",
+                            notes: "Contagem física: {$newLocationStock} {$product->unit_of_measure} (Anterior: {$oldLocationStock}). Motivo: {$reason}",
+                            userId: $userId,
+                            orderItemId: null,
+                            lossType: InventoryLoss::TYPE_INVENTORY_AUDIT,
+                            storageLocationId: $locationId,
+                            skipDeduction: true
+                        );
+
+                        $lossesCount++;
+                        $totalLossAmount += (float) $lossRecord->total_cost;
+                    }
+                } else {
+                    $oldStock = (float) $product->current_stock;
+                    $delta = round($newLocationStock - $oldStock, 4);
+
+                    $this->adjustStock($product, $newLocationStock, $reason, $userId);
+
+                    if ($delta < 0) {
+                        $lossesCount++;
+                    }
+                }
+
+                // Avaliação de Ruptura ou Restauração
+                $freshStock = (float) $product->fresh()->current_stock;
+                if ($freshStock <= 0 && $product->status === 'available') {
+                    $this->triggerStockRupture($product);
+                } elseif ($freshStock > 0 && $product->status === 'out_of_stock') {
+                    $this->triggerStockRestored($product);
+                }
+            }
+        });
+
+        broadcast(new CatalogUpdated(function_exists('tenant') && tenant('id') ? tenant('id') : 'central'));
+
+        return [
+            'losses_count'      => $lossesCount,
+            'total_loss_amount' => $totalLossAmount,
+        ];
+    }
+
     public function registerLoss(
         Product $product,
         float $qty,
@@ -418,8 +511,8 @@ class InventoryService
         ?int $storageLocationId = null,
         bool $skipDeduction = false
     ): InventoryLoss {
-        $unitCost = class_exists(ProductCostingService::class)
-            ? ProductCostingService::calculateBaseCost($product)
+        $unitCost = class_exists(\App\Services\SupplyChain\ProductCostingService::class)
+            ? \App\Services\SupplyChain\ProductCostingService::calculateBaseCost($product)
             : (float) ($product->base_cost ?? 0);
 
         $loss = new InventoryLoss([

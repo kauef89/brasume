@@ -57,12 +57,13 @@ class ScheduleService
                     $emp->setAttribute('active_roles', $roles);
 
                     $typeLabel = 'Geral';
-                    if (!empty($emp->employment_type)) {
-                        $enumInstance = EmploymentType::tryFrom($emp->employment_type);
-                        if ($enumInstance) {
-                            $typeLabel = $enumInstance->getLabel();
-                        }
+
+                    if ($emp->employment_type instanceof EmploymentType) {
+                        $typeLabel = $emp->employment_type->getLabel() ?? 'Geral';
+                    } elseif (is_string($emp->employment_type) || is_int($emp->employment_type)) {
+                        $typeLabel = EmploymentType::tryFrom($emp->employment_type)?->getLabel() ?? 'Geral';
                     }
+
                     $emp->setAttribute('employment_type_label', $typeLabel);
 
                     return $emp;

@@ -8,9 +8,13 @@ use App\Models\Transaction;
 use App\Models\PaymentMethod;
 use App\Models\CashShift;
 use App\Models\Employee;
+use App\Models\DiningTable;
+use App\Models\Coupon;
 use App\Events\OrderUpdated;
 use App\Events\OrderCreated;
+use App\Services\Marketing\CouponService;
 use App\Services\Marketing\LoyaltyService;
+use App\Services\RestaurantOps\TablesService;
 use App\Services\RestaurantOps\KitchenDispatchService;
 use App\Services\RestaurantOps\ShiftAttendanceService;
 use App\Notifications\NewB2COrderNotification;
@@ -23,6 +27,65 @@ use Exception;
 class OrderPaymentService
 {
     public function __construct(protected LoyaltyService $loyaltyService) {}
+
+    public function applyCheckoutCoupon(Order $order, string $couponCode, ?float $serviceFee = null): void
+    {
+        $couponService = app(CouponService::class);
+        $baseTotal = (float) $order->subtotal + (float) $order->delivery_fee;
+
+        $couponResult = $couponService->applyCoupon(
+            $couponCode,
+            $baseTotal,
+            $order->customer_id,
+            true
+        );
+
+        if ($couponResult['success']) {
+            $coupon = Coupon::find($couponResult['coupon_id']);
+            $discountValue = $couponService->calculateDiscountValue(
+                $coupon,
+                (float) $order->subtotal,
+                (float) $order->delivery_fee,
+                $serviceFee ?? (float) $order->service_fee
+            );
+
+            $order->coupon_id = $coupon->id;
+            $order->discount = round($discountValue, 2);
+            $order->save();
+
+            $coupon->increment('usage_count');
+        }
+    }
+
+    public function resolveOrderCompletion(Order $order): void
+    {
+        $shouldClose = ($order->status === 'dispatched' && $order->payment_status === 'paid')
+            || ($order->type === 'counter' && in_array($order->status, ['ready', 'dispatched']) && $order->payment_status === 'paid')
+            || ($order->type === 'table' && $order->payment_status === 'paid');
+
+        if (!$shouldClose) {
+            return;
+        }
+
+        $order->status = 'closed';
+        $order->closed_at = now();
+        $order->save();
+
+        if ($order->type === 'table') {
+            $table = $order->diningTable
+                ?? ($order->dining_table_id ? DiningTable::find($order->dining_table_id) : null)
+                ?? (!empty($order->table_number) ? DiningTable::where('name', $order->table_number)->first() : null);
+
+            if ($table && !$table->hasActiveOrdersInGroup($order->id)) {
+                $primaryTable = $table->parent_table_id ? $table->parentTable : $table;
+                if ($primaryTable) {
+                    app(TablesService::class)->split($primaryTable);
+                }
+            }
+        }
+
+        broadcast(new OrderUpdated($order->fresh()));
+    }
 
     public function processPayment(Order $order, array $data): void
     {
@@ -199,7 +262,6 @@ class OrderPaymentService
 
             $areAllItemsPaid = ($unpaidItemsCount === 0);
 
-            // Troco Real: Saída da gaveta se pago em espécie
             if ($excess > 0.02 && $cashPaidThisRun > 0) {
                 $cashChange = min($cashPaidThisRun, $excess);
                 $order->change_returned = round(($order->change_returned ?? 0) + $cashChange, 2);
@@ -217,7 +279,6 @@ class OrderPaymentService
                 ]);
             }
 
-            // Liquidação da conta
             if ($totalPaid >= ($expectedTotal - 0.05) || $areAllItemsPaid || $excess > 0.02) {
                 $order->service_fee = $requestedServiceFee;
                 $order->total = $expectedTotal;
@@ -255,14 +316,12 @@ class OrderPaymentService
 
         $order = DB::transaction(function () use ($txid, $amount, $endToEndId) {
 
-            // 🚀 Tenta achar via coluna nativa ou caso o frontend tenha injetado via payments pivot JSON
             $order = Order::with(['customer.user', 'items', 'payments'])
                 ->where('txid', $txid)
                 ->orWhere('payment_intent_methods', 'like', "%\"txid\":\"{$txid}\"%")
                 ->first();
 
             if (!$order) {
-                // Última tentativa: busca por uma tentativa prévia salva na tabela de pagamentos
                 $payment = \App\Models\Payment::where('txid', $txid)->with('order')->first();
                 if ($payment && $payment->order) {
                     $order = $payment->order;
