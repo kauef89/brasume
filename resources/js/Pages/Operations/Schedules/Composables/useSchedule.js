@@ -18,7 +18,6 @@ export function useSchedule(props) {
     const hasUnsavedChanges = ref(false);
     const isSaving = ref(false);
 
-    // Controle de Drag & Drop e Restrição por Roles
     const draggingEmployeeId = ref(null);
     const draggingEmployeeRoles = ref([]);
 
@@ -86,6 +85,7 @@ export function useSchedule(props) {
                     employee_id: sch.employee_id,
                     name: sch.employee?.name || 'Colaborador',
                     employment_type: sch.employee?.employment_type || 'clt',
+                    employment_type_label: sch.employee?.employment_type_label || 'Geral',
                     active_roles: employeeRoles,
                     schedule_slot_id: sch.schedule_slot_id,
                     assigned_role: sch.assigned_role,
@@ -115,6 +115,7 @@ export function useSchedule(props) {
             employee_id: employee.id,
             name: employee.name,
             employment_type: employee.employment_type,
+            employment_type_label: employee.employment_type_label || 'Geral',
             active_roles: employee.active_roles || [],
             schedule_slot_id: null,
             assigned_role: 'Operação',
@@ -123,7 +124,6 @@ export function useSchedule(props) {
         };
     };
 
-    // Rastreamento do Início do Arrasto
     const onDragStartPool = (evt) => {
         const item = employeePool.value[evt.oldIndex];
         if (item) {
@@ -155,7 +155,6 @@ export function useSchedule(props) {
         draggingEmployeeRoles.value = [];
     };
 
-    // Validador de Incompatibilidade de Slot
     const isSlotIncompatible = (slotId) => {
         if (!draggingEmployeeId.value) return false;
 

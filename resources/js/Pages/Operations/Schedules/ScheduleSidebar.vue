@@ -35,7 +35,7 @@
                                 </span>
                             </div>
                             <div class="flex items-center justify-between text-[10px] text-surface-muted font-bold">
-                                <span class="uppercase truncate text-[9px]">{{ element.employment_type || 'Geral' }}</span>
+                                <span class="uppercase truncate text-[9px]">{{ element.employment_type_label || 'Geral' }}</span>
                                 <span class="bg-surface-2 px-1.5 py-0.5 rounded text-[9px] shrink-0">
                                     {{ getEmployeeWeeklyWorkDays(element.id) }}/5
                                 </span>
@@ -169,7 +169,6 @@
 
             <!-- 2. BASE DO PAINEL: BOTÃO / FORMULÁRIO COMPLETO -->
             <div class="shrink-0 pt-3 border-t border-surface-border/50">
-                <!-- ESTADO RECOLHIDO: BOTÃO "+ ADICIONAR NOVO" -->
                 <button
                     v-if="!isCreating"
                     type="button"
@@ -180,7 +179,6 @@
                     <span>Adicionar Novo</span>
                 </button>
 
-                <!-- ESTADO EXPANDIDO: FORMULÁRIO COMPLETO COM BOTÃO "SALVAR" -->
                 <div v-else class="bg-surface-1 border border-surface-border p-3 rounded-2xl flex flex-col gap-2.5 shadow-sm animate-in fade-in duration-200">
                     <div class="flex items-center justify-between">
                         <span class="text-[11px] font-black uppercase tracking-wider text-surface-text">Novo Slot</span>
@@ -216,7 +214,6 @@
                         />
                     </div>
 
-                    <!-- SELEÇÃO DE FUNÇÕES -->
                     <div class="flex flex-col gap-1">
                         <span class="text-[9px] font-bold text-surface-muted uppercase">Funções aceitas (vazio = todas):</span>
                         <div class="flex flex-wrap gap-1 max-h-24 overflow-y-auto hide-scrollbar">
@@ -235,7 +232,6 @@
                         </div>
                     </div>
 
-                    <!-- BOTÕES DE AÇÃO: CANCELAR E SALVAR -->
                     <div class="flex items-center gap-2 pt-1">
                         <button
                             type="button"
@@ -286,14 +282,12 @@ const emit = defineEmits([
     'drag-end'
 ]);
 
-// Estado do formulário de criação
 const isCreating = ref(false);
 const newSlotInputRef = ref(null);
 const newSlotName = ref('');
 const newSlotCapacity = ref(2);
 const newAllowedRoles = ref([]);
 
-// Estado do formulário de edição inline
 const editingSlotId = ref(null);
 const editName = ref('');
 const editCapacity = ref(1);

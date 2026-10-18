@@ -22,10 +22,10 @@ enum EmploymentType: string implements HasLabel
             self::CLT_44 => 'CLT (44h)',
             self::CLT_40 => 'CLT (40h)',
             self::INTERN => 'Estagiário',
-            self::PJ => 'Prestador de Serviços (PJ)',
-            self::FREELANCE_FIXED => 'Freelancer Fixo',
-            self::FREELANCER => 'Freelancer Eventual',
-            self::PARTNER => 'Sócio / Proprietário',
+            self::PJ => 'PJ',
+            self::FREELANCE_FIXED => 'Fixo',
+            self::FREELANCER => 'Freelancer',
+            self::PARTNER => 'Sócio',
         };
     }
 }

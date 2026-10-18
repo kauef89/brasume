@@ -18,9 +18,9 @@ enum EmployeeRole: string
             self::ADMIN => 'Administrador',
             self::MANAGER => 'Gerente',
             self::CASHIER => 'Caixa',
-            self::WAITER => 'Atendente / Garçom',
+            self::WAITER => 'Atendente',
             self::KITCHEN => 'Cozinha',
-            self::DRIVER => 'Entregador / Motoboy',
+            self::DRIVER => 'Entregador',
             self::CLEANING => 'Limpeza',
         };
     }
