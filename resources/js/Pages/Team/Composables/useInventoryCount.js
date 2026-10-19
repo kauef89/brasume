@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { router } from '@inertiajs/vue3';
+import axios from 'axios';
 import { useToast } from 'primevue/usetoast';
 
 export function useInventoryCount(catalogRef) {
@@ -14,6 +14,7 @@ export function useInventoryCount(catalogRef) {
     // Estado do Balanço
     const expandedItemKey = ref(null);
     const draftCounts = ref({});
+    const savingItemKey = ref(null);
 
     const modeOptions = [
         { label: 'Status', value: 'status', icon: 'pi-bolt' },
@@ -38,7 +39,7 @@ export function useInventoryCount(catalogRef) {
 
     const makeKey = (locationId, productId) => `${locationId || 0}_${productId}`;
 
-    // Mapeamento por Ponto Físico com Saldo Local
+    // Mapeamento por Ponto Físico com Saldo Local e Ordenação por Categoria (Prateleiras)
     const locationBlocks = computed(() => {
         const rawCatalog = catalogRef.value || [];
         const term = (searchQuery.value || '').trim().toLowerCase();
@@ -93,6 +94,21 @@ export function useInventoryCount(catalogRef) {
             });
         });
 
+        // Ordenação por Categoria (Prateleiras) e depois Nome do Produto
+        blocksMap.forEach(block => {
+            block.items.sort((a, b) => {
+                const catOrderA = a.category?.sort_order ?? 999;
+                const catOrderB = b.category?.sort_order ?? 999;
+                if (catOrderA !== catOrderB) return catOrderA - catOrderB;
+
+                const catNameA = a.category?.name || 'Geral';
+                const catNameB = b.category?.name || 'Geral';
+                if (catNameA !== catNameB) return catNameA.localeCompare(catNameB, 'pt-BR');
+
+                return (a.name || '').localeCompare(b.name || '', 'pt-BR');
+            });
+        });
+
         return Array.from(blocksMap.values()).sort((a, b) => {
             if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
             if (a.type !== b.type) return a.type === 'display' ? -1 : 1;
@@ -144,7 +160,6 @@ export function useInventoryCount(catalogRef) {
         return list;
     });
 
-    // Ações de Contagem
     const isExpanded = (locationId, productId) => expandedItemKey.value === makeKey(locationId, productId);
 
     const toggleItemExpansion = (locationId, item) => {
@@ -181,91 +196,71 @@ export function useInventoryCount(catalogRef) {
         return 'Exato';
     };
 
-    const saveCount = (locationId, productId, countedQty) => {
-        const key = makeKey(locationId, productId);
-        draftCounts.value[key] = Math.max(0, Number(countedQty));
-        expandedItemKey.value = null;
-    };
+    const isSaving = (locationId, productId) => savingItemKey.value === makeKey(locationId, productId);
 
-    // Submissão
-    const touchedItemsCount = computed(() => {
-        return Object.keys(draftCounts.value).filter(k => draftCounts.value[k] !== null && draftCounts.value[k] !== undefined).length;
-    });
+    // 🚀 SALVAMENTO ULTRA-RÁPIDO COM AXIOS (SEM RECARREGAR O INERTIA)
+    const saveSingleCount = async (locationId, item, countedQty) => {
+        const key = makeKey(locationId, item.id);
+        savingItemKey.value = key;
 
-    const divergencesSummary = computed(() => {
-        let losses = 0;
-        let surpluses = 0;
-
-        locationBlocks.value.forEach(block => {
-            block.items.forEach(item => {
-                if (isTouched(block.location_id, item.id)) {
-                    const delta = getItemDelta(block.location_id, item);
-                    if (delta < 0) losses++;
-                    if (delta > 0) surpluses++;
+        try {
+            const response = await axios.post(route('operations.inventory.batch-adjust'), {
+                items: [{
+                    product_id: item.id,
+                    location_id: locationId !== 0 ? locationId : null,
+                    counted_stock: Number(countedQty)
+                }],
+                reason: `Balanço Unitário: ${item.name}`
+            }, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
                 }
             });
-        });
 
-        const total = losses + surpluses;
-        let text = `${total} divergências`;
-        if (losses > 0 && surpluses > 0) text += ` (-${losses} faltas, +${surpluses} sobras)`;
-        else if (losses > 0) text += ` (-${losses} faltas)`;
-        else if (surpluses > 0) text += ` (+${surpluses} sobras)`;
+            if (response.data?.success) {
+                // 1. Atualiza reativamente o rascunho com o valor confirmado
+                draftCounts.value = {
+                    ...draftCounts.value,
+                    [key]: Number(countedQty)
+                };
 
-        return { total, losses, surpluses, text };
-    });
-
-    const submitBatchAdjustment = () => {
-        if (touchedItemsCount.value === 0) return;
-
-        const payloadItems = [];
-
-        locationBlocks.value.forEach(block => {
-            block.items.forEach(item => {
-                const counted = getCountValue(block.location_id, item.id);
-                if (counted !== null) {
-                    payloadItems.push({
-                        product_id: item.id,
-                        location_id: block.location_id !== 0 ? block.location_id : null,
-                        counted_stock: counted,
-                    });
-                }
-            });
-        });
-
-        router.post(route('operations.inventory.batch-adjust'), {
-            items: payloadItems,
-            reason: 'Balanço Físico Operacional (TeamApp)'
-        }, {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => {
-                draftCounts.value = {};
+                // 2. Fecha o card expandido
                 expandedItemKey.value = null;
+
                 toast.add({
                     severity: 'success',
-                    summary: 'Balanço Gravado',
-                    detail: `${payloadItems.length} itens tiveram seu estoque físico atualizado com sucesso.`,
-                    life: 4000
-                });
-            },
-            onError: (err) => {
-                toast.add({
-                    severity: 'error',
-                    summary: 'Erro na Gravação',
-                    detail: Object.values(err)[0] || 'Não foi possível gravar o balanço.',
-                    life: 5000
+                    summary: 'Estoque Gravado',
+                    detail: `${item.name}: conferido em ${countedQty} ${item.unit_of_measure}.`,
+                    life: 2500
                 });
             }
-        });
+        } catch (err) {
+            console.error("Erro no ajuste de estoque:", err);
+            toast.add({
+                severity: 'error',
+                summary: 'Falha ao Gravar',
+                detail: err.response?.data?.message || 'Erro ao processar balanço.',
+                life: 3500
+            });
+        } finally {
+            savingItemKey.value = null;
+        }
     };
 
-    const updateStatus = (item, targetStatus) => {
-        router.post(route('operations.availability.toggle'), {
-            product_id: item.id,
-            action: targetStatus,
-            new_stock: targetStatus === 'out_of_stock' ? 0 : null
-        }, { preserveScroll: true, preserveState: true });
+    const updateStatus = async (item, targetStatus) => {
+        try {
+            await axios.post(route('operations.availability.toggle'), {
+                product_id: item.id,
+                action: targetStatus,
+                new_stock: targetStatus === 'out_of_stock' ? 0 : null
+            }, {
+                headers: { 'Accept': 'application/json' }
+            });
+            item.status = targetStatus;
+        } catch (e) {
+            console.error("Erro ao alterar status:", e);
+        }
     };
 
     return {
@@ -286,10 +281,8 @@ export function useInventoryCount(catalogRef) {
         getDisplayValue,
         getItemDelta,
         formatDeltaLabel,
-        saveCount,
-        touchedItemsCount,
-        divergencesSummary,
-        submitBatchAdjustment,
+        isSaving,
+        saveSingleCount,
         updateStatus
     };
 }

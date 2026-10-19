@@ -412,6 +412,7 @@ class InventoryService
 
         DB::transaction(function () use ($items, $userId, $reason, &$lossesCount, &$totalLossAmount) {
             foreach ($items as $entry) {
+                \Illuminate\Support\Facades\Log::info("🔍 [PROBE ITEM PROCESSANDO]", $entry);
                 $product = Product::find($entry['product_id']);
                 if (!$product || !$product->track_inventory) {
                     continue;
@@ -452,6 +453,14 @@ class InventoryService
                     );
 
                     $product->update(['current_stock' => $sumLocations]);
+                    \Illuminate\Support\Facades\Log::info("🔍 [PROBE SALDO ATUALIZADO]", [
+                        "product_id" => $product->id,
+                        "product_name" => $product->name,
+                        "location_id" => $locationId,
+                        "newLocationStock" => $newLocationStock,
+                        "sumLocations" => $sumLocations,
+                        "product_current_stock_before_fresh" => $product->current_stock
+                    ]);
 
                     if ($locationDelta < 0) {
                         $lossQty = abs($locationDelta);

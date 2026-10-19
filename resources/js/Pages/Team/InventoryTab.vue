@@ -1,6 +1,6 @@
 <template>
     <div
-        class="flex flex-col h-full overflow-y-auto hide-scrollbar relative pb-36 select-none"
+        class="flex flex-col h-full overflow-y-auto hide-scrollbar relative pb-28 select-none"
         :style="{ paddingTop: 'var(--app-header-height, 6rem)' }"
     >
         <!-- TELEPORT PARA O TEAM HEADER -->
@@ -103,23 +103,40 @@
                         </span>
                     </div>
 
-                    <!-- Lista Modular de Itens -->
+                    <!-- Lista com Separadores de Categoria (Prateleiras) -->
                     <div class="flex flex-col divide-y divide-surface-border/40">
-                        <InventoryItemRow
-                            v-for="item in block.items"
+                        <template
+                            v-for="(item, idx) in block.items"
                             :key="`${block.location_id}_${item.id}`"
-                            :item="item"
-                            :active-mode="activeMode"
-                            :is-expanded="isExpanded(block.location_id, item.id)"
-                            :is-touched="isTouched(block.location_id, item.id)"
-                            :display-value="getDisplayValue(block.location_id, item.id)"
-                            :delta="getItemDelta(block.location_id, item)"
-                            :delta-label="formatDeltaLabel(block.location_id, item)"
-                            @toggle-expand="toggleItemExpansion(block.location_id, item)"
-                            @save="qty => saveCount(block.location_id, item.id, qty)"
-                            @match-expected="saveCount(block.location_id, item.id, item.local_expected_stock)"
-                            @update-status="target => updateStatus(item, target)"
-                        />
+                        >
+                            <div
+                                v-if="idx === 0 || (item.category?.name || 'Geral') !== (block.items[idx - 1]?.category?.name || 'Geral')"
+                                class="px-3.5 py-1.5 bg-surface-3/40 border-y border-surface-border/40 flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-primary-smart select-none"
+                            >
+                                <span class="flex items-center gap-1.5">
+                                    <i class="pi pi-tag text-[9px]"></i>
+                                    {{ item.category?.name || 'Geral' }}
+                                </span>
+                                <span class="text-[9px] font-bold text-surface-muted lowercase">
+                                    {{ block.items.filter(i => (i.category?.name || 'Geral') === (item.category?.name || 'Geral')).length }} itens
+                                </span>
+                            </div>
+
+                            <InventoryItemRow
+                                :item="item"
+                                :location-id="block.location_id"
+                                :active-mode="activeMode"
+                                :is-expanded="isExpanded(block.location_id, item.id)"
+                                :is-touched="isTouched(block.location_id, item.id)"
+                                :display-value="getDisplayValue(block.location_id, item.id)"
+                                :delta="getItemDelta(block.location_id, item)"
+                                :delta-label="formatDeltaLabel(block.location_id, item)"
+                                :is-saving="isSaving(block.location_id, item.id)"
+                                @toggle-expand="toggleItemExpansion(block.location_id, item)"
+                                @save="qty => saveSingleCount(block.location_id, item, qty)"
+                                @update-status="target => updateStatus(item, target)"
+                            />
+                        </template>
                     </div>
                 </div>
             </template>
@@ -130,37 +147,6 @@
                 <p class="text-xs mt-1 text-center max-w-xs">Ajuste os filtros ou escolha outro local.</p>
             </div>
         </div>
-
-        <!-- BARRA FIXA INFERIOR (GRAVAÇÃO DO BALANÇO) -->
-        <Transition name="slide-up">
-            <div
-                v-if="activeMode === 'inventory' && touchedItemsCount > 0"
-                class="fixed bottom-0 inset-x-0 z-40 bg-surface-1/95 border-t border-surface-border/60 backdrop-blur-xl p-3 px-4 flex flex-col gap-2 shadow-2xl"
-            >
-                <div class="flex items-center justify-between text-xs font-bold px-1">
-                    <span class="flex items-center gap-1.5 text-surface-text">
-                        <i class="pi pi-clipboard text-primary-smart"></i>
-                        <span><strong>{{ touchedItemsCount }}</strong> {{ touchedItemsCount === 1 ? 'item conferido' : 'itens conferidos' }}</span>
-                    </span>
-                    <span v-if="divergencesSummary.total !== 0" class="text-[11px] font-black" :class="divergencesSummary.losses > 0 ? 'text-danger-500' : 'text-emerald-500'">
-                        {{ divergencesSummary.text }}
-                    </span>
-                    <span v-else class="text-[11px] font-black text-emerald-500">
-                        <i class="pi pi-check text-[10px]"></i> Tudo exato com o sistema
-                    </span>
-                </div>
-
-                <SlideToConfirm
-                    text="Deslize para Gravar Balanço"
-                    success-text="Atualizando Estoque..."
-                    :color="divergencesSummary.losses > 0 ? 'danger' : 'primary'"
-                    icon="pi-check"
-                    format="long"
-                    class="!h-11 text-xs w-full shadow-lg"
-                    @confirm="submitBatchAdjustment"
-                />
-            </div>
-        </Transition>
 
         <!-- MODAL DE FILTROS -->
         <AdaptiveModal v-model:visible="isFilterModalOpen">
@@ -208,7 +194,6 @@
 import { ref, computed, onMounted } from 'vue';
 import ExpandableSearch from '@/Components/UI/ExpandableSearch.vue';
 import SegmentedControl from '@/Components/UI/SegmentedControl.vue';
-import SlideToConfirm from '@/Components/UI/SlideToConfirm.vue';
 import AdaptiveModal from '@/Components/UI/AdaptiveModal.vue';
 
 import InventoryItemRow from '@/Pages/Team/InventoryItemRow.vue';
@@ -242,10 +227,8 @@ const {
     getDisplayValue,
     getItemDelta,
     formatDeltaLabel,
-    saveCount,
-    touchedItemsCount,
-    divergencesSummary,
-    submitBatchAdjustment,
+    isSaving,
+    saveSingleCount,
     updateStatus
 } = useInventoryCount(catalogRef);
 
@@ -253,13 +236,3 @@ onMounted(() => {
     isMounted.value = true;
 });
 </script>
-
-<style scoped>
-.slide-up-enter-active, .slide-up-leave-active {
-    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
-}
-.slide-up-enter-from, .slide-up-leave-to {
-    transform: translateY(100%);
-    opacity: 0;
-}
-</style>

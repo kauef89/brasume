@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Tenant\Operations;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Services\Catalog\InventoryService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -29,7 +30,7 @@ class InventoryMovementController extends Controller
         return back()->with('success', 'Estoque ajustado com sucesso!');
     }
 
-    public function batchAdjust(Request $request): RedirectResponse
+    public function batchAdjust(Request $request): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
             'items'                 => 'required|array|min:1',
@@ -45,6 +46,14 @@ class InventoryMovementController extends Controller
         $msg = 'Balanço salvo com sucesso!';
         if ($result['losses_count'] > 0) {
             $msg .= " ({$result['losses_count']} divergências de quebra registradas em auditoria).";
+        }
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success'      => true,
+                'message'      => $msg,
+                'losses_count' => $result['losses_count'] ?? 0,
+            ]);
         }
 
         return back()->with('success', $msg);

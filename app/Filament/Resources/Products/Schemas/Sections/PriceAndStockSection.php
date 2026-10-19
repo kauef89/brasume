@@ -2,17 +2,28 @@
 
 namespace App\Filament\Resources\Products\Schemas\Sections;
 
-use App\Enums\ProductStatus;
-use App\Enums\ProductType;
 use App\Enums\UnitOfMeasure;
+use App\Models\Product;
 use Filament\Forms;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
-use App\Models\Product;
 
 class PriceAndStockSection
 {
+    /**
+     * Verifica se o produto possui locais de estoque físicos vinculados (no banco ou no formulário).
+     */
+    protected static function hasWmsLocations(Get $get, ?Product $record): bool
+    {
+        if ($record && ($record->storageRules()->exists() || $record->storageLocations()->exists())) {
+            return true;
+        }
+
+        $rules = $get('storageRules');
+        return is_array($rules) && count($rules) > 0;
+    }
+
     public static function make(): Section
     {
         return Section::make("Preços e Estoque")
@@ -69,34 +80,45 @@ class PriceAndStockSection
                                 ->default(1),
                         ]),
 
-                        // 🚀 AQUI: Expandimos a Grid para acomodar a nova inteligência de níveis!
                         Grid::make(5)->schema([
                             Forms\Components\Toggle::make("track_inventory")
                                 ->label("Controlar Estoque?")
                                 ->default(true)
                                 ->live(),
+
+                            // 🔒 ESTOQUE CENTRAL PRESO QUANDO HOUVER LOCAIS NO WMS
                             Forms\Components\TextInput::make("current_stock")
-                                ->label("Estoque Atual")
+                                ->label("Estoque")
                                 ->numeric()
                                 ->default(0)
-                                ->visible(fn(Get $get) => $get("track_inventory")),
+                                ->visible(fn(Get $get) => (bool) $get("track_inventory"))
+                                ->disabled(fn(Get $get, ?Product $record): bool => static::hasWmsLocations($get, $record))
+                                ->dehydrated(fn(Get $get, ?Product $record): bool => !static::hasWmsLocations($get, $record))
+                                ->hintIcon(fn(Get $get, ?Product $record): ?string => static::hasWmsLocations($get, $record) ? 'heroicon-m-lock-closed' : null)
+                                ->helperText(function (Get $get, ?Product $record): string {
+                                    return static::hasWmsLocations($get, $record)
+                                        ? 'Gerenciado pelo WMS: soma automática das prateleiras e depósitos.'
+                                        : 'Estoque geral da loja (sem local vinculado).';
+                                }),
+
                             Forms\Components\TextInput::make("min_stock")
                                 ->label("Estoque Mínimo")
                                 ->numeric()
                                 ->default(0)
                                 ->visible(fn(Get $get) => $get("track_inventory")),
+
                             Forms\Components\TextInput::make("max_stock")
                                 ->label("Estoque Máximo")
                                 ->helperText("Teto da lista de compras")
                                 ->numeric()
                                 ->default(0)
                                 ->visible(fn(Get $get) => $get("track_inventory")),
+
                             Forms\Components\TextInput::make("par_level")
                                 ->label("Nível Ideal (Produção)")
                                 ->helperText("Exclusivo para preparo")
                                 ->numeric()
                                 ->default(0)
-                                // 🚀 Só é exibido para itens de fabrico interno!
                                 ->visible(fn(Get $get) => $get("type") === "manufactured"),
                         ]),
                     ]),

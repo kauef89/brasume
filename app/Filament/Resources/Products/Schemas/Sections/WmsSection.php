@@ -13,7 +13,6 @@ class WmsSection
         return Section::make("WMS - Gestão de Saldo e Reposição por Local")
             ->description("Distribua fisicamente o estoque deste produto. O Saldo Atual configurado aqui reflete imediatamente no PDV.")
             ->icon("heroicon-o-arrows-right-left")
-            // 🚀 AQUI: Oculta a sessão inteira se o produto exigir preparo na cozinha
             ->visible(fn(Get $get) =>
                 $get("type") !== "combo" &&
                 $get("track_inventory") === true &&
@@ -24,6 +23,7 @@ class WmsSection
                     ->relationship("storageRules")
                     ->label("Locais de Armazenamento")
                     ->addActionLabel("Adicionar Local")
+                    ->live() // 🚀 Torna o repeater reativo para avisar o PriceAndStockSection
                     ->schema([
                         Forms\Components\Select::make("storage_location_id")
                             ->label("Local (Destino)")
@@ -41,7 +41,6 @@ class WmsSection
                             ->helperText("De onde a equipe tira para abastecer o destino.")
                             ->columnSpan(2),
 
-                        // 🚀 NOVO CAMPO DE SALDO
                         Forms\Components\TextInput::make("current_stock")
                             ->label("Saldo Atual")
                             ->numeric()
