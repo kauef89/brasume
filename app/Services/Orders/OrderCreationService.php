@@ -40,9 +40,13 @@ class OrderCreationService
 
         // 🚀 2. FLUXO DE CRIAÇÃO DE NOVO PEDIDO
         $order = DB::transaction(function () use ($payload, $routing) {
-            // Regra de Ouro: Pedidos via PDV/Garçom exigem turno aberto
+            $settings = \App\Models\CompanySetting::getCached() ?? \App\Models\CompanySetting::first();
+            $enforceTeam = (bool) ($settings?->enforce_cashier_open_team ?? false);
+
             $shift = CashShift::where('status', 'open')->latest()->first();
-            if (!$shift) {
+
+            // Só lança exceção se o tenant configurou obrigatoriedade para a equipe interna
+            if ($enforceTeam && !$shift) {
                 throw new Exception("Nenhum turno de caixa aberto. Abra o caixa antes de registrar pedidos no PDV.");
             }
             $orderType = $routing["type"] ?? "table";
