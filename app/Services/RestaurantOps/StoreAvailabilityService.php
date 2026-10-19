@@ -139,7 +139,7 @@ class StoreAvailabilityService
                 usort($currentClosings, fn($a, $b) => $a <=> $b);
                 $status['current_close_time'] = $currentClosings[0]->toIso8601String();
             }
-            // 2. 🚀 REGRA 1: Caixa abriu mais cedo que o horário da escala
+            // 2. Caixa abriu mais cedo que o horário da escala
             elseif (!empty($nextOpenings)) {
                 $nextBlock = $nextOpenings[0];
                 if ($now->diffInHours($nextBlock['start'], false) <= 14) {
@@ -150,7 +150,7 @@ class StoreAvailabilityService
                 }
             }
 
-            // 3. 🚀 REGRA 2: Passou do horário regular de fechar, mas o turno continua aberto
+            // 3. Passou do horário regular de fechar, mas o turno continua aberto
             if (empty($status['current_close_time']) && !empty($pastClosings)) {
                 $mostRecentPastClosing = $pastClosings[0];
                 if ($now->diffInHours($mostRecentPastClosing) <= 12) {
@@ -172,8 +172,7 @@ class StoreAvailabilityService
 
         // CENÁRIO B: Caixa está FECHADO
         if ($isScheduledOpen) {
-            if ($isScheduledOpen) {
-            // 🚀 Prioriza a regra granular do cliente com fallback seguro
+            // Regra granular do cliente com fallback retrocompatível
             $enforceCustomer = $settings->enforce_cashier_open_customer
                 ?? $settings->enforce_cashier_open
                 ?? true;
