@@ -588,6 +588,7 @@ class SpedDocumentService
             $document->access_key,
             $document->protocol,
             $justification,
+            null,
             1
         );
 

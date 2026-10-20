@@ -10,6 +10,7 @@ use App\Services\Fiscal\SpedDocumentService;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Log;
 
 class OrderReactivationService
 {
@@ -39,16 +40,21 @@ class OrderReactivationService
             : "Reabertura e correcao operacional da conta do pedido #{$order->id}";
 
         DB::transaction(function () use ($order, $mode, $fiscalJustification) {
-            // 2. Cancelamento Fiscal de NFC-e com verificação do limite de 30 minutos
+            // 2. Cancelamento Fiscal de NFC-e com tolerância de prazo
             $authorizedDocs = $order->fiscalDocuments()->where('status', 'authorized')->get();
             $fiscalErrors = [];
 
             foreach ($authorizedDocs as $doc) {
                 $minutesSinceIssue = $doc->issue_date ? $doc->issue_date->diffInMinutes(now()) : 999;
 
+                // 🚀 FLEXIBILIDADE: Se passou de 30 min, não bloqueia o caixa. Apenas anota.
                 if ($minutesSinceIssue > 30) {
-                    $fiscalErrors[] = "A NFC-e #{$doc->number} foi emitida há mais de 30 minutos (limite da SEFAZ excedido). O documento precisará de estorno contábil manual.";
-                    continue;
+                    Log::warning("Estorno Financeiro Liberado, mas NFC-e #{$doc->number} estourou 30 min. Sefaz ignorada.");
+                    $doc->update([
+                        'status' => 'cancel_expired',
+                        'notes' => 'Cancelamento financeiro efetuado após 30 min. Requer NF-e de estorno manual no contador.'
+                    ]);
+                    continue; // Pula a chamada Sefaz, mas continua o estorno financeiro
                 }
 
                 try {

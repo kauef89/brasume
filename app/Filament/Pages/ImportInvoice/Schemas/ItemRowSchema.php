@@ -78,10 +78,10 @@ class ItemRowSchema
                 return match ($xmlUom) {
                     "CX", "CX1" => "Qtd. na caixa",
                     "FD", "FDO" => "Qtd. no fardo",
-                    "PC" => "Qtd. na peça",
-                    "PCT" => "Qtd. no pacote",
-                    "SC" => "Qtd. no saco",
-                    default => "Fator de Conversão",
+                    "PC"        => "Qtd. na peça",
+                    "PCT"       => "Qtd. no pacote",
+                    "SC"        => "Qtd. no saco",
+                    default     => "Fator de Conversão",
                 };
             })
             ->numeric()
@@ -90,10 +90,10 @@ class ItemRowSchema
             ->live(debounce: 500)
             ->extraInputAttributes(fn(Get $get) => match ($get("factor_source")) {
                 "history", "auto" => ["style" => "background-color: rgba(34, 197, 94, 0.15) !important;"],
-                "identical" => ["style" => "background-color: rgba(59, 130, 246, 0.15) !important;"],
-                "auto_math" => ["style" => "background-color: rgba(234, 179, 8, 0.15) !important;"],
-                "assistant_used" => ["style" => "background-color: rgba(168, 85, 247, 0.15) !important;"],
-                default => [],
+                "identical"       => ["style" => "background-color: rgba(59, 130, 246, 0.15) !important;"],
+                "auto_math"       => ["style" => "background-color: rgba(234, 179, 8, 0.15) !important;"],
+                "assistant_used"  => ["style" => "background-color: rgba(168, 85, 247, 0.15) !important;"],
+                default           => [],
             })
             ->suffixAction(self::getAssistantAction())
             ->columnSpan(1);
@@ -152,11 +152,37 @@ class ItemRowSchema
 
                 $set('conversion_factor', $conversion['factor']);
                 $set('factor_source', $conversion['source']);
+
+                if (!empty($conversion['notification'])) {
+                    $type = $conversion['notification']['type'] ?? 'info';
+                    Notification::make()
+                        ->title($conversion['notification']['title'])
+                        ->body($conversion['notification']['body'])
+                        ->{$type}()
+                        ->send();
+                }
             })
             ->hint(fn(Get $get) => $get("product_id") ? "U.M Interna: " . Product::where("id", $get("product_id"))->value("unit_of_measure") : null)
             ->hidden(fn(Get $get) => $get("is_personal"))
             ->required(fn(Get $get) => !$get("is_personal"))
-            ->columnSpan(3);
+            // 🚀 Dinâmico: 4 colunas quando vazio, 2 quando divide espaço com o romaneio
+            ->columnSpan(fn(Get $get) => empty($get('product_id')) ? 4 : 2)
+            // 🚀 QuickCreate Restaurado
+            ->createOptionForm(
+                \App\Filament\Resources\Products\Schemas\ProductForm::getQuickCreateSchema()
+            )
+            ->createOptionUsing(function (array $data, $livewire, Get $get) {
+                $data["current_stock"] = 0;
+                $data["base_cost"] = (float) $get("xml_cost") ?: 0;
+                $product = Product::create($data);
+                $livewire->dispatch('$refresh');
+                return $product->id;
+            })
+            ->createOptionAction(function (Action $action) {
+                return $action
+                    ->modalHeading('Cadastro Rápido de Insumo')
+                    ->modalWidth('sm');
+            });
     }
 
     private static function getGoodsReceiptMatchField(): Select

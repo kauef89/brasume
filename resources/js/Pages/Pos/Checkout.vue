@@ -19,17 +19,20 @@
         </div>
     </Teleport>
 
-    <!-- PAINEL ESQUERDO: LISTAGEM DE ITENS COM ROLAGEM INDEPENDENTE -->
+    <!-- PAINEL ESQUERDO: LISTAGEM DE ITENS -->
     <div class="flex-1 flex flex-col h-full max-h-full bg-surface-2 rounded-4xl overflow-hidden min-h-0">
         <CheckoutHeader
             class="shrink-0"
             :title="orderDestinationTitle"
             :order-label="`Pagamento #${liveOrder.id}`"
             :subtitle="headerSubtitle"
+            :applied-coupon="appliedCheckoutCoupon"
+            :coupon-discount="appliedCheckoutDiscount"
             :is-all-selected="isAllSelected"
             v-model:is-grouped="isGrouped"
             v-model:search-query="itemSearchQuery"
             @toggle-all="toggleAllSelections"
+            @open-coupon="isCouponModalVisible = true"
             @go-back="handleManualClose"
         />
 
@@ -54,7 +57,7 @@
     <div class="w-full md:w-[400px] lg:w-[480px] shrink-0 flex flex-col bg-surface-2 rounded-4xl overflow-hidden min-h-0 relative">
       <Transition name="fade-slide" mode="out-in">
 
-        <!-- FASE 1: AGUARDANDO QR CODE -->
+        <!-- FASE 1: AGUARDANDO PIX -->
         <div v-if="isPixWaitingPhase" class="flex flex-col h-full w-full bg-surface-2 p-6 justify-center" key="pix-phase">
             <PixWaitingArea
                 :order-id="liveOrder.id"
@@ -66,7 +69,7 @@
             />
         </div>
 
-        <!-- FASE 2: SELEÇÃO DE PAGAMENTO NORMAL -->
+        <!-- FASE 2: SELEÇÃO DE PAGAMENTO -->
         <div v-else-if="!isPostPaymentPhase" class="flex flex-col h-full min-h-0 w-full" key="payment-phase">
             <CheckoutPaymentPanel
                 class="flex-1 min-h-0 bg-surface-2"
@@ -96,8 +99,8 @@
                 @add-payment="handleAddPayment"
                 @remove-payment="removePayment"
 
-                @apply-coupon="handleApplyCheckoutCoupon"
-                @remove-coupon="handleRemoveCheckoutCoupon"
+                @apply-coupon="applyCoupon"
+                @remove-coupon="removeCoupon"
             />
 
             <div class="p-6 shrink-0 z-10">
@@ -127,63 +130,58 @@
 
       </Transition>
 
-      <!-- SUBPAINEL EMBUTIDO: VINCULAR CLIENTE -->
+      <!-- 🚀 SUBPAINEL EMBUTIDO 1: VINCULAR CLIENTE -->
       <Transition name="fade-slide">
-        <div
-            v-if="isLinkCustomerModalVisible"
-            class="absolute inset-0 bg-surface-2 z-30 flex flex-col p-6"
-        >
-            <div class="flex items-center justify-between pb-4 mb-4 border-b border-surface-border/50 shrink-0">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-primary-500/10 text-primary-500 flex items-center justify-center font-bold">
-                        <i class="pi pi-user-plus text-base"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-base text-surface-text leading-tight">Identificar Cliente</h3>
-                        <p class="text-xs text-surface-muted">Vincule um cadastro ou nome avulso à comanda</p>
-                    </div>
-                </div>
-
-                <button
-                    @click="isLinkCustomerModalVisible = false"
-                    type="button"
-                    class="w-9 h-9 rounded-full bg-surface-3 hover:bg-surface-4 text-surface-muted hover:text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer"
-                    title="Fechar"
-                >
-                    <i class="pi pi-times text-xs"></i>
-                </button>
-            </div>
-
-            <div class="flex-1 min-h-0 overflow-y-auto hide-scrollbar">
-                <CustomerSearch
-                    order-type="counter"
-                    @customer-selected="linkCustomer"
-                    @create-new="openNewCustomerModal"
-                />
-            </div>
-        </div>
+          <CheckoutCustomerDrawer
+              v-if="isLinkCustomerModalVisible"
+              :order-id="liveOrder.id"
+              :coupon-code="appliedCheckoutCoupon"
+              @close="isLinkCustomerModalVisible = false"
+              @create-new="openNewCustomerModal"
+          />
       </Transition>
+
+      <!-- 🚀 SUBPAINEL EMBUTIDO 2: GAVETA DE CUPOM DE DESCONTO -->
+      <Transition name="fade-slide">
+          <CheckoutCouponDrawer
+              v-if="isCouponModalVisible"
+              :applied-coupon="appliedCheckoutCoupon"
+              :applied-discount="appliedCheckoutDiscount"
+              :subtotal="selectedItemsValue"
+              :customer-id="liveOrder?.customer_id || liveOrder?.customer?.id"
+              @close="isCouponModalVisible = false"
+              @apply="applyCoupon"
+              @remove="removeCoupon"
+          />
+      </Transition>
+
+      <!-- 🚀 SUBPAINEL EMBUTIDO 3: MOTIVO & PIN (CORREÇÃO / REATIVAÇÃO / ESTORNO) -->
+      <Transition name="fade-slide">
+          <OperationReasonModal
+              v-if="isReasonModalVisible"
+              v-model:visible="isReasonModalVisible"
+              mode="inline"
+              class="absolute inset-0 z-40 bg-surface-2"
+              :item-name="itemToProcess?.name || itemToProcess?.product_name || (itemToProcess?.method ? 'Pagamento ' + itemToProcess.method : 'Item')"
+              :action-type="authActionType"
+              :requires-pin="authNeedsPin"
+              @cancel="isReasonModalVisible = false"
+              @confirm="handleConfirmAction"
+          />
+      </Transition>
+
     </div>
 
-    <!-- Modais Auxiliares -->
+    <!-- Modal Auxiliar de Criação Rápida de Cliente -->
     <NewCustomerModal v-model:visible="isNewCustomerModalVisible" :initial-name="newCustomerInitialName" @save="handleSaveNewCustomer" />
 
-    <OperationReasonModal
-        v-model:visible="isReasonModalVisible"
-        :item-name="itemToProcess?.name || itemToProcess?.product_name || (itemToProcess?.method ? 'Pagamento ' + itemToProcess.method : 'Item')"
-        :action-type="authActionType"
-        :requires-pin="authNeedsPin"
-        @confirm="handleConfirmAction"
-    />
   </div>
 </template>
 
 <script setup>
-import axios from "axios";
 import { ref, computed, onMounted, watch } from "vue";
 import { router, usePage } from "@inertiajs/vue3";
 import { useToast } from "primevue/usetoast";
-
 import Button from "primevue/button";
 
 import PosTeleportButton from "@/Components/UI/PosTeleportButton.vue";
@@ -192,18 +190,23 @@ import CheckoutPaymentPanel from "@/Pages/Pos/Components/Checkout/CheckoutPaymen
 import CheckoutPostPaymentPanel from "@/Pages/Pos/Components/Checkout/CheckoutPostPaymentPanel.vue";
 import CheckoutHeader from "@/Pages/Pos/Components/Checkout/CheckoutHeader.vue";
 import PixWaitingArea from "@/Pages/Pos/Components/Checkout/PixWaitingArea.vue";
-import CustomerSearch from "@/Pages/Pos/Components/Cart/CustomerSearch.vue";
 import NewCustomerModal from "@/Components/Modals/NewCustomerModal.vue";
 import OperationReasonModal from "@/Pages/Pos/Components/Checkout/OperationReasonModal.vue";
 
+// Subpainéis embutidos
+import CheckoutCustomerDrawer from "@/Pages/Pos/Components/Checkout/CheckoutCustomerDrawer.vue";
+import CheckoutCouponDrawer from "@/Pages/Pos/Components/Checkout/CheckoutCouponDrawer.vue";
+
+// Composables de Domínio
 import { useCheckoutMath } from "@/Pages/Shared/Composables/useCheckoutMath";
 import { useOrderFinancials } from "@/Pages/Shared/Composables/useOrderFinancials";
 import { useCheckoutStaging } from "@/Pages/Shared/Composables/useCheckoutStaging";
 import { useSecureAction } from "@/Composables/useSecureAction";
 import { useOrderFormatting } from "@/Pages/Shared/Composables/useOrderFormatting";
-
 import { useCheckoutPix } from "@/Pages/Pos/Composables/useCheckoutPix";
 import { useCheckoutProcessor } from "@/Pages/Pos/Composables/useCheckoutProcessor";
+import { useCheckoutCoupon } from "@/Pages/Pos/Composables/useCheckoutCoupon";
+import { usePaymentRollback } from "@/Pages/Pos/Composables/usePaymentRollback";
 
 const props = defineProps({ order: Object, paymentMethods: Array, companySettings: Object });
 const emit = defineEmits(['close']);
@@ -226,9 +229,7 @@ const liveOrder = computed(() => {
         })
         : (fromList.items || []);
 
-    const payments = Array.isArray(base.payments)
-        ? base.payments
-        : (fromList.payments || []);
+    const payments = Array.isArray(base.payments) ? base.payments : (fromList.payments || []);
 
     return {
         ...base,
@@ -244,17 +245,19 @@ const liveOrder = computed(() => {
 const orderRef = computed(() => liveOrder.value);
 const checkoutPrintMode = computed(() => props.companySettings?.checkout_print_mode || 'ask');
 
-const isPostPaymentPhase = ref(
-    liveOrder.value?.payment_status === 'paid' ||
-    liveOrder.value?.status === 'closed' ||
-    liveOrder.value?.status === 'cancelled'
-);
+// 🚀 Trava estrita: só avança para pós-pagamento se o pedido estiver integralmente quitado
+const isPostPaymentPhase = ref(false);
 
 watch(
-    () => [liveOrder.value?.payment_status, liveOrder.value?.status],
-    ([payStatus, orderStatus]) => {
-        if (payStatus === 'paid' || orderStatus === 'closed' || orderStatus === 'cancelled') {
+    () => [liveOrder.value?.payment_status, liveOrder.value?.status, liveOrder.value?.total, liveOrder.value?.paid_amount],
+    ([payStatus, orderStatus, totalStr, paidStr]) => {
+        const orderTotal = Number(totalStr || 0);
+        const orderPaid = Number(paidStr || 0);
+
+        if (orderStatus === 'closed' || orderStatus === 'cancelled' || (payStatus === 'paid' && orderPaid >= orderTotal - 0.01)) {
             isPostPaymentPhase.value = true;
+        } else {
+            isPostPaymentPhase.value = false;
         }
     },
     { immediate: true }
@@ -271,13 +274,9 @@ watch(() => [liveOrder.value?.id, liveOrder.value?.type], ([, type]) => {
 });
 
 const isFiscalEmitter = computed(() => props.companySettings?.is_fiscal_emitter || false);
-
 const isLinkCustomerModalVisible = ref(false);
-const customerToLink = ref(null);
 const isNewCustomerModalVisible = ref(false);
 const newCustomerInitialName = ref("");
-const appliedCheckoutCoupon = ref(null);
-const appliedCheckoutDiscount = ref(0);
 
 const { getOrderTitle } = useOrderFormatting();
 
@@ -294,9 +293,7 @@ const orderDestinationTitle = computed(() => {
 const headerSubtitle = computed(() => getOrderTitle(liveOrder.value));
 
 const activeOrderItems = computed(() => {
-    const items = (liveOrder.value?.items && liveOrder.value.items.length > 0)
-        ? liveOrder.value.items
-        : (props.order?.items || []);
+    const items = (liveOrder.value?.items && liveOrder.value.items.length > 0) ? liveOrder.value.items : (props.order?.items || []);
     return items.filter(i => i.status !== 'cancelled');
 });
 
@@ -307,7 +304,6 @@ const {
 } = useCheckoutMath(activeOrderItems, isGrouped);
 
 const selectedItemsValue = computed(() => selectedSubtotal.value);
-
 const selectionRatio = computed(() => {
     const total = orderTotalItemsValue.value;
     return total === 0 ? 0 : Math.min(1, selectedItemsValue.value / total);
@@ -318,6 +314,21 @@ const { deliveryFee, discount, serviceFeeAmount, feesAndDiscounts } = useOrderFi
 const effectiveServiceFee = computed(() => Number((serviceFeeAmount.value * selectionRatio.value).toFixed(2)));
 const effectiveDeliveryFee = computed(() => Number((deliveryFee.value * selectionRatio.value).toFixed(2)));
 const effectiveDiscount = computed(() => Number((discount.value * selectionRatio.value).toFixed(2)));
+
+// 🚀 Composable de Cupons Integrado
+const {
+    appliedCheckoutCoupon,
+    appliedCheckoutDiscount,
+    isCouponModalVisible,
+    applyCoupon,
+    removeCoupon
+} = useCheckoutCoupon({
+    selectedItemsValue,
+    effectiveDeliveryFee,
+    effectiveServiceFee,
+    liveOrder,
+    toast
+});
 
 const totalAlreadyPaid = computed(() => {
     return (liveOrder.value?.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -340,28 +351,17 @@ const isZeroRevenueOrder = computed(() => {
     const discountVal = Math.max(Number(o.discount || 0), Number(appliedCheckoutDiscount.value || 0));
     const effectiveTotal = Math.max(0, subtotal + delivery - discountVal);
 
-    if (effectiveTotal <= 0.01) {
-        return true;
-    }
+    if (effectiveTotal <= 0.01) return true;
 
-    const payments = Array.isArray(o.payments) && o.payments.length > 0
-        ? o.payments
-        : (stagedPayments.value || []);
-
+    const payments = Array.isArray(o.payments) && o.payments.length > 0 ? o.payments : (stagedPayments.value || []);
     if (payments.length > 0) {
         const methodsMap = new Map((props.paymentMethods || []).map(m => [m.id, m.engine_type || m.engine]));
-        const allLoss = payments.every(p => {
-            const engine = p.payment_method?.engine_type
-                || p.payment_method?.engine
-                || methodsMap.get(p.payment_method_id || p.method_id);
+        return payments.every(p => {
+            const engine = p.payment_method?.engine_type || p.payment_method?.engine || methodsMap.get(p.payment_method_id || p.method_id);
             const name = (p.method || p.name || '').toLowerCase();
             return engine === 'loss' || name.includes('perda') || name.includes('quebra');
         });
-        if (allLoss) {
-            return true;
-        }
     }
-
     return false;
 });
 
@@ -371,56 +371,14 @@ const itemsPaidValue = computed(() => {
         .reduce((sum, item) => sum + (Number(item.base_paid || 0) * item.effective_unit_price), 0);
 });
 
-const unallocatedPaid = computed(() => {
-    return Math.max(0, totalAlreadyPaid.value - itemsPaidValue.value);
-});
-
-const handleApplyCheckoutCoupon = async (code) => {
-    try {
-        const response = await axios.post(route('customer.coupons.validate'), {
-            code: code,
-            subtotal: selectedItemsValue.value,
-            is_pos: true,
-            customer_id: liveOrder.value?.customer_id
-        });
-
-        appliedCheckoutCoupon.value = response.data.code;
-
-        const type = response.data.type;
-        const val = Number(response.data.value || 0);
-
-        if (type === 'percent') {
-            appliedCheckoutDiscount.value = Math.round(((selectedItemsValue.value * val) / 100) * 100) / 100;
-        } else if (type === 'fixed') {
-            appliedCheckoutDiscount.value = Math.min(val, selectedItemsValue.value);
-        } else if (type === 'free_delivery') {
-            appliedCheckoutDiscount.value = effectiveDeliveryFee.value;
-        } else if (type === 'fixed_total') {
-            const bruto = selectedItemsValue.value + effectiveDeliveryFee.value + effectiveServiceFee.value;
-            const diff = bruto - val;
-            appliedCheckoutDiscount.value = diff > 0 ? diff : 0;
-        }
-
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: response.data.message, life: 3000 });
-    } catch (e) {
-        toast.add({ severity: 'error', summary: 'Atenção', detail: e.response?.data?.message || 'Cupom inválido.', life: 4000 });
-    }
-};
-
-const handleRemoveCheckoutCoupon = () => {
-    appliedCheckoutCoupon.value = null;
-    appliedCheckoutDiscount.value = 0;
-};
+const unallocatedPaid = computed(() => Math.max(0, totalAlreadyPaid.value - itemsPaidValue.value));
 
 const intendedPaymentTotal = computed(() => {
-    // Se o pedido tiver itens discriminados, a base é a soma dos itens selecionados + taxas proporcionais.
-    // Se for um pedido legado ou externo sem itens listados, usa o saldo pendente do pedido como fallback.
     const baseTotal = orderTotalItemsValue.value > 0
         ? (selectedItemsValue.value + (feesAndDiscounts.value * selectionRatio.value))
         : pendingOriginalBalance.value;
 
     const paidDeduction = unallocatedPaid.value * (orderTotalItemsValue.value > 0 ? selectionRatio.value : 1);
-
     const finalAmount = baseTotal - paidDeduction - appliedCheckoutDiscount.value;
 
     return Math.max(0, Number(finalAmount.toFixed(2)));
@@ -453,10 +411,7 @@ const canSubmitCheckout = computed(() => {
     return intendedPaymentTotal.value > 0 && stagedTotalAmount >= (requiredAmount - 0.01);
 });
 
-const handleManualClose = () => {
-    emit('close');
-};
-
+const handleManualClose = () => { emit('close'); };
 const handleAddPayment = (method) => { addPayment(method, toast); };
 
 const handleQuickAdd = (item) => {
@@ -464,174 +419,50 @@ const handleQuickAdd = (item) => {
     router.post(route('operations.quick-add', liveOrder.value?.id || props.order?.id), {
         item_id: targetId,
         should_print: false,
-    }, {
-        preserveScroll: true,
-        preserveState: true,
-    });
+    }, { preserveScroll: true, preserveState: true });
 };
 
 const { isReasonModalVisible, itemToProcess, authActionType, authNeedsPin, initiateSecureAction } = useSecureAction(props.companySettings);
 
-const handleQuickCancel = (item) => {
-    initiateSecureAction(item?._parent_ref || item, 'cancel');
-};
+const handleQuickCancel = (item) => { initiateSecureAction(item?._parent_ref || item, 'cancel'); };
 
 const handleRollbackPayment = (payment) => {
-    if (!payment || !payment.id) {
+    if (!payment?.id) {
         toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Identificador não localizado.', life: 3000 });
         return;
     }
-
     itemToProcess.value = payment;
     authActionType.value = 'rollback_payment';
     authNeedsPin.value = Boolean(props.companySettings?.require_pin_for_voids ?? true);
     isReasonModalVisible.value = true;
 };
 
+// 🚀 Composable de Estorno Integrado
+const { rollbackPayment, cancelItem } = usePaymentRollback({
+    liveOrder,
+    props,
+    page,
+    reactiveItems,
+    stagedPayments,
+    clearDivisor,
+    isPostPaymentPhase,
+    isReasonModalVisible,
+    itemToProcess,
+    toast
+});
+
 const handleConfirmAction = (authData) => {
     if (authActionType.value === 'reactivate' || authActionType.value === 'correct_payment') {
         confirmCancellation(authData);
-        return;
-    }
-
-    if (authActionType.value === 'rollback_payment') {
-        const payment = itemToProcess.value;
-        if (!payment || !payment.id) {
-            toast.add({ severity: 'error', summary: 'Erro', detail: 'Nenhum pagamento selecionado.', life: 3000 });
-            return;
-        }
-
-        router.delete(route('operations.orders.payments.rollback', { order: liveOrder.value.id, payment: payment.id }), {
-            data: {
-                pin: authData?.password || authData?.pin || null,
-                reason: authData?.reason || 'Estorno solicitado pelo operador'
-            },
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => {
-                isReasonModalVisible.value = false;
-                itemToProcess.value = null;
-
-                if (props.order?.payments) {
-                    props.order.payments = props.order.payments.filter(p => p.id !== payment.id);
-                }
-
-                if (props.order?.items) {
-                    props.order.items.forEach(i => {
-                        i.paid_qty = 0;
-                    });
-                }
-
-                if (props.order) {
-                    props.order.payment_status = 'pending';
-                    if (props.order.status === 'closed' || props.order.status === 'completed') {
-                        props.order.status = 'pending';
-                    }
-                }
-
-                const fromList = (page.props.initialOrders || []).find(o => o.id === liveOrder.value?.id);
-                if (fromList) {
-                    fromList.payments = (fromList.payments || []).filter(p => p.id !== payment.id);
-                    if (fromList.items) fromList.items.forEach(i => { i.paid_qty = 0; });
-                    fromList.payment_status = 'pending';
-                    fromList.status = 'pending';
-                }
-
-                reactiveItems.value.forEach(item => {
-                    item.base_paid = 0;
-                    item.paid_parts = 0;
-                    item.available_parts = (item.base_qty ?? item.quantity ?? 1) * (item.parts_per_unit || 1);
-                    item.selected_parts = item.available_parts;
-                });
-
-                stagedPayments.value = [];
-                clearDivisor();
-
-                toast.add({ severity: 'success', summary: 'Estornado', detail: 'Pagamento revertido com sucesso!', life: 3000 });
-                isPostPaymentPhase.value = false;
-
-                router.reload({
-                    only: ['cashierData', 'initialOrders'],
-                    preserveScroll: true,
-                    preserveState: true
-                });
-            },
-            onError: (errors) => {
-                toast.add({ severity: 'error', summary: 'Falha no Estorno', detail: errors?.pin || errors?.reason || 'Não foi possível estornar.', life: 4000 });
-            }
-        });
+    } else if (authActionType.value === 'rollback_payment') {
+        rollbackPayment(itemToProcess.value, authData);
     } else {
-        const targetItem = itemToProcess.value;
-        const targetId = targetItem?._parent_ref?.id || targetItem?.id;
-        if (!targetId) {
-            toast.add({ severity: 'error', summary: 'Erro', detail: 'Nenhum item selecionado.', life: 3000 });
-            return;
-        }
-
-        router.post(route('operations.orders.cancel-item', liveOrder.value.id), {
-            item_id: targetId,
-            pin: authData?.password || authData?.pin || null,
-            reason: authData?.reason || 'Ajuste no encerramento de conta',
-            is_loss: Boolean(authData?.isLoss || authData?.is_loss)
-        }, {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => {
-                isReasonModalVisible.value = false;
-                itemToProcess.value = null;
-                toast.add({ severity: 'success', summary: 'Item Estornado', detail: 'Item removido do pedido.', life: 2500 });
-            },
-            onError: (errors) => {
-                toast.add({ severity: 'error', summary: 'Falha', detail: errors?.pin || errors?.reason || 'Não foi possível estornar o item.', life: 3000 });
-            }
-        });
+        cancelItem(itemToProcess.value, authData);
     }
 };
 
 const printBill = () => {
-    router.post(route('operations.print-conference', liveOrder.value.id), {}, {
-        preserveScroll: true,
-        preserveState: true,
-        onSuccess: () => {}
-    });
-};
-
-const linkCustomer = (selected = null) => {
-    if (selected) {
-        customerToLink.value = selected;
-    }
-
-    const currentCustomer = customerToLink.value;
-    const orderId = liveOrder.value?.id || props.order?.id;
-
-    if (!orderId) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'ID da comanda não identificado.', life: 3000 });
-        return;
-    }
-
-    if (!currentCustomer) {
-        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Selecione um cliente válido.', life: 3000 });
-        return;
-    }
-
-    const payload = {
-        customer_id: typeof currentCustomer === 'object' ? currentCustomer?.id : null,
-        customer_name: typeof currentCustomer === 'object' ? currentCustomer?.name : currentCustomer,
-        coupon_code: appliedCheckoutCoupon.value
-    };
-
-    router.post(route('operations.orders.link-customer', orderId), payload, {
-        preserveScroll: true,
-        preserveState: true,
-        onSuccess: () => {
-            isLinkCustomerModalVisible.value = false;
-            customerToLink.value = null;
-            toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Cliente vinculado!', life: 3000 });
-        },
-        onError: (err) => {
-            toast.add({ severity: 'error', summary: 'Atenção', detail: Object.values(err)[0] || 'Falha ao vincular cliente.', life: 4000 });
-        }
-    });
+    router.post(route('operations.print-conference', liveOrder.value.id), {}, { preserveScroll: true, preserveState: true });
 };
 
 const openNewCustomerModal = (initialName = "") => {
@@ -651,17 +482,13 @@ const handleSaveNewCustomer = (customerData) => {
     });
 };
 
-const handlePixApproved = () => {
-    isPostPaymentPhase.value = true;
-};
+const handlePixApproved = () => { isPostPaymentPhase.value = true; };
 
-const {
-    isPixWaitingPhase, cancelPixPayment, refreshPixPayment, onPixApprovedByWebhook
-} = useCheckoutPix(orderRef, handlePixApproved, toast);
+const { isPixWaitingPhase, cancelPixPayment, refreshPixPayment, onPixApprovedByWebhook } = useCheckoutPix(orderRef, handlePixApproved, toast);
 
 const handlePostPaymentActionIntercepted = (action) => {
     const type = typeof action === 'string' ? action : action?.type;
-    if (type === 'close' || type === 'finish' || type === 'home' || type === 'no_print') {
+    if (['close', 'finish', 'home', 'no_print'].includes(type)) {
         emit('close');
     } else {
         handlePostPaymentAction(action);
@@ -679,9 +506,7 @@ const {
     order: orderRef,
     props,
     toast,
-    emitClose: () => {
-        emit('close');
-    },
+    emitClose: () => { emit('close'); },
     isFiscalEmitter,
     checkoutPrintMode,
     customerDocument,

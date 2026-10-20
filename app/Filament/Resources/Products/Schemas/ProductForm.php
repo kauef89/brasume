@@ -50,19 +50,33 @@ class ProductForm
             Forms\Components\Select::make("type")
                 ->label("Tipo de Produto")
                 ->options(ProductType::class)
-                ->default("ingredient")
+                ->default(ProductType::INGREDIENT->value)
                 ->live()
                 ->afterStateUpdated(fn(Set $set) => $set("category_id", null))
                 ->required(),
 
             Forms\Components\Select::make("category_id")
                 ->label("Categoria")
-                ->options(fn (Get $get) => Category::where("type", match ($get("type")) {
-                    "resale" => "external",
-                    "ingredient" => "internal",
-                    "packaging", "consumable" => "supply",
-                    default => "internal"
-                })->pluck("name", "id"))
+                ->options(function (Get $get) {
+                    $rawType = $get("type");
+
+                    if (!$rawType) {
+                        return [];
+                    }
+
+                    // 🚀 Normalização segura: aceita tanto Enum quanto String
+                    $enumType = $rawType instanceof \App\Enums\ProductType
+                        ? $rawType
+                        : \App\Enums\ProductType::tryFrom((string) $rawType);
+
+                    // Puxa 'external', 'internal' ou 'supply' via método de domínio
+                    $categoryGroup = $enumType?->defaultCategoryType() ?? 'internal';
+
+                    return Category::query()
+                        ->where("type", $categoryGroup)
+                        ->orderBy("name")
+                        ->pluck("name", "id");
+                })
                 ->searchable()
                 ->preload()
                 ->required(),
@@ -75,8 +89,7 @@ class ProductForm
 
             Forms\Components\Toggle::make("track_inventory")
                 ->label("Controlar Estoque?")
-                ->default(true)
-                ->inline(false),
+                ->default(true),
         ];
     }
 }
