@@ -8,7 +8,7 @@ use App\Filament\Resources\Supplies\Schemas\SupplyForm;
 use App\Filament\Resources\Supplies\Tables\SuppliesTable;
 use App\Filament\Resources\Products\RelationManagers\CostHistoriesRelationManager;
 use App\Filament\Resources\Products\RelationManagers\InventoryMovementsRelationManager;
-use App\Models\Product;
+use App\Models\Supply;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Filament\Schemas\Schema;
@@ -18,7 +18,7 @@ class SupplyResource extends Resource
 {
     use HasGlobalSearch;
 
-    protected static ?string $model = Product::class;
+    protected static ?string $model = Supply::class;
     protected static ?string $slug = 'material-consumo';
     protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-archive-box';
     protected static string | \UnitEnum | null $navigationGroup = 'Estoque & Compras';
@@ -26,11 +26,9 @@ class SupplyResource extends Resource
     protected static ?string $pluralModelLabel = 'Suprimentos';
 
     public static function getEloquentQuery(): Builder
-        {
-            return parent::getEloquentQuery()
-                ->whereIn('type', ['supply', 'consumable', 'packaging'])
-                ->whereHas('category', fn($query) => $query->where('type', 'supply'));
-        }
+    {
+        return parent::getEloquentQuery();
+    }
 
     public static function form(Schema $schema): Schema
     {

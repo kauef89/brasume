@@ -9,7 +9,7 @@ use App\Filament\Resources\Ingredients\Tables\IngredientTable;
 use App\Filament\Resources\Products\RelationManagers\CostHistoriesRelationManager;
 use App\Filament\Resources\Products\RelationManagers\InventoryMovementsRelationManager;
 use App\Filament\Resources\Products\RelationManagers\TechnicalSheetsRelationManager;
-use App\Models\Product;
+use App\Models\Ingredient;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Filament\Schemas\Schema;
@@ -19,7 +19,7 @@ class IngredientResource extends Resource
 {
     use HasGlobalSearch;
 
-    protected static ?string $model = Product::class;
+    protected static ?string $model = Ingredient::class;
     protected static ?string $slug = 'insumos';
     protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-scale';
     protected static string | \UnitEnum | null $navigationGroup = 'Estoque & Compras';
@@ -27,11 +27,9 @@ class IngredientResource extends Resource
     protected static ?string $pluralModelLabel = 'Insumos';
 
     public static function getEloquentQuery(): Builder
-{
-    return parent::getEloquentQuery()
-        ->whereIn('type', ['ingredient', 'manufactured', 'internal'])
-        ->whereHas('category', fn($query) => $query->where('type', 'internal'));
-}
+    {
+        return parent::getEloquentQuery();
+    }
 
     public static function form(Schema $schema): Schema
     {

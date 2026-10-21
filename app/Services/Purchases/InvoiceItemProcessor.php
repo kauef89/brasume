@@ -7,6 +7,7 @@ use App\Models\GoodsReceipt;
 use App\Models\PersonalPurchase;
 use App\Models\Product;
 use App\Models\ProductCostHistory;
+use App\Models\CompanyAsset;
 use App\Services\Catalog\InventoryService;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -85,11 +86,11 @@ class InvoiceItemProcessor
         $processQty = (float) ($item['xml_qty'] ?? 0);
         $invoiceCost = (float) ($item['xml_cost'] ?? 0);
         $invoiceUom = (string) ($item['xml_uom'] ?? '');
-        $isPersonal = !empty($item['is_personal']);
+        $destination = $item['destination_type'] ?? (!empty($item['is_personal']) ? 'personal' : 'stock');
         $receiptItemId = $item['goods_receipt_item_id'] ?? null;
 
-        // 🚀 OTIMIZAÇÃO: Transação individual removida! Assumimos que o chamador (processConfirmedItems) já abriu a transação.
-        if ($isPersonal) {
+        // 🚀 ROTA 1: USO PESSOAL
+        if ($destination === 'personal') {
             PersonalPurchase::create([
                 'nfe_key'    => $invoiceKey,
                 'supplier_id'=> $supplierId,
@@ -101,6 +102,24 @@ class InvoiceItemProcessor
             return;
         }
 
+        // 🚀 ROTA 2: PATRIMÔNIO / ATIVO IMOBILIZADO (Não toca no Kardex!)
+        if ($destination === 'asset') {
+            CompanyAsset::create([
+                'name'             => !empty($item['asset_name']) ? $item['asset_name'] : $item['xml_name'],
+                'asset_tag'        => !empty($item['asset_tag']) ? $item['asset_tag'] : null,
+                'location'         => !empty($item['asset_location']) ? $item['asset_location'] : null,
+                'description'      => "Adquirido via NF-e {$invoiceKey} - Item XML: {$item['xml_name']}",
+                'acquisition_cost' => round($processQty * $invoiceCost, 2),
+                'acquisition_date' => now()->toDateString(),
+                'warranty_until'   => !empty($item['warranty_until']) ? $item['warranty_until'] : null,
+                'supplier_id'      => $supplierId,
+                'nfe_key'          => $invoiceKey,
+                'status'           => 'active',
+            ]);
+            return;
+        }
+
+        // 🚀 ROTA 3: ESTOQUE / INSUMO / REVENDA
         $productId = $item['product_id'];
         $conversionFactor = (float) ($item['conversion_factor'] ?? 1.0);
         if ($conversionFactor <= 0) $conversionFactor = 1.0;
@@ -112,7 +131,6 @@ class InvoiceItemProcessor
         $inventoryService = app(InventoryService::class);
 
         if ($product) {
-            // Usa updateQuietly para não disparar observers desnecessários
             $product->updateQuietly(['base_cost' => $actualUnitCost]);
 
             if ($receiptItemId) {
@@ -181,13 +199,13 @@ class InvoiceItemProcessor
             throw new InvalidArgumentException('O fornecedor é obrigatório para processar itens da nota.');
         }
 
-        $isPersonal = !empty($payload['is_personal']);
+        $destination = $payload['destination_type'] ?? (!empty($payload['is_personal']) ? 'personal' : 'stock');
         $productId = isset($payload['product_id']) && !empty($payload['product_id'])
             ? (int) $payload['product_id']
             : null;
 
-        if (!$isPersonal && !$productId) {
-            throw new InvalidArgumentException('Selecione um produto cadastrado ou marque a compra como Uso Pessoal.');
+        if ($destination === 'stock' && !$productId) {
+            throw new InvalidArgumentException('Selecione um produto cadastrado para entrada em estoque.');
         }
 
         $invoiceKey = $payload['invoice_key'] ?? null;
@@ -200,15 +218,19 @@ class InvoiceItemProcessor
             'xml_qty'               => $processQty,
             'xml_cost'              => (float) ($payload['xml_cost'] ?? 0),
             'xml_uom'               => (string) ($payload['xml_uom'] ?? ''),
-            'is_personal'           => $isPersonal,
+            'destination_type'      => $destination,
+            'is_personal'           => $destination === 'personal',
             'xml_name'              => $targetXmlName,
             'product_id'            => $productId,
             'goods_receipt_item_id' => $receiptItemId,
             'conversion_factor'     => $conversionFactor,
+            'asset_name'            => $payload['asset_name'] ?? null,
+            'asset_location'        => $payload['asset_location'] ?? null,
+            'asset_tag'             => $payload['asset_tag'] ?? null,
+            'warranty_until'        => $payload['warranty_until'] ?? null,
         ];
 
-        // 🚀 OTIMIZAÇÃO: Uma única transação para englobar a inserção manual e as duplicadas (efeito dominó)
-        return DB::transaction(function () use ($itemData, $invoiceKey, $supplierId, $currentItems, $uuidToFind, $processQty, $availableQty, $targetXmlName, $isPersonal, $productId, $conversionFactor, $receiptItemId) {
+        return DB::transaction(function () use ($itemData, $invoiceKey, $supplierId, $currentItems, $uuidToFind, $processQty, $availableQty, $targetXmlName, $destination, $productId, $conversionFactor, $receiptItemId) {
 
             $this->processDirectItem($itemData, $invoiceKey, $supplierId, false);
 
@@ -221,7 +243,8 @@ class InvoiceItemProcessor
                         $newAvailable = round($availableQty - $processQty, 4);
                         $items[$key]['available_qty'] = $newAvailable;
                         $items[$key]['xml_qty'] = $newAvailable;
-                        $items[$key]['is_personal'] = false;
+                        $items[$key]['destination_type'] = $destination;
+                        $items[$key]['is_personal'] = ($destination === 'personal');
                         $items[$key]['factor_source'] = 'manual';
                     } else {
                         unset($items[$key]);
@@ -229,17 +252,13 @@ class InvoiceItemProcessor
                     continue;
                 }
 
-                // Efeito dominó para itens idênticos pendentes
+                // Efeito dominó para itens idênticos
                 if (!$receiptItemId && isset($item['xml_name']) && (string)$item['xml_name'] === $targetXmlName) {
-                    $duplicateItemData = [
-                        'xml_qty'           => (float) ($item['available_qty'] ?? $item['xml_qty'] ?? 0),
-                        'xml_cost'          => (float) ($item['xml_cost'] ?? 0),
-                        'xml_uom'           => (string) ($item['xml_uom'] ?? ''),
-                        'is_personal'       => $isPersonal,
-                        'xml_name'          => $targetXmlName,
-                        'product_id'        => $productId,
-                        'conversion_factor' => $conversionFactor,
-                    ];
+                    $duplicateItemData = array_merge($itemData, [
+                        'xml_qty'  => (float) ($item['available_qty'] ?? $item['xml_qty'] ?? 0),
+                        'xml_cost' => (float) ($item['xml_cost'] ?? 0),
+                        'xml_uom'  => (string) ($item['xml_uom'] ?? ''),
+                    ]);
 
                     $this->processDirectItem($duplicateItemData, $invoiceKey, $supplierId, false);
                     unset($items[$key]);

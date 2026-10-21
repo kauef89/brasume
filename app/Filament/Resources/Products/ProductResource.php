@@ -32,11 +32,15 @@ class ProductResource extends Resource
     protected static ?string $pluralModelLabel = "Produtos";
 
     public static function getEloquentQuery(): Builder
-{
-    return parent::getEloquentQuery()
-        ->whereIn('type', ['resale', 'dish', 'combo', 'service'])
-        ->whereHas('category', fn($query) => $query->where('type', 'external'));
-}
+    {
+        return parent::getEloquentQuery()
+            ->whereIn('type', [
+                \App\Enums\ProductType::DISH->value,
+                \App\Enums\ProductType::COMBO->value,
+                \App\Enums\ProductType::RESALE->value,
+                \App\Enums\ProductType::SERVICE->value,
+            ]);
+    }
 
     public static function form(Schema $schema): Schema
     {

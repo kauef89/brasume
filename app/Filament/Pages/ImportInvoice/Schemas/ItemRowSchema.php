@@ -5,8 +5,8 @@ namespace App\Filament\Pages\ImportInvoice\Schemas;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Hidden;
-use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\DatePicker;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -26,35 +26,60 @@ class ItemRowSchema
     public static function schema(): array
     {
         return [
-            self::getXmlNameField(),
-            self::getXmlQtyField(),
-            self::getConversionFactorField(),
-            self::getIsPersonalField(),
-            self::getProductSelectField(),
-            self::getGoodsReceiptMatchField(),
-            self::getRealEntryField(),
-            self::getConfirmItemAction(),
+            // ==========================================
+            // LINHA 1: DADOS BÁSICOS DO XML E DESTINO (6 COLS)
+            // ==========================================
+            self::getXmlNameField(),         // 3 colunas
+            self::getXmlQtyField(),          // 1 coluna
+            self::getDestinationTypeField(), // 2 colunas
+
+            // ==========================================
+            // LINHA 2: CONTEXTO ESTOQUE / INSUMO
+            // ==========================================
+            self::getConversionFactorField(), // 1 coluna
+            self::getProductSelectField(),    // 2 ou 3 colunas
+            self::getGoodsReceiptMatchField(),// 1 coluna (se houver produto)
+            self::getRealEntryField(),        // 1 coluna
+
+            // ==========================================
+            // LINHA 2: CONTEXTO PATRIMÔNIO / IMOBILIZADO
+            // ==========================================
+            self::getAssetNameField(),        // 2 colunas
+            self::getAssetLocationField(),    // 1 coluna
+            self::getAssetTagField(),         // 1 coluna
+            self::getWarrantyUntilField(),     // 1 coluna
+
+            // ==========================================
+            // LINHA 2: CONTEXTO USO PESSOAL
+            // ==========================================
+            self::getPersonalNoticeField(),   // 5 colunas
+
+            // BOTÃO DE CONFIRMAÇÃO (SEMPRE A ÚLTIMA COLUNA DA LINHA 2)
+            self::getConfirmItemAction(),     // 1 coluna
 
             // Controles Ocultos
             Hidden::make("xml_cost"),
             Hidden::make("xml_uom"),
+            Hidden::make("xml_cfop"),
             Hidden::make("available_qty"),
             Hidden::make("is_matched"),
             Hidden::make("item_uuid"),
             Hidden::make("confirmation_step")->default(0),
+            Hidden::make("factor_source")->default("manual"),
         ];
     }
 
     private static function getXmlNameField(): TextInput
     {
         return TextInput::make("xml_name")
-            ->label("Item da Nota")
+            ->label("Item da Nota (XML)")
             ->readOnly()
             ->hint(function (Get $get) {
                 $cost = (float) $get("xml_cost");
                 $formattedCost = rtrim(rtrim(number_format($cost, 5, ",", "."), "0"), ",");
                 $cleanUom = strtoupper(preg_replace("/[^A-Z]/", "", (string) ($get("xml_uom") ?? "")));
-                return "Original: R$ {$formattedCost} /{$cleanUom}";
+                $cfop = $get("xml_cfop") ? " | CFOP: " . $get("xml_cfop") : "";
+                return "Original: R$ {$formattedCost} /{$cleanUom}{$cfop}";
             })
             ->columnSpan(3);
     }
@@ -70,6 +95,35 @@ class ItemRowSchema
             ->columnSpan(1);
     }
 
+    private static function getDestinationTypeField(): Select
+    {
+        return Select::make("destination_type")
+            ->label("Destino do Item")
+            ->options([
+                'stock'    => '📦 Estoque / Insumo / Revenda',
+                'asset'    => '🏛️ Patrimônio (Ativo Imobilizado)',
+                'personal' => '👤 Uso Pessoal (Sócio)',
+            ])
+            ->default('stock')
+            ->required()
+            ->live()
+            ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                if ($state !== 'stock') {
+                    $set("product_id", null);
+                    $set("goods_receipt_item_id", null);
+                }
+                if ($state === 'asset') {
+                    $set("asset_name", $get("xml_name"));
+                }
+                $set("confirmation_step", 0);
+            })
+            ->columnSpan(2);
+    }
+
+    // ----------------------------------------------------
+    // CAMPOS DE ESTOQUE
+    // ----------------------------------------------------
+
     private static function getConversionFactorField(): TextInput
     {
         return TextInput::make("conversion_factor")
@@ -81,36 +135,16 @@ class ItemRowSchema
                     "PC"        => "Qtd. na peça",
                     "PCT"       => "Qtd. no pacote",
                     "SC"        => "Qtd. no saco",
-                    default     => "Fator de Conversão",
+                    default     => "Fator Conversão",
                 };
             })
             ->numeric()
             ->default(1)
             ->required()
             ->live(debounce: 500)
-            ->extraInputAttributes(fn(Get $get) => match ($get("factor_source")) {
-                "history", "auto" => ["style" => "background-color: rgba(34, 197, 94, 0.15) !important;"],
-                "identical"       => ["style" => "background-color: rgba(59, 130, 246, 0.15) !important;"],
-                "auto_math"       => ["style" => "background-color: rgba(234, 179, 8, 0.15) !important;"],
-                "assistant_used"  => ["style" => "background-color: rgba(168, 85, 247, 0.15) !important;"],
-                default           => [],
-            })
+            ->visible(fn(Get $get) => ($get("destination_type") ?? 'stock') === 'stock')
             ->suffixAction(self::getAssistantAction())
             ->columnSpan(1);
-    }
-
-    private static function getIsPersonalField(): Toggle
-    {
-        return Toggle::make("is_personal")
-            ->label("Uso Pessoal?")
-            ->live()
-            ->inline(false)
-            ->columnSpan(1)
-            ->afterStateUpdated(function (Set $set) {
-                $set("product_id", null);
-                $set("goods_receipt_item_id", null);
-                $set("confirmation_step", 0);
-            });
     }
 
     private static function getProductSelectField(): Select
@@ -119,6 +153,8 @@ class ItemRowSchema
             ->label("Produto / Insumo / Suprimento")
             ->searchable()
             ->allowHtml()
+            ->visible(fn(Get $get) => ($get("destination_type") ?? 'stock') === 'stock')
+            ->required(fn(Get $get) => ($get("destination_type") ?? 'stock') === 'stock')
             ->getSearchResultsUsing(function (string $search): array {
                 $products = Product::with('category')
                     ->whereIn('type', ['ingredient', 'resale', 'packaging', 'consumable'])
@@ -152,22 +188,9 @@ class ItemRowSchema
 
                 $set('conversion_factor', $conversion['factor']);
                 $set('factor_source', $conversion['source']);
-
-                if (!empty($conversion['notification'])) {
-                    $type = $conversion['notification']['type'] ?? 'info';
-                    Notification::make()
-                        ->title($conversion['notification']['title'])
-                        ->body($conversion['notification']['body'])
-                        ->{$type}()
-                        ->send();
-                }
             })
-            ->hint(fn(Get $get) => $get("product_id") ? "U.M Interna: " . Product::where("id", $get("product_id"))->value("unit_of_measure") : null)
-            ->hidden(fn(Get $get) => $get("is_personal"))
-            ->required(fn(Get $get) => !$get("is_personal"))
-            // 🚀 Dinâmico: 4 colunas quando vazio, 2 quando divide espaço com o romaneio
-            ->columnSpan(fn(Get $get) => empty($get('product_id')) ? 4 : 2)
-            // 🚀 QuickCreate Restaurado
+            ->hint(fn(Get $get) => $get("product_id") ? "U.M: " . Product::where("id", $get("product_id"))->value("unit_of_measure") : null)
+            ->columnSpan(fn(Get $get) => empty($get('product_id')) ? 3 : 2)
             ->createOptionForm(
                 \App\Filament\Resources\Products\Schemas\ProductForm::getQuickCreateSchema()
             )
@@ -178,18 +201,14 @@ class ItemRowSchema
                 $livewire->dispatch('$refresh');
                 return $product->id;
             })
-            ->createOptionAction(function (Action $action) {
-                return $action
-                    ->modalHeading('Cadastro Rápido de Insumo')
-                    ->modalWidth('sm');
-            });
+            ->createOptionAction(fn(Action $action) => $action->modalHeading('Cadastro Rápido de Insumo')->modalWidth('sm'));
     }
 
     private static function getGoodsReceiptMatchField(): Select
     {
         return Select::make('goods_receipt_item_id')
-            ->label('Conciliar Romaneio / Canhoto')
-            ->placeholder('Nenhum (Entrada Nova no Estoque)')
+            ->label('Conciliar Romaneio')
+            ->placeholder('Nenhum')
             ->options(function (Get $get, $livewire) {
                 $productId = $get('product_id');
                 if (!$productId) return [];
@@ -205,15 +224,13 @@ class ItemRowSchema
                 }
 
                 return $query->get()->mapWithKeys(function ($item) {
-                    $receiptNum = $item->goodsReceipt?->receipt_number ?: "ID #{$item->goods_receipt_id}";
-                    $date = $item->goodsReceipt?->received_at ? $item->goodsReceipt->received_at->format('d/m') : '';
+                    $receiptNum = $item->goodsReceipt?->receipt_number ?: "#{$item->goods_receipt_id}";
                     $uom = $item->product?->unit_of_measure ?: 'UN';
-                    return [$item->id => "Canhoto {$receiptNum} ({$date}) - Qtd: {$item->quantity} {$uom}"];
+                    return [$item->id => "Canhoto {$receiptNum} ({$item->quantity} {$uom})"];
                 })->toArray();
             })
-            ->helperText('Selecione caso este item já tenha sido entregue fisicamente para não duplicar o estoque.')
-            ->hidden(fn(Get $get) => $get("is_personal") || empty($get("product_id")))
-            ->columnSpan(2);
+            ->visible(fn(Get $get) => ($get("destination_type") ?? 'stock') === 'stock' && filled($get("product_id")))
+            ->columnSpan(1);
     }
 
     private static function getRealEntryField(): Placeholder
@@ -229,24 +246,113 @@ class ItemRowSchema
                 $formattedTotal = Number::format($total, maxPrecision: 4);
 
                 $receiptId = $get('goods_receipt_item_id');
-                $badge = $receiptId ? "<span class='text-[10px] font-black uppercase text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded'>Conciliação</span>" : "";
+                $badge = $receiptId ? "<span class='text-[9px] font-black uppercase text-amber-500 bg-amber-500/10 px-1 py-0.5 rounded'>Conciliação</span>" : "";
 
-                return new HtmlString("<div class='flex flex-col gap-0.5 mt-1'><div class='flex items-baseline gap-1'><span class='text-base font-black text-primary-600 dark:text-primary-400'>{$formattedTotal}</span><span class='text-xs font-medium text-gray-500'>{$uom}</span></div>{$badge}</div>");
+                return new HtmlString("<div class='flex flex-col gap-0.5 mt-1'><div class='flex items-baseline gap-1'><span class='text-sm font-black text-primary-600 dark:text-primary-400'>{$formattedTotal}</span><span class='text-xs font-medium text-gray-500'>{$uom}</span></div>{$badge}</div>");
             })
-            ->hidden(fn(Get $get) => $get("is_personal"))
+            ->visible(fn(Get $get) => ($get("destination_type") ?? 'stock') === 'stock')
             ->columnSpan(1);
     }
+
+    // ----------------------------------------------------
+    // CAMPOS DE PATRIMÔNIO / IMOBILIZADO
+    // ----------------------------------------------------
+
+    private static function getAssetNameField(): TextInput
+    {
+        return TextInput::make("asset_name")
+            ->label("Descrição do Ativo")
+            ->placeholder("Ex: Fachada em ACM com LED")
+            ->required(fn(Get $get) => $get("destination_type") === 'asset')
+            ->visible(fn(Get $get) => $get("destination_type") === 'asset')
+            ->columnSpan(2);
+    }
+
+    private static function getAssetLocationField(): TextInput
+    {
+        return TextInput::make("asset_location")
+            ->label("Localização Física")
+            ->placeholder("Ex: Fachada Externa, Salão...")
+            ->visible(fn(Get $get) => $get("destination_type") === 'asset')
+            ->columnSpan(1);
+    }
+
+    private static function getAssetTagField(): TextInput
+    {
+        return TextInput::make("asset_tag")
+            ->label("Plaqueta / Tombamento")
+            ->placeholder("Ex: PAT-001")
+            ->visible(fn(Get $get) => $get("destination_type") === 'asset')
+            ->columnSpan(1);
+    }
+
+    private static function getWarrantyUntilField(): DatePicker
+    {
+        return DatePicker::make("warranty_until")
+            ->label("Garantia Até")
+            ->placeholder("Opcional")
+            ->visible(fn(Get $get) => $get("destination_type") === 'asset')
+            ->columnSpan(1);
+    }
+
+    // ----------------------------------------------------
+    // CAMPOS DE USO PESSOAL
+    // ----------------------------------------------------
+
+    private static function getPersonalNoticeField(): Placeholder
+    {
+        return Placeholder::make("personal_notice")
+            ->hiddenLabel()
+            ->content(new HtmlString("
+                <div class='p-3 text-xs rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'>
+                    <strong>Retirada de Sócios / Uso Pessoal:</strong> Este item será alocado como despesa particular dos proprietários e não impactará o Kardex nem o CMV da empresa.
+                </div>
+            "))
+            ->visible(fn(Get $get) => $get("destination_type") === 'personal')
+            ->columnSpan(5);
+    }
+
+    // ----------------------------------------------------
+    // AÇÃO DE CONFIRMAÇÃO
+    // ----------------------------------------------------
 
     private static function getConfirmItemAction(): Actions
     {
         return Actions::make([
             Action::make("confirmItem")
-                ->label(fn(Get $get) => $get("is_personal") ? "Gerar Despesa" : "Associar")
-                ->icon(fn(Get $get) => $get("is_personal") ? "heroicon-m-banknotes" : "heroicon-m-link")
-                ->color(fn(Get $get) => $get("is_personal") ? "warning" : "primary")
+                ->label(function (Get $get) {
+                    return match ($get("destination_type")) {
+                        'asset'    => 'Tombá-lo',
+                        'personal' => 'Uso Pessoal',
+                        default    => 'Associar',
+                    };
+                })
+                ->icon(function (Get $get) {
+                    return match ($get("destination_type")) {
+                        'asset'    => 'heroicon-m-building-storefront',
+                        'personal' => 'heroicon-m-banknotes',
+                        default    => 'heroicon-m-link',
+                    };
+                })
+                ->color(function (Get $get) {
+                    return match ($get("destination_type")) {
+                        'asset'    => 'warning',
+                        'personal' => 'gray',
+                        default    => 'primary',
+                    };
+                })
                 ->size('sm')
                 ->extraAttributes(['class' => 'whitespace-nowrap'])
-                ->disabled(fn(Get $get) => !$get("is_personal") && empty($get("product_id")))
+                ->disabled(function (Get $get) {
+                    $dest = $get("destination_type") ?? 'stock';
+                    if ($dest === 'stock') {
+                        return empty($get("product_id"));
+                    }
+                    if ($dest === 'asset') {
+                        return empty($get("asset_name"));
+                    }
+                    return false;
+                })
                 ->action(function (Get $get, $livewire) {
                     $processQty = (float) ($get('xml_qty') ?? 0);
                     $availableQty = (float) ($get('available_qty') ?? 0);
@@ -272,7 +378,7 @@ class ItemRowSchema
                         return;
                     }
 
-                    $isPersonal = (bool) $get('is_personal');
+                    $destination = $get('destination_type') ?? 'stock';
                     $productId = $get('product_id') ? (int) $get('product_id') : null;
 
                     $payload = [
@@ -282,33 +388,47 @@ class ItemRowSchema
                         'available_qty'         => $availableQty,
                         'xml_cost'              => (float) ($get('xml_cost') ?? 0),
                         'xml_uom'               => (string) ($get('xml_uom') ?? ''),
+                        'destination_type'      => $destination,
+                        'is_personal'           => $destination === 'personal',
                         'conversion_factor'     => (float) ($get('conversion_factor') ?? 1),
-                        'is_personal'           => $isPersonal,
                         'product_id'            => $productId,
                         'goods_receipt_item_id' => $get('goods_receipt_item_id') ? (int) $get('goods_receipt_item_id') : null,
                         'supplier_id'           => (int) $supplierId,
                         'invoice_key'           => $invoice?->nfe_key ?? $invoice?->access_key ?? ($livewire->data['invoice_key'] ?? null),
+                        // Campos de Ativo Imobilizado
+                        'asset_name'            => (string) ($get('asset_name') ?? $get('xml_name')),
+                        'asset_location'        => $get('asset_location'),
+                        'asset_tag'             => $get('asset_tag'),
+                        'warranty_until'        => $get('warranty_until'),
                     ];
 
                     try {
                         $result = $livewire->confirmItem($payload);
                         $autoCount = $result['auto_processed_count'] ?? 0;
-
                         $targetXmlName = $payload['xml_name'] ?: 'Item';
-                        $body = $isPersonal
-                            ? "Despesa gerada para '{$targetXmlName}'."
-                            : "Item '{$targetXmlName}' integrado com sucesso!";
 
-                        if ($payload['goods_receipt_item_id']) {
-                            $body .= " (Estoque conciliado com o romaneio anterior sem duplicação).";
+                        $body = match ($destination) {
+                            'asset'    => "Ativo Imobilizado '{$payload['asset_name']}' registrado no Patrimônio sem gerar estoque físico.",
+                            'personal' => "Despesa pessoal gerada para '{$targetXmlName}'.",
+                            default    => "Item '{$targetXmlName}' integrado ao estoque com sucesso!",
+                        };
+
+                        if ($destination === 'stock' && $payload['goods_receipt_item_id']) {
+                            $body .= " (Estoque conciliado com o romaneio anterior).";
                         }
 
                         if ($autoCount > 0) {
-                            $body .= " Efeito dominó: +{$autoCount} item(ns) idêntico(s) associado(s) automaticamente.";
+                            $body .= " Efeito dominó: +{$autoCount} item(ns) idêntico(s) associado(s).";
                         }
 
+                        $title = match ($destination) {
+                            'asset'    => 'Patrimônio Registrado',
+                            'personal' => 'Despesa Registrada',
+                            default    => 'Estoque Conciliado',
+                        };
+
                         Notification::make()
-                            ->title($isPersonal ? 'Despesa Registrada' : 'Estoque Conciliado')
+                            ->title($title)
                             ->body($body)
                             ->success()
                             ->send();
@@ -323,8 +443,8 @@ class ItemRowSchema
                 }),
         ])
         ->alignEnd()
-        ->columnSpan(fn(Get $get) => $get("is_personal") ? 6 : 1)
-        ->extraAttributes(fn(Get $get) => $get("is_personal") ? [] : ["style" => "margin-top: 32px"]);
+        ->columnSpan(1)
+        ->extraAttributes(["style" => "margin-top: 32px"]);
     }
 
     private static function getAssistantAction(): Action
@@ -333,7 +453,7 @@ class ItemRowSchema
             ->icon("heroicon-m-sparkles")
             ->tooltip("Assistente de Conversão")
             ->color("primary")
-            ->visible(fn(Get $get) => filled($get("product_id")))
+            ->visible(fn(Get $get) => filled($get("product_id")) && ($get("destination_type") ?? 'stock') === 'stock')
             ->modalHeading("Assistente de Conversão")
             ->form(function (Get $get) {
                 $xmlUom = strtoupper(preg_replace("/[^A-Z]/", "", (string) ($get("xml_uom") ?? "")));
@@ -386,10 +506,7 @@ class ItemRowSchema
                 $set("conversion_factor", round($factor, 4));
                 $set("factor_source", "assistant_used");
 
-                Notification::make()
-                    ->title("Fator de Conversão Aplicado!")
-                    ->success()
-                    ->send();
+                Notification::make()->title("Fator de Conversão Aplicado!")->success()->send();
             });
     }
 }

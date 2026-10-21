@@ -7,6 +7,7 @@ use App\Models\Supplier;
 use App\Models\AccountPayable;
 use App\Models\ReceivedInvoice;
 use App\Models\PersonalPurchase;
+use App\Models\CompanyAsset;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -55,7 +56,6 @@ class InvoiceImportService
             ];
         }
 
-        // Se não achou em lugar nenhum, retorna null
         return null;
     }
 
@@ -102,15 +102,15 @@ class InvoiceImportService
                     $xmlQty = (float) $det->prod->qCom;
                     $xmlCost = (float) $det->prod->vUnCom;
                     $xmlTotal = (float) $det->prod->vProd;
-                    // Remove qualquer coisa que não seja letra e joga para maiúsculo (ex: "un1" vira "UN")
                     $xmlUom = strtoupper(preg_replace('/[^A-Za-z]/', '', (string) $det->prod->uCom));
                     $xmlCode = (string) $det->prod->cProd;
+                    $xmlCfop = (string) ($det->prod->CFOP ?? '');
 
                     if ($xmlCost <= 0.001 && $xmlQty > 0) {
                         $xmlCost = $xmlTotal / $xmlQty;
                     }
 
-                    $groupKey = md5($xmlName . '_' . $xmlCost . '_' . $xmlUom);
+                    $groupKey = md5($xmlName . '_' . $xmlCost . '_' . $xmlUom . '_' . $xmlCfop);
 
                     if (!isset($groupedItems[$groupKey])) {
                         $groupedItems[$groupKey] = [
@@ -118,6 +118,7 @@ class InvoiceImportService
                             'code' => $xmlCode,
                             'cost' => $xmlCost,
                             'uom'  => $xmlUom,
+                            'cfop' => $xmlCfop,
                             'qty'  => 0
                         ];
                     }
@@ -132,16 +133,23 @@ class InvoiceImportService
                 $xmlQty = $group['qty'];
                 $xmlUom = $group['uom'];
                 $xmlCode = $group['code'];
+                $xmlCfop = $group['cfop'];
 
+                // 🚀 Verifica se já foi processado em Estoque, Despesa Pessoal ou Patrimônio
                 $processed = ProductCostHistory::where('nfe_key', $state['invoice_key'])->where('xml_name', $xmlName)->exists()
-                    || PersonalPurchase::where('nfe_key', $state['invoice_key'])->where('xml_name', $xmlName)->exists();
+                    || PersonalPurchase::where('nfe_key', $state['invoice_key'])->where('xml_name', $xmlName)->exists()
+                    || CompanyAsset::where('nfe_key', $state['invoice_key'])->where(function ($q) use ($xmlName) {
+                        $q->where('name', $xmlName)->orWhere('description', 'like', "%{$xmlName}%");
+                    })->exists();
 
                 if (!$processed) {
-                    // 🚀 Aplicamos o Smart Match!
                     $matchData = $this->findInternalMatch($state['supplier_id'], $xmlName);
-
                     $matchProductId = $matchData['product_id'] ?? null;
                     $matchFactor = $matchData['conversion_factor'] ?? 1;
+
+                    // 🚀 Se o CFOP indicar Ativo Imobilizado (1551, 2551, 3551), sugere 'asset'
+                    $isAssetCfop = in_array($xmlCfop, ['1551', '2551', '3551']);
+                    $defaultDestination = $isAssetCfop ? 'asset' : 'stock';
 
                     $items[] = [
                         'xml_name' => $xmlName,
@@ -150,12 +158,18 @@ class InvoiceImportService
                         'available_qty' => $xmlQty,
                         'xml_cost' => $xmlCost,
                         'xml_uom'  => $xmlUom,
+                        'xml_cfop' => $xmlCfop,
+                        'destination_type' => $defaultDestination,
                         'conversion_factor' => $matchFactor,
                         'product_id' => $matchProductId,
                         'is_matched' => $matchProductId ? 1 : 0,
                         'item_uuid'  => (string) Str::uuid(),
                         'confirmation_step' => 0,
                         'factor_source' => 'auto',
+                        'asset_name' => $xmlName,
+                        'asset_location' => null,
+                        'asset_tag' => null,
+                        'warranty_until' => null,
                     ];
                 }
             }
@@ -230,55 +244,45 @@ class InvoiceImportService
         }
     }
 
-    /**
-         * 🚀 O ROBÔ: Tenta aprovar automaticamente uma nota inteira logo após o download.
-         */
-        public function attemptAutoApproval(ReceivedInvoice $invoice): void
-        {
-            // 1. Finge que a nota foi aberta na tela e extrai os dados
-            $data = $this->extractDataFromXml($invoice->xml_content, $invoice->id);
+    public function attemptAutoApproval(ReceivedInvoice $invoice): void
+    {
+        $data = $this->extractDataFromXml($invoice->xml_content, $invoice->id);
 
-            if (empty($data['xml_items']) || empty($data['supplier_id'])) {
-                return;
-            }
-
-            $processor = app(InvoiceItemProcessor::class);
-            $allProcessed = true;
-
-            foreach ($data['xml_items'] as $index => $item) {
-                // 2. Procura se existe uma regra de auto-aprovação para este item exato
-                $rule = ProductCostHistory::where('supplier_id', $data['supplier_id'])
-                    ->where('xml_name', $item['xml_name'])
-                    ->where('auto_approve', true)
-                    ->latest('id')
-                    ->first();
-
-                if ($rule) {
-                    // 3. TRAVA DE SEGURANÇA: A unidade de medida mudou? (Ex: Era UN e agora é FD?)
-                    $xmlUom = strtoupper(preg_replace('/[^A-Za-z]/', '', $item['xml_uom']));
-                    $ruleUom = strtoupper(preg_replace('/[^A-Za-z]/', '', $rule->original_unit_of_measure ?? ''));
-
-                    if ($xmlUom === $ruleUom) {
-                        // 4. Injeta os dados históricos no item e processa direto!
-                        $item['product_id'] = $rule->product_id;
-                        $item['conversion_factor'] = $rule->conversion_factor;
-                        $item['is_personal'] = false;
-
-                        // O último 'true' mantém a flag acesa para compras futuras
-                        $processor->processDirectItem($item, $data['invoice_key'], $data['supplier_id'], true);
-                        continue; // Item processado com sucesso! Vai para o próximo.
-                    }
-                }
-
-                // Se o item não tem regra ou a segurança falhou, a nota não pode ser fechada 100%
-                $allProcessed = false;
-            }
-
-            // 5. Se o robô conseguiu processar TODOS os itens sozinho, ele gera as contas a pagar e finaliza a nota!
-            if ($allProcessed) {
-                // Removemos os xml_items do payload para evitar retrabalho, pois já foram processados linha a linha
-                unset($data['xml_items']);
-                $this->finalizeInvoice($data);
-            }
+        if (empty($data['xml_items']) || empty($data['supplier_id'])) {
+            return;
         }
+
+        $processor = app(InvoiceItemProcessor::class);
+        $allProcessed = true;
+
+        foreach ($data['xml_items'] as $index => $item) {
+            $rule = ProductCostHistory::where('supplier_id', $data['supplier_id'])
+                ->where('xml_name', $item['xml_name'])
+                ->where('auto_approve', true)
+                ->latest('id')
+                ->first();
+
+            if ($rule) {
+                $xmlUom = strtoupper(preg_replace('/[^A-Za-z]/', '', $item['xml_uom']));
+                $ruleUom = strtoupper(preg_replace('/[^A-Za-z]/', '', $rule->original_unit_of_measure ?? ''));
+
+                if ($xmlUom === $ruleUom) {
+                    $item['product_id'] = $rule->product_id;
+                    $item['conversion_factor'] = $rule->conversion_factor;
+                    $item['destination_type'] = 'stock';
+                    $item['is_personal'] = false;
+
+                    $processor->processDirectItem($item, $data['invoice_key'], $data['supplier_id'], true);
+                    continue;
+                }
+            }
+
+            $allProcessed = false;
+        }
+
+        if ($allProcessed) {
+            unset($data['xml_items']);
+            $this->finalizeInvoice($data);
+        }
+    }
 }
