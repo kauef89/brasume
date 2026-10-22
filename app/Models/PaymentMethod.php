@@ -2,47 +2,32 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PaymentMethod extends Model
 {
-    protected $fillable = [
-        'name',
-        'destination_account_id',
-        'engine_type',
-        'gateway_driver',
-        'category',
-        'fiscal_code',
-        'show_on_pos',
-        'show_on_delivery',
-        'is_active',
-    ];
+    use HasFactory;
+
+    // 🚀 Padronização do projeto: elimina bloqueios de atribuição em massa
+    protected $guarded = [];
 
     protected $casts = [
-        'show_on_pos' => 'boolean',
-        'show_on_delivery' => 'boolean',
-        'is_active' => 'boolean',
+        'show_on_pos'          => 'boolean',
+        'show_on_delivery'     => 'boolean',
+        'auto_fiscal_emission' => 'boolean',
+        'is_active'            => 'boolean',
     ];
 
-    // Scopes locais para reaproveitamento limpo
-    public function scopeActive(Builder $query): Builder
+    public function destinationAccount(): BelongsTo
     {
-        return $query->where('is_active', true);
+        return $this->belongsTo(BankAccount::class, 'destination_account_id');
     }
 
-    public function scopeForPos(Builder $query): Builder
+    public function orderPayments(): HasMany
     {
-        return $query->where('show_on_pos', true);
-    }
-
-    public function scopeForDelivery(Builder $query): Builder
-    {
-        return $query->where('show_on_delivery', true);
-    }
-
-    public function destinationAccount(): \Illuminate\Database\Eloquent\Relations\BelongsTo
-    {
-        return $this->belongsTo(\App\Models\BankAccount::class, 'destination_account_id');
+        return $this->hasMany(OrderPayment::class, 'payment_method_id');
     }
 }

@@ -17,6 +17,11 @@ class OrderStatusService
     {
         $order->update(["status" => $newStatus]);
 
+        // 🚀 AVALIAÇÃO FISCAL NO FECHAMENTO
+        if (in_array($newStatus, ['closed', 'completed'])) {
+            $this->evaluateFiscalEmission($order);
+        }
+
         broadcast(new OrderUpdated($order->fresh()));
 
         if ($newStatus === 'dispatched' || $newStatus === 'out_for_delivery') {
@@ -46,8 +51,40 @@ class OrderStatusService
     }
 
     /**
-     * Alterna a inibição preventiva de avaliação pelo caixa.
+     * Avalia as formas de pagamento do pedido e define se emite NFC-e ou marca como dispensada.
      */
+    private function evaluateFiscalEmission(Order $order): void
+    {
+        // Se a nota já foi autorizada previamente, preserva
+        if (in_array($order->fiscal_status, ['authorized', 'emitted'])) {
+            return;
+        }
+
+        $order->loadMissing('payments.paymentMethod');
+
+        // Se qualquer forma de pagamento usada tiver auto_fiscal_emission = false, dispensa a emissão
+        $shouldSkip = $order->payments->contains(function ($payment) {
+            return $payment->paymentMethod && !$payment->paymentMethod->auto_fiscal_emission;
+        });
+
+        if ($shouldSkip || $order->payments->isEmpty()) {
+            $order->update([
+                'fiscal_status' => 'skipped',
+                'fiscal_error'  => null,
+            ]);
+            return;
+        }
+
+        // Se todas as formas permitem emissão automática e o certificado estivesse ativo:
+        // Caso seu disparo já seja feito por um Job automático, marque como 'pending'
+        if (empty($order->fiscal_status) || $order->fiscal_status === 'skipped') {
+            $order->update(['fiscal_status' => 'pending']);
+
+            // Se você despacha o Job de emissão por aqui:
+            // dispatch(new \App\Jobs\EmitNfceJob($order->id, tenant('id')));
+        }
+    }
+
     public function toggleRatingSuppression(Order $order, bool $skipRating): void
     {
         if ($skipRating) {

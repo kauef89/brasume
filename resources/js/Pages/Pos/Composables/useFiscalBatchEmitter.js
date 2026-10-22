@@ -8,22 +8,25 @@ export function useFiscalBatchEmitter(props, unifiedHistory) {
     const isRetryingFiscal = ref(false);
 
     const pendingFiscalOrders = computed(() => {
-        const list = (props.ordersHistory && props.ordersHistory.length > 0)
-            ? props.ordersHistory
-            : (unifiedHistory.value || []).filter(item => item._type === 'order');
+            const list = (props.ordersHistory && props.ordersHistory.length > 0)
+                ? props.ordersHistory
+                : (unifiedHistory.value || []).filter(item => item._type === 'order');
 
-        return list.filter(order => {
-            const isNotCancelled = order.status !== 'cancelled';
-            const isNotAuthorized = order.fiscal_status !== 'authorized';
+            return list.filter(order => {
+                const isNotCancelled = order.status !== 'cancelled';
+                const isNotAuthorized = order.fiscal_status !== 'authorized';
 
-            // 🛑 REGRA FISCAL ESTRITA: Apenas pedidos QUITADOS entram no lote
-            const hasPayment = order.payment_status === 'paid' || (Array.isArray(order.payments) && order.payments.length > 0);
-            const isSettled = ['closed', 'completed'].includes(order.status) || order.payment_status === 'paid';
-            const isNotOpenTable = !(order.type === 'table' && order.status !== 'closed' && order.payment_status !== 'paid');
+                // 🚀 REGRA FISCAL: Não tentar reemitir em lote pedidos intencionalmente dispensados
+                const isNotSkipped = order.fiscal_status !== 'skipped';
 
-            return isNotCancelled && isNotAuthorized && hasPayment && isSettled && isNotOpenTable;
+                // 🛑 REGRA FISCAL ESTRITA: Apenas pedidos QUITADOS entram no lote
+                const hasPayment = order.payment_status === 'paid' || (Array.isArray(order.payments) && order.payments.length > 0);
+                const isSettled = ['closed', 'completed'].includes(order.status) || order.payment_status === 'paid';
+                const isNotOpenTable = !(order.type === 'table' && order.status !== 'closed' && order.payment_status !== 'paid');
+
+                return isNotCancelled && isNotAuthorized && isNotSkipped && hasPayment && isSettled && isNotOpenTable;
+            });
         });
-    });
 
     const retryFailedFiscal = async () => {
         if (isRetryingFiscal.value) return;

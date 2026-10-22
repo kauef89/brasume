@@ -38,11 +38,11 @@ class PaymentMethodForm
                         Select::make("engine_type")
                             ->label("Comportamento do Sistema")
                             ->options([
-                                "money" => "Dinheiro Físico (Abre Gaveta)",
-                                "manual" => "Baixa Manual (Maquininha/Cartões)",
-                                "bank_api" => "Integração Bancária (API)",
-                                "loss" => "Perda / Cortesia",
-                                "internal" => "Consumo Interno",
+                                "money"            => "Dinheiro Físico (Abre Gaveta)",
+                                "manual"           => "Baixa Manual (Maquininha/Cartões)",
+                                "bank_api"         => "Integração Bancária (API)",
+                                "loss"             => "Perda / Cortesia",
+                                "internal"         => "Consumo Interno",
                                 "internal_loyalty" => "Cashback/Fidelidade",
                             ])
                             ->live()
@@ -55,7 +55,7 @@ class PaymentMethodForm
                             ->visible(fn(Get $get) => $get("engine_type") === 'bank_api')
                             ->live()
                             ->required(fn(Get $get) => $get("engine_type") === 'bank_api')
-                            ->columnSpanFull(), // Ocupa a linha toda se aparecer
+                            ->columnSpanFull(),
 
                         Placeholder::make('integration_status')
                             ->label('Status da Integração')
@@ -89,28 +89,37 @@ class PaymentMethodForm
                             ->columnSpan(1),
                     ]),
                 ])
-                ->columnSpanFull(), // 🚀 Força a secção a ocupar 100% da largura, empurrando a próxima para baixo
+                ->columnSpanFull(),
 
-                Section::make("Regras de Exibição")->schema([
-                                Grid::make(3)->schema([
-                                    Toggle::make("show_on_pos")
-                                        ->label("Mostrar no PDV (Caixa)?")
-                                        ->default(true)
-                                        ->inline(false),
+            // --- LINHA 3: REGRAS OPERACIONAIS & FISCAIS ---
+            Section::make("Regras de Operação e Emissão")
+                ->schema([
+                    Grid::make(4)->schema([
+                        Toggle::make("show_on_pos")
+                            ->label("Mostrar no PDV?")
+                            ->default(true)
+                            ->inline(false),
 
-                                    Toggle::make("show_on_delivery")
-                                        ->label("Mostrar no Delivery?")
-                                        ->default(true)
-                                        ->inline(false),
+                        Toggle::make("show_on_delivery")
+                            ->label("Mostrar no Delivery?")
+                            ->default(true)
+                            ->inline(false),
 
-                                    Toggle::make("is_active")
-                                        ->label("Status (Ativo?)")
-                                        ->default(true)
-                                        ->inline(false),
-                                ]),
-                            ]),
-                        ];
-                    }
+                        Toggle::make("auto_fiscal_emission")
+                            ->label("Emissão Fiscal Auto?")
+                            ->helperText("NFC-e imediata após fechar pedido")
+                            ->default(true)
+                            ->inline(false),
+
+                        Toggle::make("is_active")
+                            ->label("Status (Ativo?)")
+                            ->default(true)
+                            ->inline(false),
+                    ]),
+                ])
+                ->columnSpanFull(),
+        ];
+    }
 
     public static function configure(Schema $schema): Schema
     {

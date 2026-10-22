@@ -25,7 +25,8 @@ class CheckoutFiscalController extends Controller
     public function emitNfce(Order $order, Request $request)
     {
         $data = $request->validate([
-            'document' => 'nullable|string'
+            'document' => 'nullable|string',
+            'force'    => 'nullable|boolean',
         ]);
 
         $settings = CompanySetting::first();
@@ -44,36 +45,65 @@ class CheckoutFiscalController extends Controller
             if ($request->wantsJson()) {
                 return response()->json([
                     'success' => true,
+                    'status'  => 'authorized',
                     'message' => $msg,
                 ]);
             }
             return back()->with('success', $msg);
         }
 
+        // Se o operador clicou para forçar OU se o pedido já estava 'skipped', trata como ação manual deliberada
+        $isManualForce = $request->boolean('force') || $order->fiscal_status === 'skipped';
+
         try {
             $spedService = app(\App\Services\Fiscal\SpedDocumentService::class);
-            $spedService->emitNfce($order, $data['document'] ?? null, false);
+            $result = $spedService->emitNfce(
+                $order,
+                $data['document'] ?? null,
+                false,
+                null,
+                $isManualForce
+            );
 
             $order->load('fiscalDocument');
 
             if (!$request->wantsJson()) {
                 try {
                     broadcast(new OrderUpdated($order));
-                } catch (\Throwable $e) {}
+                } catch (Throwable $e) {}
+            }
+
+            // Caso tenha sido dispensada pela forma de pagamento (auto_fiscal_emission = false)
+            if (is_array($result) && ($result['status'] ?? null) === 'skipped') {
+                if ($request->wantsJson()) {
+                    return response()->json([
+                        'success' => true,
+                        'status'  => 'skipped',
+                        'message' => $result['message'] ?? "Emissão de NFC-e dispensada para o pedido #{$order->id}."
+                    ]);
+                }
+                return back()->with('info', "Emissão de NFC-e dispensada para o pedido #{$order->id}.");
             }
 
             if ($request->wantsJson()) {
                 return response()->json([
                     'success' => true,
+                    'status'  => 'authorized',
                     'message' => "NFC-e do pedido #{$order->id} autorizada com sucesso na SEFAZ!"
                 ]);
             }
 
             return back()->with('success', 'NFC-e autorizada com sucesso na Sefaz!');
         } catch (Throwable $e) {
+            $order->update([
+                'fiscal_status' => 'failed',
+                'fiscal_error'  => $e->getMessage(),
+            ]);
+
             if ($request->wantsJson()) {
                 return response()->json([
                     'success' => false,
+                    'status'  => 'failed',
                     'message' => $e->getMessage()
                 ], 422);
             }

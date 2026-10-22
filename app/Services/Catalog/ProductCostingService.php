@@ -157,7 +157,11 @@ class ProductCostingService
             $groupExpectedCost = 0;
             $totalWeight = 0;
 
+            // 1. Identifica se o grupo já possui histórico de vendas
+            $groupHasHistory = $options->sum('historical_weight') > 0;
+
             foreach ($options as $option) {
+                // Opções com acréscimo pago à parte não compõem o custo do prato base
                 if ((float) $option->price > 0 && ($group->max_free ?? 0) <= 0) {
                     continue;
                 }
@@ -171,7 +175,15 @@ class ProductCostingService
                     }
                 }
 
-                $weight = max((float) ($option->historical_weight ?? 1), 0.001);
+                // Se houver histórico, usa o peso real da base de dados.
+                // Se o item for novo (peso 0), atribui peso 0.1 para compor a cauda longa.
+                // Se ninguém do grupo tiver histórico, usa peso 1 para todos (média simples).
+                if ($groupHasHistory) {
+                    $weight = (float) $option->historical_weight > 0 ? (float) $option->historical_weight : 0.1;
+                } else {
+                    $weight = 1.0;
+                }
+
                 $groupExpectedCost += $optionCost * $weight;
                 $totalWeight += $weight;
             }

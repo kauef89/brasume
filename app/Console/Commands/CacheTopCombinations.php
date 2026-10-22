@@ -10,12 +10,13 @@ use App\Models\Tenant;
 
 class CacheTopCombinations extends Command
 {
-    protected $signature = 'catalog:cache-top-combinations {--tenant=}';
-    protected $description = 'Top 10: Ranking geral de produtos expandido nas top 3 variações de ingredientes.';
+    protected $signature = 'catalog:cache-top-combinations {--tenant=} {--days=30}';
+    protected $description = 'Top 10: Ranking geral de produtos expandido nas top 3 variações de ingredientes e atualização do BI preditivo.';
 
     public function handle()
     {
-        $cutoffDate = Carbon::now()->subDays(30);
+        $days = (int) $this->option('days');
+        $cutoffDate = Carbon::now()->subDays($days);
         $tenantId = $this->option('tenant');
         $tenants = $tenantId ? Tenant::where('id', $tenantId)->get() : Tenant::all();
 
@@ -26,7 +27,8 @@ class CacheTopCombinations extends Command
 
         foreach ($tenants as $tenant) {
             $this->info("\n==================================================");
-            $this->info("🚀 PROCESSANDO RANKING INTELIGENTE: {$tenant->id}");
+            $this->info("🚀 PROCESSANDO RANKING INTELIGENTE & BI: {$tenant->id}");
+            $this->info("   Janela considerada: últimos {$days} dias");
             $this->info("==================================================");
 
             tenancy()->initialize($tenant);
@@ -65,7 +67,7 @@ class CacheTopCombinations extends Command
                     ->toArray();
 
                 // =========================================================================
-                // 1. CARGA ATUAL (SISTEMA V3) - Sem descartar os itens ainda!
+                // 1. CARGA ATUAL (SISTEMA V3)
                 // =========================================================================
                 $currentItems = DB::table('order_items')
                     ->join('orders', 'order_items.order_id', '=', 'orders.id')
@@ -105,7 +107,6 @@ class CacheTopCombinations extends Command
                             $opt = $v3OptionsByName[$cleanKey] ?? null;
                         }
 
-                        // Se não for um ingrediente oficial mapeado, descarta (limpa lixo do V3)
                         if (!$opt || $opt->group_type !== 'ingredient') return null;
 
                         return [
@@ -125,7 +126,7 @@ class CacheTopCombinations extends Command
                 });
 
                 // =========================================================================
-                // 2. CARGA LEGADA - Sem descartar os itens ainda!
+                // 2. CARGA LEGADA
                 // =========================================================================
                 $legacyMapped = collect();
                 $schema = DB::getSchemaBuilder();
@@ -191,9 +192,6 @@ class CacheTopCombinations extends Command
                     });
                 }
 
-                // =========================================================================
-                // 3. O RANKING INTELIGENTE
-                // =========================================================================
                 $allItems = $currentMapped->merge($legacyMapped);
 
                 if ($allItems->isEmpty()) {
@@ -202,7 +200,39 @@ class CacheTopCombinations extends Command
                     continue;
                 }
 
-                // A "Lista Geral": Agrupa 100% dos itens (incluindo os vazios) e rankeia
+                // =========================================================================
+                // 3. ATUALIZAÇÃO DO BI PREDITIVO (HISTORICAL_WEIGHT)
+                // =========================================================================
+                $optionVolumes = [];
+                foreach ($allItems as $item) {
+                    if (!empty($item['modifiers'])) {
+                        foreach ($item['modifiers'] as $mod) {
+                            $optId = $mod['id'];
+                            $optionVolumes[$optId] = ($optionVolumes[$optId] ?? 0) + (float) ($mod['quantity'] ?? 1);
+                        }
+                    }
+                }
+
+                if (!empty($optionVolumes)) {
+                    // Reseta os pesos das opções de ingredientes para refletir a amostra recente
+                    DB::table('modifier_options')
+                        ->join('modifier_groups', 'modifier_options.modifier_group_id', '=', 'modifier_groups.id')
+                        ->where('modifier_groups.type', 'ingredient')
+                        ->update(['modifier_options.historical_weight' => 0]);
+
+                    // Grava os novos volumes minerados
+                    foreach ($optionVolumes as $optId => $volume) {
+                        DB::table('modifier_options')
+                            ->where('id', $optId)
+                            ->update(['historical_weight' => $volume]);
+                    }
+
+                    $this->info("📈 BI Atualizado: " . count($optionVolumes) . " opções de ingredientes receberam novos pesos estatísticos.");
+                }
+
+                // =========================================================================
+                // 4. O RANKING INTELIGENTE
+                // =========================================================================
                 $groupedByProduct = $allItems->groupBy('product_id');
                 $sortedProducts = $groupedByProduct->sortByDesc(fn($items) => $items->count());
 
@@ -213,20 +243,17 @@ class CacheTopCombinations extends Command
 
                     $requiresIngredients = in_array($productId, $productsWithIngredients);
 
-                    // Validação: Só extrai ocorrências que sejam válidas para virarem variações
                     $validItems = $productItems->filter(function($item) use ($requiresIngredients) {
                         if ($requiresIngredients && empty($item['modifiers'])) {
-                            return false; // É um campeão de vendas, mas essa ocorrência específica tá vazia
+                            return false;
                         }
                         return true;
                     });
 
-                    // Se for um Pastel campeão mas TODAS as suas vendas estiverem vazias, nós pulamos
                     if ($validItems->isEmpty()) {
                         continue;
                     }
 
-                    // Agrupa os itens válidos nas suas assinaturas
                     $combinations = $validItems->groupBy(function ($item) {
                         if (empty($item['modifiers'])) {
                             return $item['product_id'] . '_no_mods';
@@ -239,7 +266,6 @@ class CacheTopCombinations extends Command
                         return $item['product_id'] . '_mods_' . $modSignature;
                     });
 
-                    // Extrai as 3 melhores variações desse produto campeão
                     $topCombinations = $combinations->sortByDesc(fn($comb) => $comb->count())->take(3);
 
                     foreach ($topCombinations as $signature => $items) {
@@ -262,19 +288,18 @@ class CacheTopCombinations extends Command
                                 'quantity' => (float) ($mod['quantity'] ?? 1),
                                 'price' => (float) ($mod['price'] ?? 0),
                             ])->toArray(),
-                            'sales_count' => $items->count(), // Volume da Variação
-                            'base_product_sales' => $productItems->count(), // Volume Global para o Terminal
+                            'sales_count' => $items->count(),
+                            'base_product_sales' => $productItems->count(),
                         ];
                     }
                 }
 
-                // SALVA NO CACHE
+                // SALVA NO CACHE DO TENANT
                 Cache::store('file')->put('tenant_top_combinations', $finalData, now()->addHours(25));
 
-                // 🚀 AVISA O FRONTEND QUE O CARDÁPIO/RANKING MUDOU!
+                // 🚀 AVISA O FRONTEND QUE O CARDÁPIO E O BI MUDARAM
                 broadcast(new \App\Events\CatalogUpdated());
 
-                // EXIBIÇÃO CLARA E DETALHADA NO TERMINAL
                 if (empty($finalData)) {
                     $this->warn("Nenhuma combinação formada.");
                 } else {
@@ -298,7 +323,7 @@ class CacheTopCombinations extends Command
                         $tableRows
                     );
 
-                    $this->info("✅ Cache atualizado e Aplicativos notificados: Produtos rankeados pelo volume global e expandidos!");
+                    $this->info("✅ Cache e BI Preditivo atualizados! Aplicativos notificados.");
                 }
 
             } catch (\Exception $e) {

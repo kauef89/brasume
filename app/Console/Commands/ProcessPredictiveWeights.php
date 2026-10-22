@@ -3,81 +3,137 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use App\Models\Tenant;
 use App\Models\ModifierOption;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class ProcessPredictiveWeights extends Command
 {
-    // O comando exige o caminho do arquivo JSON
-    protected $signature = 'app:process-predictive-weights {filepath}';
-    protected $description = 'Lê um JSON de histórico de vendas e atualiza o peso preditivo (BI) dos modificadores.';
+    protected $signature = 'catalog:process-predictive-weights {--tenant= : ID do Tenant (ex: nativa)} {--days=60 : Janela histórica em dias}';
+    protected $description = 'Minera o histórico real de vendas (V3 + Legado) e atualiza a propensão estatística (historical_weight) dos modificadores.';
 
     public function handle()
     {
-        $filepath = $this->argument('filepath');
+        $tenantId = $this->option('tenant');
+        $days = (int) $this->option('days');
+        $cutoffDate = Carbon::now()->subDays($days);
 
-        if (!File::exists($filepath)) {
-            $this->error("Arquivo não encontrado: {$filepath}");
+        $tenants = $tenantId ? Tenant::where('id', $tenantId)->get() : Tenant::all();
+
+        if ($tenants->isEmpty()) {
+            $this->error("Nenhum tenant encontrado.");
             return Command::FAILURE;
         }
 
-        $this->info("Lendo JSON...");
-        $json = File::get($filepath);
-        $data = json_decode($json, true);
+        foreach ($tenants as $tenant) {
+            $this->info("\n==================================================");
+            $this->info("📊 PROCESSANDO PESOS PREDITIVOS (BI): {$tenant->id}");
+            $this->info("   Janela considerada: últimos {$days} dias");
+            $this->info("==================================================");
 
-        if (!$data) {
-            $this->error("O arquivo JSON é inválido ou está vazio.");
-            return Command::FAILURE;
-        }
+            tenancy()->initialize($tenant);
 
-        $optionCounts = [];
-        $totalPedidos = count($data);
-        $this->info("Processando {$totalPedidos} itens de histórico...");
+            try {
+                $optionCounts = [];
 
-        // 1. Agrega as quantidades
-        foreach ($data as $item) {
-            // Se quiser filtrar apenas pedidos concluídos no futuro, coloque um IF aqui.
-            // if ($item['status_do_item'] !== 'completed') continue;
+                // 1. Mineração V3 (order_item_modifiers)
+                $v3Sales = DB::table('order_item_modifiers')
+                    ->join('order_items', 'order_item_modifiers.order_item_id', '=', 'order_items.id')
+                    ->join('orders', 'order_items.order_id', '=', 'orders.id')
+                    ->whereIn('orders.status', ['completed', 'closed', 'delivered', 'paid', 'finished'])
+                    ->where('orders.created_at', '>=', $cutoffDate)
+                    ->select(
+                        'order_item_modifiers.modifier_option_id',
+                        'order_item_modifiers.name',
+                        DB::raw('SUM(COALESCE(order_item_modifiers.quantity, 1)) as total_qty')
+                    )
+                    ->groupBy('order_item_modifiers.modifier_option_id', 'order_item_modifiers.name')
+                    ->get();
 
-            if (!isset($item['adicionais_escolhidos']) || !is_array($item['adicionais_escolhidos'])) {
-                continue;
-            }
+                foreach ($v3Sales as $sale) {
+                    $optId = $sale->modifier_option_id;
+                    $qty = (float) $sale->total_qty;
 
-            foreach ($item['adicionais_escolhidos'] as $adicional) {
-                $name = trim($adicional['nome']);
-                $qtd = (int) ($adicional['qtd'] ?? 1);
-
-                if (!isset($optionCounts[$name])) {
-                    $optionCounts[$name] = 0;
+                    if ($optId) {
+                        $optionCounts[$optId] = ($optionCounts[$optId] ?? 0) + $qty;
+                    } else {
+                        $cleanName = mb_strtolower(trim($sale->name));
+                        $found = ModifierOption::whereRaw('LOWER(TRIM(name)) = ?', [$cleanName])->first();
+                        if ($found) {
+                            $optionCounts[$found->id] = ($optionCounts[$found->id] ?? 0) + $qty;
+                        }
+                    }
                 }
-                $optionCounts[$name] += $qtd;
+
+                // 2. Mineração Legada (Passando por legacy_order_items)
+                $schema = DB::getSchemaBuilder();
+                if ($schema->hasTable('legacy_orders') && $schema->hasTable('legacy_order_items') && $schema->hasTable('legacy_order_item_modifiers')) {
+                    $legacySales = DB::table('legacy_order_item_modifiers')
+                        ->join('legacy_modifiers', 'legacy_order_item_modifiers.legacy_modifier_id', '=', 'legacy_modifiers.id')
+                        ->join('legacy_order_items', 'legacy_order_item_modifiers.legacy_order_item_id', '=', 'legacy_order_items.id')
+                        ->join('legacy_orders', 'legacy_order_items.legacy_order_id', '=', 'legacy_orders.id')
+                        ->where('legacy_modifiers.is_ignored', 0)
+                        ->whereNotNull('legacy_modifiers.modifier_option_id')
+                        ->whereIn('legacy_orders.status', ['completed', 'closed', 'delivered', 'paid', 'finished', 'authorized', 'processed'])
+                        ->where('legacy_orders.issue_date', '>=', $cutoffDate)
+                        ->select(
+                            'legacy_modifiers.modifier_option_id',
+                            DB::raw('SUM(COALESCE(legacy_order_item_modifiers.quantity, 1)) as total_qty')
+                        )
+                        ->groupBy('legacy_modifiers.modifier_option_id')
+                        ->get();
+
+                    foreach ($legacySales as $sale) {
+                        $optId = $sale->modifier_option_id;
+                        $qty = (float) $sale->total_qty;
+                        $optionCounts[$optId] = ($optionCounts[$optId] ?? 0) + $qty;
+                    }
+                }
+
+                if (empty($optionCounts)) {
+                    $this->warn("Nenhum modificador vendido no período.");
+                    tenancy()->end();
+                    continue;
+                }
+
+                // 3. Atualização no Banco de Dados
+                $updatedCount = 0;
+                $tableRows = [];
+
+                // Zera pesos de grupos do tipo ingredient para não manter lixo antigo
+                DB::table('modifier_options')
+                    ->join('modifier_groups', 'modifier_options.modifier_group_id', '=', 'modifier_groups.id')
+                    ->where('modifier_groups.type', 'ingredient')
+                    ->update(['modifier_options.historical_weight' => 0]);
+
+                foreach ($optionCounts as $optionId => $totalVolume) {
+                    $option = ModifierOption::find($optionId);
+                    if (!$option) continue;
+
+                    $option->update(['historical_weight' => $totalVolume]);
+                    $updatedCount++;
+
+                    $tableRows[] = [
+                        $option->id,
+                        $option->name,
+                        $option->group?->name ?? 'Geral',
+                        number_format($totalVolume, 0, ',', '.') . 'x'
+                    ];
+                }
+
+                usort($tableRows, fn($a, $b) => (int)str_replace(['.', 'x'], '', $b[3]) <=> (int)str_replace(['.', 'x'], '', $a[3]));
+                $this->table(['ID', 'Opção / Adicional', 'Grupo', 'Volume Escolhido'], array_slice($tableRows, 0, 15));
+
+                $this->info("✅ {$updatedCount} modificadores tiveram seu peso estatístico atualizado.");
+
+                broadcast(new \App\Events\CatalogUpdated());
+
+            } catch (\Exception $e) {
+                $this->error("Erro no processamento: " . $e->getMessage());
             }
-        }
 
-        // 2. Atualiza o banco de dados
-        $updatedCount = 0;
-        $this->info("Sincronizando pesos com o banco de dados...");
-
-        foreach ($optionCounts as $name => $count) {
-            // Busca opções com esse nome (independente de maiúsculas/minúsculas) e atualiza o peso
-            $updated = ModifierOption::where('name', 'LIKE', $name)->update([
-                'historical_weight' => $count
-            ]);
-
-            if ($updated > 0) {
-                $this->line("<fg=green>✓</> '{$name}' -> Peso atualizado para: {$count}");
-                $updatedCount++;
-            } else {
-                $this->line("<fg=red>✗</> '{$name}' -> Ignorado (Não encontrado no painel atual)");
-            }
-        }
-
-        // 🚀 AVISA O FRONTEND QUE O RANKING DE INGREDIENTES MUDOU!
-        if ($updatedCount > 0) {
-            broadcast(new \App\Events\CatalogUpdated());
-            $this->info("Concluído! {$updatedCount} modificadores tiveram seu BI atualizado e os apps foram notificados.");
-        } else {
-            $this->info("Concluído! Nenhum peso foi alterado, frontend não precisou ser recarregado.");
+            tenancy()->end();
         }
 
         return Command::SUCCESS;
