@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Supplies\Tables;
 
+use App\Enums\ProductType;
 use Filament\Tables;
 use Filament\Tables\Table;
 use App\Models\Category;
@@ -30,10 +31,10 @@ class SuppliesTable
                 Tables\Columns\TextColumn::make('type')
                     ->label('Tipo')
                     ->badge()
-                    ->colors(['primary' => 'packaging', 'gray' => 'supply'])
+                    ->colors(['primary' => ProductType::PACKAGING->value, 'gray' => ProductType::CONSUMABLE->value])
                     ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'packaging' => 'Embalagem',
-                        'supply' => 'Uso Interno',
+                        ProductType::PACKAGING->value => 'Embalagem',
+                        ProductType::CONSUMABLE->value => 'Consumo / Operação',
                         default => $state,
                     }),
 

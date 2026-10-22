@@ -2,6 +2,7 @@
 
 namespace App\Observers;
 
+use App\Enums\ProductType;
 use App\Models\Product;
 use App\Events\CatalogUpdated;
 use Illuminate\Support\Str;
@@ -20,7 +21,7 @@ class ProductObserver
         }
 
         // 🛡️ 2. BLINDAGEM DE IDENTIDADE: Insumos e Materiais Operacionais
-        $operationalTypes = ['ingredient', 'supply', 'consumable', 'packaging', 'service', 'manufactured', 'internal'];
+        $operationalTypes = [ProductType::INGREDIENT->value, ProductType::CONSUMABLE->value, ProductType::PACKAGING->value, ProductType::SERVICE->value, ProductType::MANUFACTURED->value];
 
         if (in_array($product->type, $operationalTypes, true)) {
             // Insumos NUNCA aparecem em cardápios e não possuem preço ao consumidor
@@ -33,9 +34,9 @@ class ProductObserver
         }
 
         // 🛡️ 3. BLINDAGEM DE PRODUTOS DE VENDA (resale, dish, combo)
-        if (in_array($product->type, ['resale', 'dish', 'combo'], true)) {
+        if (in_array($product->type, [ProductType::RESALE->value, ProductType::DISH->value, ProductType::COMBO->value], true)) {
             // Se for cadastrado como prato ou combo, obrigatoriamente requer preparo
-            if (in_array($product->type, ['dish', 'combo'], true)) {
+            if (in_array($product->type, [ProductType::DISH->value, ProductType::COMBO->value], true)) {
                 $product->requires_preparation = true;
             }
         }
@@ -54,6 +55,13 @@ class ProductObserver
 
     public function saved(Product $product): void
     {
+        // Se o preço de Salão ou Delivery mudou (ou produto novo de venda)
+        if ($product->isDirty('dine_in_price') || $product->isDirty('delivery_price') || $product->wasRecentlyCreated) {
+            if (in_array($product->type, [\App\Enums\ProductType::DISH->value, \App\Enums\ProductType::COMBO->value, \App\Enums\ProductType::RESALE->value])) {
+                \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($product, 'price_change');
+            }
+        }
+
         $this->flushCacheAndBroadcast($product);
     }
 

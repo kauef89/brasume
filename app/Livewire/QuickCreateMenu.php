@@ -29,7 +29,7 @@ class QuickCreateMenu extends Component implements HasForms, HasActions
             ->icon('heroicon-o-beaker')
             ->model(Product::class)
             ->form(fn ($form) => IngredientResource::form($form)) // 🚀 Removido o 'Form' daqui
-            ->mutateFormDataUsing(fn (array $data) => array_merge($data, ['type' => 'internal']))
+            ->mutateFormDataUsing(fn (array $data) => array_merge($data, ['type' => \App\Enums\ProductType::INGREDIENT->value]))
             ->successNotificationTitle('Insumo criado com sucesso!')
             ->slideOver();
     }
@@ -42,7 +42,7 @@ class QuickCreateMenu extends Component implements HasForms, HasActions
             ->icon('heroicon-o-archive-box')
             ->model(Product::class)
             ->form(fn ($form) => SupplyResource::form($form)) // 🚀 Removido o 'Form' daqui
-            ->mutateFormDataUsing(fn (array $data) => array_merge($data, ['type' => 'supply']))
+            ->mutateFormDataUsing(fn (array $data) => array_merge($data, ['type' => \App\Enums\ProductType::CONSUMABLE->value]))
             ->successNotificationTitle('Material criado com sucesso!')
             ->slideOver();
     }
@@ -55,7 +55,7 @@ class QuickCreateMenu extends Component implements HasForms, HasActions
             ->icon('heroicon-o-star')
             ->model(Product::class)
             ->form(fn ($form) => ProductResource::form($form)) // 🚀 Removido o 'Form' daqui
-            ->mutateFormDataUsing(fn (array $data) => array_merge($data, ['type' => 'resale']))
+            ->mutateFormDataUsing(fn (array $data) => array_merge($data, ['type' => \App\Enums\ProductType::RESALE->value]))
             ->successNotificationTitle('Produto criado com sucesso!')
             ->slideOver();
     }

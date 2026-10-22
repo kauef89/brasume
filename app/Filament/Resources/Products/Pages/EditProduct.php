@@ -56,6 +56,7 @@ class EditProduct extends EditRecord
     {
         return [
             \App\Filament\Resources\Products\Widgets\ProductMarginWidget::class,
+            \App\Filament\Resources\Products\Widgets\ProductCostAnalysisWidget::class,
         ];
     }
 }

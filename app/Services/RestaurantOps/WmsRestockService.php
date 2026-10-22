@@ -42,7 +42,7 @@ class WmsRestockService
                     ->whereHas('product', function ($q) {
                         $q->where('products.track_inventory', true)
                           ->where('products.requires_preparation', false)
-                          ->where('products.type', 'resale')
+                          ->where('products.type', \App\Enums\ProductType::RESALE->value)
                           ->where('products.status', 'available')
                           ->where(function ($sub) {
                               // 🛡️ BLINDAGEM: Produto de revenda precisa obrigatoriamente ter preço de venda
@@ -58,7 +58,7 @@ class WmsRestockService
                     $product = $rule->product;
 
                     // Salvaguarda caso o relacionamento venha corrompido
-                    if (!$product || $product->status !== 'available' || $product->type !== 'resale') {
+                    if (!$product || $product->status !== 'available' || $product->type !== \App\Enums\ProductType::RESALE->value) {
                         return null;
                     }
 

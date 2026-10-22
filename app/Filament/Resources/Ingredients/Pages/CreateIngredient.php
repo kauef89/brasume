@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Ingredients\Pages;
 
 use App\Filament\Resources\Ingredients\IngredientResource;
+use App\Enums\ProductType;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateIngredient extends CreateRecord
@@ -21,7 +22,7 @@ class CreateIngredient extends CreateRecord
         $data['requires_preparation'] = false;
 
         if (empty($data['type'])) {
-            $data['type'] = 'ingredient';
+            $data['type'] = ProductType::INGREDIENT->value;
         }
 
         return $data;

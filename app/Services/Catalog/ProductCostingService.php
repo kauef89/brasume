@@ -8,57 +8,34 @@ use Illuminate\Support\Facades\DB;
 
 class ProductCostingService
 {
-    // 🚀 CACHE EM MEMÓRIA: Evita consultas recursivas pesadas
     private static array $costCache = [];
 
-    /**
-     * Limpa o cache estático em memória (essencial para testes e workers).
-     */
     public static function clearCache(): void
     {
         self::$costCache = [];
     }
 
-    /**
-     * @return array<string,mixed>
-     */
     public static function getMarginData(Product $product): array
     {
-        $sellPrice = (float) ($product->dine_in_price ?? ($product->delivery_price ?? 0));
+        // 1. CMV por Modo de Consumo Real
+        $costDineIn   = self::calculateBaseCost($product, "dine_in");
+        $costTakeaway = self::calculateBaseCost($product, "takeaway");
 
-        // 1. Custos de Insumos (CMV)
-        $costTable = self::calculateBaseCost($product, "table");
-        $costCounter = self::calculateBaseCost($product, "counter");
-        $costDelivery = self::calculateBaseCost($product, "delivery");
+        // Preços Praticados
+        $dineInPrice   = (float) ($product->dine_in_price ?? 0);
+        $deliveryPrice = (float) ($product->delivery_price ?? 0);
 
-        // 2. Média Ponderada
-        $activeChannels = 0;
-        $sumCost = 0;
-        if ($product->show_on_menu) {
-            $sumCost += $costTable + $costCounter;
-            $activeChannels += 2;
-        }
-        if ($product->show_on_delivery) {
-            $sumCost += $costDelivery;
-            $activeChannels += 1;
-        }
-        if ($activeChannels === 0) {
-            $sumCost = $costTable + $costCounter + $costDelivery;
-            $activeChannels = 3;
-        }
+        // Preço e Custo primário a exibir no topo
+        $sellPrice = $dineInPrice > 0 ? $dineInPrice : $deliveryPrice;
+        $primaryCmv = $dineInPrice > 0 ? $costDineIn : $costTakeaway;
 
-        $baseCost = $sumCost / $activeChannels;
+        // Injeção do Custo Preditivo de Ingredientes/Modificadores
+        $predictiveCost = self::getPredictiveModifiersCost($product);
+        $baseCost = $primaryCmv + $predictiveCost;
 
-        // INJEÇÃO DO CUSTO PREDITIVO (BI)
-        $predictiveModifiersCost = self::getPredictiveModifiersCost($product);
-        $baseCost += $predictiveModifiersCost;
-
-        // 3. Impostos Individuais com Proteção Null-Safe
+        // 2. Parâmetros Fiscais (Simples Nacional)
         $settings = CompanySetting::getCached();
         $simplesRate = (float) ($settings?->simples_rate ?? 0);
-
-        $icmsRate = 0;
-        $icmsAmount = 0;
 
         $effectiveSimplesRate = $simplesRate;
         if ($product->is_monofasico) {
@@ -67,61 +44,73 @@ class ProductCostingService
 
         $simplesAmount = $sellPrice * ($effectiveSimplesRate / 100);
 
-        // 4. Taxas de Cartão
+        // 3. Taxas de Cartão
         $avgFeeResult = DB::table("bank_accounts")
             ->where("is_active", true)
+            ->where(function ($q) {
+                $q->where('credit_fee', '>', 0)->orWhere('debit_fee', '>', 0);
+            })
             ->selectRaw("AVG((credit_fee + debit_fee) / 2) as avg_fee")
             ->first();
 
         $cardFeePercentage = (float) ($avgFeeResult->avg_fee ?? 0);
         $cardFeeAmount = $sellPrice * ($cardFeePercentage / 100);
 
-        // A SOMA REAL DOS VARIÁVEIS
-        $totalVariables = $simplesAmount + $icmsAmount + $cardFeeAmount;
+        $totalVariables = $simplesAmount + $cardFeeAmount;
 
-        // 5. Margem de Contribuição
+        // 4. Margem de Contribuição
         $contributionMargin = $sellPrice - $baseCost - $totalVariables;
-        $marginPercentage = $sellPrice > 0 ? ($contributionMargin / $sellPrice) * 100 : 0;
+        $marginPercentage   = $sellPrice > 0 ? ($contributionMargin / $sellPrice) * 100 : 0;
 
         $fmt = fn($val) => 'R$ ' . number_format($val, 2, ",", ".");
 
         return [
-            "sell_price" => $sellPrice,
-            "base_cost" => $baseCost,
-            "cost_table" => $costTable,
-            "cost_counter" => $costCounter,
-            "cost_delivery" => $costDelivery,
-            "total_variables" => $totalVariables,
-            "simples_amount" => $simplesAmount,
-            "icms_amount" => $icmsAmount,
-            "simples_display" => ($settings?->tax_regime === "mei") ? "ISENTO" : $fmt($simplesAmount),
-            "icms_display" => $product->is_monofasico ? "ISENTO" : $fmt($icmsAmount),
-            "card_fee_amount" => $cardFeeAmount,
+            "sell_price"          => $sellPrice,
+            "base_cost"           => $baseCost,
+            // Sub-métricas para os cartões
+            "cost_dine_in"        => $costDineIn,
+            "cost_takeaway"       => $costTakeaway,
+            "cost_table"          => $costDineIn,   // alias para compatibilidade
+            "cost_delivery"       => $costTakeaway, // alias para compatibilidade
+            "predictive_cost"     => $predictiveCost,
+            "total_variables"     => $totalVariables,
+            "simples_amount"      => $simplesAmount,
+            "icms_amount"         => 0,
+            "simples_display"     => ($settings?->tax_regime === "mei") ? "ISENTO" : $fmt($simplesAmount),
+            "icms_display"        => $product->is_monofasico ? "MONOFÁSICO" : "ISENTO",
+            "card_fee_amount"     => $cardFeeAmount,
             "contribution_margin" => $contributionMargin,
-            "marginPercentage" => $marginPercentage,
-            "margin_percentage" => $marginPercentage,
-            "simples_rate" => $simplesRate,
-            "icms_rate" => $icmsRate,
+            "marginPercentage"    => $marginPercentage,
+            "margin_percentage"   => $marginPercentage,
+            "simples_rate"        => $simplesRate,
+            "icms_rate"           => 0,
             "card_fee_percentage" => $cardFeePercentage,
         ];
     }
 
     /**
-     * Calcula o custo de forma recursiva, filtrando pelo tipo de pedido ($orderType)
-     * e considerando APENAS insumos com is_active = true.
+     * Calcula o custo base recursivo filtrando pelo Modo de Consumo:
+     * 'all' (geral), 'dine_in' (Consumo no Local) ou 'takeaway' (Para Viagem)
      */
-    public static function calculateBaseCost(Product $product, string $orderType = "all"): float
+    public static function calculateBaseCost(Product $product, string $consumptionMode = "all"): float
     {
-        $cacheKey = $product->id . '_' . $orderType;
+        $cacheKey = $product->id . '_' . $consumptionMode;
 
         if (isset(self::$costCache[$cacheKey])) {
             return self::$costCache[$cacheKey];
         }
 
-        // 🛡️ Filtra somente insumos ativos na Ficha Técnica
-        $sheetItems = \App\Models\TechnicalSheet::where("parent_product_id", $product->id)
-            ->where("is_active", true)
-            ->get();
+        $query = \App\Models\TechnicalSheet::where("parent_product_id", $product->id)
+            ->where("is_active", true);
+
+        // Filtro estrito pelo modo de consumo real
+        if ($consumptionMode === 'dine_in') {
+            $query->where('is_dine_in', true);
+        } elseif ($consumptionMode === 'takeaway') {
+            $query->where('is_takeaway', true);
+        }
+
+        $sheetItems = $query->get();
 
         if ($sheetItems->isEmpty()) {
             $latestHistory = \App\Models\ProductCostHistory::where("product_id", $product->id)
@@ -140,16 +129,11 @@ class ProductCostingService
         }
 
         $cost = 0;
-
         foreach ($sheetItems as $item) {
-            $channelsArray = is_array($item->order_type) ? $item->order_type : ["table", "counter", "delivery"];
-
-            if ($orderType === "all" || in_array($orderType, $channelsArray)) {
-                $child = Product::find($item->ingredient_product_id);
-                if ($child) {
-                    $childCost = self::calculateBaseCost($child, $orderType);
-                    $cost += $childCost * (float) $item->quantity;
-                }
+            $child = Product::find($item->ingredient_product_id);
+            if ($child) {
+                $childCost = self::calculateBaseCost($child, $consumptionMode);
+                $cost += $childCost * (float) $item->quantity;
             }
         }
 
@@ -167,31 +151,34 @@ class ProductCostingService
         $modifierGroups = $product->modifiers()->where("type", "ingredient")->get();
 
         foreach ($modifierGroups as $group) {
-            $options = $group->options()->whereNotNull("linked_product_id")->get();
-            if ($options->isEmpty()) {
-                continue;
-            }
+            $options = $group->options()->get();
+            if ($options->isEmpty()) continue;
 
             $groupExpectedCost = 0;
             $totalWeight = 0;
 
             foreach ($options as $option) {
-                $linkedInsumo = Product::find($option->linked_product_id);
-                if (!$linkedInsumo) {
+                if ((float) $option->price > 0 && ($group->max_free ?? 0) <= 0) {
                     continue;
                 }
 
-                $actualCost = self::calculateBaseCost($linkedInsumo);
-                $optionCost = $actualCost * ($option->linked_qty ?? 0);
-                $weight = $option->historical_weight ?? 1;
+                $optionCost = 0;
+                if (!empty($option->linked_product_id)) {
+                    $linkedInsumo = Product::find($option->linked_product_id);
+                    if ($linkedInsumo) {
+                        $actualCost = self::calculateBaseCost($linkedInsumo);
+                        $optionCost = $actualCost * (float) ($option->linked_qty ?? 1);
+                    }
+                }
 
+                $weight = max((float) ($option->historical_weight ?? 1), 0.001);
                 $groupExpectedCost += $optionCost * $weight;
                 $totalWeight += $weight;
             }
 
             if ($totalWeight > 0) {
                 $averageOptionCost = $groupExpectedCost / $totalWeight;
-                $includedQty = $group->max_free > 0 ? $group->max_free : 1;
+                $includedQty = $group->max_free > 0 ? (int) $group->max_free : 1;
                 $totalPredictiveCost += $averageOptionCost * $includedQty;
             }
         }
@@ -215,13 +202,13 @@ class ProductCostingService
             foreach ($group->options as $option) {
                 if (in_array($option->id, $selectedAddons)) {
                     $groupIsSimulated = true;
-                    $addonSellPriceTotal += $option->price;
+                    $addonSellPriceTotal += (float) $option->price;
 
                     if ($option->linked_product_id) {
-                        $linkedInsumo = \App\Models\Product::find($option->linked_product_id);
+                        $linkedInsumo = Product::find($option->linked_product_id);
                         if ($linkedInsumo) {
                             $actualCost = self::calculateBaseCost($linkedInsumo);
-                            $groupSimulatedCost += $actualCost * ($option->linked_qty ?? 0);
+                            $groupSimulatedCost += $actualCost * (float) ($option->linked_qty ?? 1);
                         }
                     }
                 }
@@ -234,13 +221,14 @@ class ProductCostingService
                     $groupExpectedCost = 0;
                     $totalWeight = 0;
                     foreach ($group->options as $opt) {
-                        if (!$opt->linked_product_id) continue;
-                        $linked = \App\Models\Product::find($opt->linked_product_id);
-                        if (!$linked) continue;
-
-                        $optCost = self::calculateBaseCost($linked) * ($opt->linked_qty ?? 0);
-                        $weight = $opt->historical_weight ?? 1;
-
+                        $optCost = 0;
+                        if ($opt->linked_product_id) {
+                            $linked = Product::find($opt->linked_product_id);
+                            if ($linked) {
+                                $optCost = self::calculateBaseCost($linked) * (float) ($opt->linked_qty ?? 1);
+                            }
+                        }
+                        $weight = max((float) ($opt->historical_weight ?? 1), 0.001);
                         $groupExpectedCost += ($optCost * $weight);
                         $totalWeight += $weight;
                     }
@@ -252,9 +240,8 @@ class ProductCostingService
         }
 
         $simplesRate = $marginData['simples_rate'] ?? 0;
-        $icmsRate = ($product->is_monofasico ?? false) ? 0 : ($marginData['icms_rate'] ?? 0);
         $cardFeePercentage = $marginData['card_fee_percentage'] ?? 0;
-        $totalTaxRate = $simplesRate + $icmsRate + $cardFeePercentage;
+        $totalTaxRate = $simplesRate + $cardFeePercentage;
 
         $simulatedSellPrice = $marginData['sell_price'];
 
@@ -268,23 +255,193 @@ class ProductCostingService
         }
 
         $simplesAmount = $simulatedSellPrice * ($simplesRate / 100);
-        $icmsAmount = $simulatedSellPrice * ($icmsRate / 100);
         $cardFeeAmount = $simulatedSellPrice * ($cardFeePercentage / 100);
-        $totalVariableCosts = $simplesAmount + $icmsAmount + $cardFeeAmount;
+        $totalVariableCosts = $simplesAmount + $cardFeeAmount;
 
         $netProfit = $simulatedSellPrice - $simulatedCost - $totalVariableCosts;
         $marginPercentage = $simulatedSellPrice > 0 ? ($netProfit / $simulatedSellPrice) * 100 : 0;
 
         return [
-            'sell_price' => $simulatedSellPrice,
-            'cost' => $simulatedCost,
-            'net_profit' => $netProfit,
+            'sell_price'          => $simulatedSellPrice,
+            'cost'                => $simulatedCost,
+            'net_profit'          => $netProfit,
             'contribution_margin' => $netProfit,
-            'margin_percentage' => $marginPercentage,
-            'simples_amount' => $simplesAmount,
-            'icms_amount' => $icmsAmount,
-            'card_fee_amount' => $cardFeeAmount,
-            'total_variable_costs' => $totalVariableCosts,
+            'margin_percentage'   => $marginPercentage,
+            'simples_amount'      => $simplesAmount,
+            'icms_amount'         => 0,
+            'card_fee_amount'     => $cardFeeAmount,
+            'total_variable_costs'=> $totalVariableCosts,
+        ];
+    }
+
+    public static function recordPriceSnapshot(Product $product, string $trigger = 'price_change'): void
+    {
+        self::clearCache();
+        $marginData = self::getMarginData($product);
+
+        $modes = [
+            'dine_in' => [
+                'price' => (float) ($product->dine_in_price ?? 0),
+                'cost'  => (float) $marginData['cost_dine_in'] + (float) $marginData['predictive_cost'],
+            ],
+            'takeaway' => [
+                'price' => (float) ($product->delivery_price ?? ($product->dine_in_price ?? 0)),
+                'cost'  => (float) $marginData['cost_takeaway'] + (float) $marginData['predictive_cost'],
+            ],
+        ];
+
+        foreach ($modes as $channelName => $ch) {
+            if ($ch['price'] <= 0) continue;
+
+            $currentLog = \App\Models\ProductPriceLog::where('product_id', $product->id)
+                ->where('channel', $channelName)
+                ->whereNull('ended_at')
+                ->latest('id')
+                ->first();
+
+            $cost = round($ch['cost'], 4);
+            $simples = $ch['price'] * (($marginData['simples_rate'] ?? 0) / 100);
+            $card = $ch['price'] * (($marginData['card_fee_percentage'] ?? 0) / 100);
+            $variables = $simples + $card;
+            $margin = $ch['price'] - $cost - $variables;
+            $marginPct = $ch['price'] > 0 ? round(($margin / $ch['price']) * 100, 2) : 0;
+
+            if ($currentLog &&
+                abs((float) $currentLog->price - $ch['price']) < 0.01 &&
+                abs((float) $currentLog->cost - $cost) < 0.01) {
+                continue;
+            }
+
+            if ($currentLog) {
+                $currentLog->update(['ended_at' => now()]);
+            }
+
+            \App\Models\ProductPriceLog::create([
+                'product_id'          => $product->id,
+                'channel'             => $channelName,
+                'price'               => $ch['price'],
+                'cost'                => $cost,
+                'total_variables'     => $variables,
+                'contribution_margin' => $margin,
+                'margin_percentage'   => $marginPct,
+                'started_at'          => now(),
+                'ended_at'            => null,
+                'trigger_reason'      => $trigger,
+            ]);
+        }
+    }
+
+    /**
+     * Gera o raio-x de variação de CMV, oscilação de margem e identificação de ofensores.
+     */
+    public static function getCostVarianceAnalysis(Product $product, int $days = 30): array
+    {
+        $currentMargin = self::getMarginData($product);
+        $currentCmv = (float) $currentMargin['base_cost'];
+        $currentMarginPct = (float) $currentMargin['margin_percentage'];
+
+        // 1. Busca condição anterior no histórico (ProductPriceLog)
+        $previousLog = \App\Models\ProductPriceLog::where('product_id', $product->id)
+            ->whereNotNull('ended_at')
+            ->where('started_at', '>=', now()->subDays($days))
+            ->orderBy('id', 'desc')
+            ->first();
+
+        // Se não houver log recente dentro dos X dias, busca o último encerrado como fallback
+        if (!$previousLog) {
+            $previousLog = \App\Models\ProductPriceLog::where('product_id', $product->id)
+                ->whereNotNull('ended_at')
+                ->orderBy('id', 'desc')
+                ->first();
+        }
+
+        $prevCmv = $previousLog ? (float) $previousLog->cost : $currentCmv;
+        $prevMarginPct = $previousLog ? (float) $previousLog->margin_percentage : $currentMarginPct;
+
+        $cmvDiffNominal = $currentCmv - $prevCmv;
+        $cmvDiffPct = $prevCmv > 0 ? (($currentCmv - $prevCmv) / $prevCmv) * 100 : 0;
+        $marginDiffPp = $currentMarginPct - $prevMarginPct;
+
+        // 2. Análise Itemizada da Ficha Técnica (BOM Explosion & Detecção de Ofensores)
+        $sheetItems = \App\Models\TechnicalSheet::where('parent_product_id', $product->id)
+            ->where('is_active', true)
+            ->with(['ingredient.costHistories'])
+            ->get();
+
+        $ingredientsAnalysis = [];
+        $alerts = [];
+        $totalRecipeCost = 0;
+
+        foreach ($sheetItems as $item) {
+            $ing = $item->ingredient;
+            if (!$ing) continue;
+
+            $unitCost = self::calculateBaseCost($ing);
+            $totalCost = $unitCost * (float) $item->quantity;
+            $totalRecipeCost += $totalCost;
+
+            // Histórico de compras para pegar variação da última NF-e vs penúltima
+            $recentPurchases = $ing->costHistories->sortByDesc('id')->take(2)->values();
+            $latestPurchaseCost = $recentPurchases->get(0)?->unit_cost;
+            $previousPurchaseCost = $recentPurchases->get(1)?->unit_cost;
+
+            $itemInflationPct = 0;
+            if ($latestPurchaseCost && $previousPurchaseCost && (float) $previousPurchaseCost > 0) {
+                $itemInflationPct = (((float) $latestPurchaseCost - (float) $previousPurchaseCost) / (float) $previousPurchaseCost) * 100;
+            }
+
+            $ingredientsAnalysis[] = [
+                'id'            => $ing->id,
+                'name'          => $ing->name,
+                'quantity'      => (float) $item->quantity,
+                'uom'           => $ing->unit_of_measure,
+                'unit_cost'     => $unitCost,
+                'total_cost'    => $totalCost,
+                'inflation_pct' => $itemInflationPct,
+            ];
+        }
+
+        // Calcula share no CMV e classifica alertas/ofensores
+        foreach ($ingredientsAnalysis as &$ingData) {
+            $sharePct = $totalRecipeCost > 0 ? ($ingData['total_cost'] / $totalRecipeCost) * 100 : 0;
+            $ingData['share_pct'] = $sharePct;
+
+            // Critérios de Alerta: inflação > 5% na última compra OU concentra > 35% do custo do prato
+            if ($ingData['inflation_pct'] >= 5) {
+                $alerts[] = [
+                    'name'     => $ingData['name'],
+                    'type'     => 'inflation',
+                    'badge'    => '+' . number_format($ingData['inflation_pct'], 1, ',', '.') . '% na NF-e',
+                    'detail'   => 'Alta de preço detectada nas últimas notas fiscais.',
+                    'severity' => $ingData['inflation_pct'] >= 15 ? 'danger' : 'warning',
+                ];
+            } elseif ($sharePct >= 35) {
+                $alerts[] = [
+                    'name'     => $ingData['name'],
+                    'type'     => 'concentration',
+                    'badge'    => number_format($sharePct, 1, ',', '.') . '% do CMV',
+                    'detail'   => 'Insumo âncora: grande sensibilidade na margem.',
+                    'severity' => 'info',
+                ];
+            }
+        }
+        unset($ingData);
+
+        // Ordena ingredientes pelo maior custo total
+        usort($ingredientsAnalysis, fn($a, $b) => $b['total_cost'] <=> $a['total_cost']);
+
+        return [
+            'has_history'       => $previousLog !== null,
+            'period_days'       => $days,
+            'current_cmv'       => $currentCmv,
+            'cmv_diff_nominal'  => $cmvDiffNominal,
+            'cmv_diff_pct'      => $cmvDiffPct,
+            'cmv_status'        => $cmvDiffPct > 0.5 ? 'rising' : ($cmvDiffPct < -0.5 ? 'falling' : 'stable'),
+            'current_margin'    => $currentMarginPct,
+            'margin_diff_pp'    => $marginDiffPp,
+            'margin_status'     => $marginDiffPp >= 0 ? 'gaining' : 'dropping',
+            'top_ingredients'   => array_slice($ingredientsAnalysis, 0, 5),
+            'alerts'            => $alerts,
         ];
     }
 }

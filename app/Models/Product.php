@@ -168,6 +168,11 @@ class Product extends Model
         return $this->hasMany(InventoryMovement::class)->latest('id');
     }
 
+    public function priceLogs(): HasMany
+    {
+        return $this->hasMany(ProductPriceLog::class)->orderBy('started_at', 'desc');
+    }
+
     protected static function booted(): void
     {
         static::addGlobalScope('active_catalog', function (\Illuminate\Database\Eloquent\Builder $builder) {

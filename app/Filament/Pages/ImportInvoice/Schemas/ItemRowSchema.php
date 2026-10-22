@@ -157,7 +157,7 @@ class ItemRowSchema
             ->required(fn(Get $get) => ($get("destination_type") ?? 'stock') === 'stock')
             ->getSearchResultsUsing(function (string $search): array {
                 $products = Product::with('category')
-                    ->whereIn('type', ['ingredient', 'resale', 'packaging', 'consumable'])
+                    ->whereIn('type', [\App\Enums\ProductType::INGREDIENT->value, \App\Enums\ProductType::RESALE->value, \App\Enums\ProductType::PACKAGING->value, \App\Enums\ProductType::CONSUMABLE->value])
                     ->where('name', 'like', "%{$search}%")
                     ->whereIn('status', ['available', 'out_of_stock', 'active'])
                     ->limit(50)

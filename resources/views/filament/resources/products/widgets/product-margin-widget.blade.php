@@ -27,7 +27,6 @@
             $mColor = $mPct >= 30 ? 'success' : ($mPct >= 15 ? 'warning' : 'danger');
             $icon = $mPct >= 15 ? 'heroicon-o-arrow-trending-up' : 'heroicon-o-arrow-trending-down';
 
-            // 🚀 VOLTAMOS AO FUNDO REATIVO ORIGINAL (MUITO MELHOR PARA A EXPERIÊNCIA VISUAL)
             $styles = [
                 'success' => [
                     'card' => 'bg-white ring-success-500/20 dark:bg-gray-900 dark:ring-success-500/20 hover:bg-success-500/20',
@@ -62,7 +61,6 @@
 {{-- 🚀 ROOT DO LIVEWIRE: EXATAMENTE UM ELEMENTO RAIZ --}}
 <div class="fi-wi-widget-bypass col-span-full mb-6 w-full" style="{{ !$showWidget ? 'display: none;' : '' }}">
 
-    {{-- O estilo fica aqui dentro para não quebrar o motor do Livewire --}}
     <style>
         .fi-wi-widget-bypass {
             grid-column: 1 / -1 !important;
@@ -90,12 +88,12 @@
                     </div>
                     <div class="flex flex-col justify-center text-right gap-1 ml-2 pl-4 border-l border-gray-100 dark:border-gray-800 shrink-0">
                         <div class="leading-none">
-                            <span class="text-[9px] font-medium uppercase tracking-wider text-gray-400">Mesa</span><br>
-                            <span class="text-[11px] font-medium text-gray-700 dark:text-gray-300">{{ $fmt($marginData['cost_table']) }}</span>
+                            <span class="text-[9px] font-medium uppercase tracking-wider text-gray-400">Salão</span><br>
+                            <span class="text-[11px] font-medium text-gray-700 dark:text-gray-300">{{ $fmt($marginData['cost_dine_in']) }}</span>
                         </div>
                         <div class="leading-none mt-1">
-                            <span class="text-[9px] font-medium uppercase tracking-wider text-gray-400">Delivery</span><br>
-                            <span class="text-[11px] font-medium text-gray-700 dark:text-gray-300">{{ $fmt($marginData['cost_delivery']) }}</span>
+                            <span class="text-[9px] font-medium uppercase tracking-wider text-gray-400">Viagem</span><br>
+                            <span class="text-[11px] font-medium text-gray-700 dark:text-gray-300">{{ $fmt($marginData['cost_takeaway']) }}</span>
                         </div>
                     </div>
                 </div>

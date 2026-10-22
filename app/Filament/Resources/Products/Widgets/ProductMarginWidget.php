@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Products\Widgets;
 
 use App\Services\Catalog\ProductCostingService;
+use App\Enums\ProductType;
 use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Attributes\On;
@@ -10,7 +11,7 @@ use Livewire\Attributes\On;
 class ProductMarginWidget extends Widget
 {
     public ?Model $record = null;
-    public ?Model $ownerRecord = null; // 🚀 Captura o produto se o widget estiver "preso" dentro de um RelationManager!
+    public ?Model $ownerRecord = null;
 
     public ?array $simulatedData = null;
 
@@ -18,68 +19,61 @@ class ProductMarginWidget extends Widget
     protected int | string | array $columnSpan = 'full';
 
     #[On('update-margin-widget')]
-    public function applySimulation(?array $simulatedData = null)
+    public function applySimulation(?array $simulatedData = null): void
     {
         $this->simulatedData = $simulatedData;
     }
 
     #[On('reset-margin-widget')]
-    public function resetSimulation()
+    public function resetSimulation(): void
     {
         $this->simulatedData = null;
     }
 
     protected function getViewData(): array
     {
-        // 1. Identifica o alvo (seja na página principal ou no RelationManager)
         $targetRecord = $this->record ?? $this->ownerRecord;
 
         if (!$targetRecord) {
             return ['marginData' => null];
         }
 
-        // 🚀 REGRA DE VISIBILIDADE:
-        // Ocultamos o widget em insumos simples (sem ficha técnica).
-        // Ele só aparece se for um tipo de venda (dish, combo, resale) OU se tiver uma receita (preparado).
         $hasRecipe = $targetRecord->technicalSheets()->exists();
-        $isComplexType = in_array($targetRecord->type, ['dish', 'combo', 'manufactured', 'resale']);
+        $isComplexType = in_array($targetRecord->type, [
+            ProductType::DISH->value,
+            ProductType::COMBO->value,
+            ProductType::MANUFACTURED->value,
+            ProductType::RESALE->value,
+        ]);
 
         if (!$isComplexType && !$hasRecipe) {
             return ['marginData' => null];
         }
 
-        // 🚀 PRIORIZAÇÃO DO CUSTO REAL:
-        // Se o produto tiver ficha técnica, forçamos o cálculo recursivo para que o base_cost
-        // reflita a soma dos ingredientes (os R$ 4,68 do seu suco) e não o valor zerado do banco.
-        if ($hasRecipe) {
-            $realCost = ProductCostingService::calculateBaseCost($targetRecord);
-            $targetRecord->base_cost = $realCost;
-        }
-
-        // Agora calculamos a margem com o custo já atualizado no objeto
         $marginData = ProductCostingService::getMarginData($targetRecord);
 
-        // Aplica os dados de simulação se o usuário estiver mexendo no simulador
+        // Se houver simulação ativa pelo usuário no Simulador
         if ($this->simulatedData) {
-            $costDifference = $this->simulatedData['cost'] - $marginData['base_cost'];
-            $marginData['cost_table'] += $costDifference;
-            $marginData['cost_counter'] += $costDifference;
-            $marginData['cost_delivery'] += $costDifference;
+            $costDiff = $this->simulatedData['cost'] - $marginData['base_cost'];
 
-            $marginData['sell_price'] = $this->simulatedData['sell_price'];
-            $marginData['base_cost'] = $this->simulatedData['cost'];
-            $marginData['net_profit'] = $this->simulatedData['net_profit'];
-            $marginData['margin_percentage'] = $this->simulatedData['margin_percentage'];
+            $marginData['sell_price']          = $this->simulatedData['sell_price'];
+            $marginData['base_cost']           = $this->simulatedData['cost'];
             $marginData['contribution_margin'] = $this->simulatedData['contribution_margin'];
+            $marginData['margin_percentage']   = $this->simulatedData['margin_percentage'];
+            $marginData['marginPercentage']    = $this->simulatedData['margin_percentage'];
+            $marginData['simples_amount']      = $this->simulatedData['simples_amount'];
+            $marginData['card_fee_amount']     = $this->simulatedData['card_fee_amount'];
+            $marginData['total_variables']     = $this->simulatedData['total_variable_costs'];
+            $marginData['is_simulated']        = true;
 
-            $marginData['simples_amount'] = $this->simulatedData['simples_amount'];
-            $marginData['icms_amount'] = $this->simulatedData['icms_amount'];
-            $marginData['card_fee_amount'] = $this->simulatedData['card_fee_amount'];
-            $marginData['total_variables'] = $this->simulatedData['total_variable_costs'];
+            $marginData['channels']['dine_in']['price']               = $this->simulatedData['sell_price'];
+            $marginData['channels']['dine_in']['cmv']                 += $costDiff;
+            $marginData['channels']['dine_in']['contribution_margin'] = $this->simulatedData['contribution_margin'];
+            $marginData['channels']['dine_in']['margin_percentage']   = $this->simulatedData['margin_percentage'];
         }
 
         return [
-            'record' => $targetRecord,
+            'record'     => $targetRecord,
             'marginData' => $marginData,
         ];
     }

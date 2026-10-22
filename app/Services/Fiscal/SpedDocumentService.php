@@ -58,14 +58,14 @@ class SpedDocumentService
         // 🚀 FILTRO CRÍTICO: Isola serviços não-fiscais (copo quebrado, avarias, etc.)
         $serviceItems = $order->items->filter(function ($item) {
             return !in_array($item->status, ['cancelled', 'voided', 'refunded'])
-                && $item->product?->type === 'service';
+                && $item->product?->type === \App\Enums\ProductType::SERVICE->value;
         });
         $totalServicos = (float) $serviceItems->sum('total_price');
 
         // 🚀 FILTRO FISCAL: Apenas mercadorias tributáveis entram na NFC-e
         $activeItems = $order->items->filter(function ($item) {
             $isValid = !in_array($item->status, ['cancelled', 'voided', 'refunded']) && (float) $item->quantity > 0;
-            $isMercadoria = ($item->product?->type !== 'service');
+            $isMercadoria = ($item->product?->type !== \App\Enums\ProductType::SERVICE->value);
 
             return $isValid && $isMercadoria;
         })->values();

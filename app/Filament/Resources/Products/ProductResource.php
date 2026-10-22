@@ -58,8 +58,9 @@ class ProductResource extends Resource
             CostHistoriesRelationManager::class,
             TechnicalSheetsRelationManager::class,
             ProductModifiersRelationManager::class,
+            RelationManagers\PriceLogsRelationManager::class,
             SimulatorRelationManager::class,
-            InventoryMovementsRelationManager::class, // 🚀 Extrato Kardex
+            InventoryMovementsRelationManager::class,
         ];
     }
 
@@ -70,6 +71,15 @@ class ProductResource extends Resource
             "create" => Pages\CreateProduct::route("/create"),
             "view" => Pages\ViewProduct::route("/{record}"),
             "edit" => Pages\EditProduct::route("/{record}/edit"),
+        ];
+    }
+
+    public static function getWidgets(): array
+    {
+        return [
+            Widgets\ProductMarginWidget::class,
+            Widgets\ProductCostAnalysisWidget::class, // 🚀 Cockpit de Análise de Custo & Ofensores
+            Widgets\ProductSimulatorWidget::class,
         ];
     }
 }

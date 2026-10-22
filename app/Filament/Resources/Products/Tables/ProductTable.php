@@ -3,13 +3,15 @@
 namespace App\Filament\Resources\Products\Tables;
 
 
-use App\Enums\ProductStatus;use App\Filament\Resources\Products\Actions\MergeProductsBulkAction;
+use App\Enums\ProductStatus;
+use App\Enums\ProductType;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Tables\Table;
 use Filament\Tables;
 use Filament\Actions;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
+use App\Filament\Resources\Products\Actions\MergeProductsBulkAction;
 use App\Models\Category;
 use App\Models\Product;
 use App\Filament\Resources\Products\ProductResource;
@@ -38,11 +40,11 @@ class ProductTable
                     ->label('Tipo')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => match (strtolower($state)) {
-                        'dish'         => 'Prato',
-                        'combo'        => 'Combo',
-                        'resale'       => 'Revenda',
-                        'ingredient'   => 'Insumo',
-                        'manufactured' => 'Preparado',
+                        ProductType::DISH->value => 'Prato',
+                        ProductType::COMBO->value => 'Combo',
+                        ProductType::RESALE->value => 'Revenda',
+                        ProductType::INGREDIENT->value => 'Insumo',
+                        ProductType::MANUFACTURED->value => 'Preparado',
                         default        => ucfirst($state),
                     })
                     ->color('gray')
@@ -81,7 +83,7 @@ class ProductTable
                 Tables\Columns\TextColumn::make('lucratividade')
                     ->label('Margem')
                     ->state(function (Product $record) {
-                        if (in_array($record->type, ['ingredient', 'supply', 'internal'])) return null;
+                        if (in_array($record->type, [ProductType::INGREDIENT->value, ProductType::CONSUMABLE->value, ProductType::PACKAGING->value, ProductType::MANUFACTURED->value])) return null;
 
                         $data = ProductCostingService::getMarginData($record);
                         return $data['margin_percentage'] ?? 0;
@@ -141,11 +143,11 @@ class ProductTable
                 Tables\Columns\TextColumn::make('connection_status')
                     ->label('Cadeia de custos')
                     ->state(function (Product $record) {
-                        if ($record->type === 'dish') {
+                        if ($record->type === ProductType::DISH->value) {
                             return $record->technicalSheets()->exists() ? 'Conectado' : 'Desconectado';
                         }
 
-                        if ($record->type === 'resale') {
+                        if ($record->type === ProductType::RESALE->value) {
                             return $record->costHistories()->exists() ? 'Conectado' : 'Desconectado';
                         }
 

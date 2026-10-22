@@ -11,6 +11,7 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use App\Enums\ProductType;
 use App\Models\Product;
 use Illuminate\Support\HtmlString;
 
@@ -144,7 +145,7 @@ class OrderTable {
                         }
                     }
 
-                    $sacolaIdeal = Product::whereIn('type', ['packaging', 'supply'])
+                    $sacolaIdeal = Product::whereIn('type', [ProductType::PACKAGING->value, ProductType::CONSUMABLE->value])
                         ->where('packaging_points', '>=', $totalPoints)
                         ->where('packaging_points', '>', 0)
                         ->orderBy('packaging_points', 'asc')
@@ -158,7 +159,7 @@ class OrderTable {
                 ->form([
                     Select::make('packaging_product_id')
                         ->label('Embalagem Sugerida')
-                        ->options(Product::whereIn('type', ['packaging', 'supply'])->pluck('name', 'id'))
+                        ->options(Product::whereIn('type', [ProductType::PACKAGING->value, ProductType::CONSUMABLE->value])->pluck('name', 'id'))
                         ->searchable()
                         ->required()
                         ->helperText('O sistema calculou o volume deste pedido e sugeriu a embalagem ideal.'),

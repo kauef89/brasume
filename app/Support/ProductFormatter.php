@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\ProductType;
 use App\Models\Product;
 
 class ProductFormatter
@@ -14,13 +15,13 @@ class ProductFormatter
         $categoryName = $product->category?->name ?? 'Sem categoria';
 
         $typeLabel = match($product->type) {
-            'ingredient' => 'Insumos',
-            'resale' => 'Revendas',
-            'packaging' => 'Embalagens',
-            'consumable' => 'Consumos',
-            'dish' => 'Pratos',
-            'combo' => 'Combos',
-            'manufactured' => 'Preparados',
+            ProductType::INGREDIENT->value => 'Insumos',
+            ProductType::RESALE->value => 'Revendas',
+            ProductType::PACKAGING->value => 'Embalagens',
+            ProductType::CONSUMABLE->value => 'Consumos',
+            ProductType::DISH->value => 'Pratos',
+            ProductType::COMBO->value => 'Combos',
+            ProductType::MANUFACTURED->value => 'Preparados',
             default => 'Outros',
         };
 

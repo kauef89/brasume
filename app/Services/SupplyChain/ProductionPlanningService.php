@@ -2,6 +2,7 @@
 
 namespace App\Services\SupplyChain;
 
+use App\Enums\ProductType;
 use App\Models\Product;
 use App\Models\ProductionOrder;
 use App\Models\TechnicalSheet;
@@ -17,7 +18,7 @@ class ProductionPlanningService
         $mode = $settings->demand_forecast_mode ?? 'manual_par';
 
         // Busca apenas produtos que são produzidos internamente (WIP)
-        $manufacturedProducts = Product::where('type', 'manufactured')
+        $manufacturedProducts = Product::where('type', ProductType::MANUFACTURED->value)
             ->where('is_active', true)
             ->get();
 

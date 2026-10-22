@@ -56,10 +56,12 @@ class ViewProduct extends ViewRecord
                 }),
         ];
     }
+
     protected function getHeaderWidgets(): array
     {
         return [
             \App\Filament\Resources\Products\Widgets\ProductMarginWidget::class,
+            \App\Filament\Resources\Products\Widgets\ProductCostAnalysisWidget::class,
         ];
     }
 }
