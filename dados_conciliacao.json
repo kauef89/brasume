@@ -1,0 +1,710 @@
+{
+    "period": {
+        "start": "2026-10-01 20:10:10",
+        "end": "2026-10-22 22:33:23"
+    },
+    "resumo_maquininha": {
+        "total_registros": 300,
+        "valor_bruto": 22420,
+        "matched": 223,
+        "ambiguous": 14,
+        "orphan": 63
+    },
+    "ambiguas": [
+        {
+            "id": 56,
+            "nsu": "000000040",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-05T01:06:33.000000Z",
+            "gross_amount": "19.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 71,
+            "nsu": "000000975",
+            "terminal_code": "APTE0CD9",
+            "transaction_date": "2026-10-07T21:20:48.000000Z",
+            "gross_amount": "38.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 121,
+            "nsu": "000000987",
+            "terminal_code": "APTE0CD9",
+            "transaction_date": "2026-10-10T23:30:51.000000Z",
+            "gross_amount": "42.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 137,
+            "nsu": "000000988",
+            "terminal_code": "APTE0CD9",
+            "transaction_date": "2026-10-11T00:47:46.000000Z",
+            "gross_amount": "42.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 156,
+            "nsu": "000000111",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T00:14:41.000000Z",
+            "gross_amount": "38.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 157,
+            "nsu": "000000112",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T00:15:46.000000Z",
+            "gross_amount": "12.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 227,
+            "nsu": "000000166",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-17T00:41:47.000000Z",
+            "gross_amount": "97.50",
+            "modality": "d?bito",
+            "brand": "elo full"
+        },
+        {
+            "id": 228,
+            "nsu": "000000167",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-17T00:41:58.000000Z",
+            "gross_amount": "97.50",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 229,
+            "nsu": "000645",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-17T00:44:34.000000Z",
+            "gross_amount": "76.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 233,
+            "nsu": "000000172",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-17T22:24:25.000000Z",
+            "gross_amount": "42.00",
+            "modality": "d?bito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 235,
+            "nsu": "000000174",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-17T22:41:28.000000Z",
+            "gross_amount": "42.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 244,
+            "nsu": "000000181",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-18T00:53:02.000000Z",
+            "gross_amount": "42.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 245,
+            "nsu": "000000182",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-18T00:53:36.000000Z",
+            "gross_amount": "42.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 252,
+            "nsu": "000711",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-18T21:49:12.000000Z",
+            "gross_amount": "75.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        }
+    ],
+    "orfas": [
+        {
+            "id": 21,
+            "nsu": "000000018",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-03T01:18:24.000000Z",
+            "gross_amount": "87.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 43,
+            "nsu": "000000968",
+            "terminal_code": "APTE0CD9",
+            "transaction_date": "2026-10-04T00:59:39.000000Z",
+            "gross_amount": "82.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 51,
+            "nsu": "000000036",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-05T00:31:37.000000Z",
+            "gross_amount": "32.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 52,
+            "nsu": "000000037",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-05T00:31:49.000000Z",
+            "gross_amount": "20.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 53,
+            "nsu": "000000038",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-05T00:34:43.000000Z",
+            "gross_amount": "89.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 72,
+            "nsu": "000000049",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-07T22:00:53.000000Z",
+            "gross_amount": "73.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 74,
+            "nsu": "000000051",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-07T22:33:03.000000Z",
+            "gross_amount": "72.00",
+            "modality": "d?bito",
+            "brand": "elo full"
+        },
+        {
+            "id": 90,
+            "nsu": "000000979",
+            "terminal_code": "APTE0CD9",
+            "transaction_date": "2026-10-09T00:25:22.000000Z",
+            "gross_amount": "36.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 102,
+            "nsu": "000000070",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-09T23:56:16.000000Z",
+            "gross_amount": "126.00",
+            "modality": "d?bito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 122,
+            "nsu": "000000084",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-10T23:33:30.000000Z",
+            "gross_amount": "165.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 123,
+            "nsu": "000385",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-10T23:34:25.000000Z",
+            "gross_amount": "200.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 139,
+            "nsu": "000405",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-11T00:59:21.000000Z",
+            "gross_amount": "97.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 140,
+            "nsu": "000000099",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-11T01:15:39.000000Z",
+            "gross_amount": "97.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 146,
+            "nsu": "000000105",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-11T23:20:37.000000Z",
+            "gross_amount": "67.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 161,
+            "nsu": "000000116",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T00:53:03.000000Z",
+            "gross_amount": "120.00",
+            "modality": "cr?dito",
+            "brand": "visa"
+        },
+        {
+            "id": 162,
+            "nsu": "000000118",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T00:55:47.000000Z",
+            "gross_amount": "105.00",
+            "modality": "d?bito",
+            "brand": "elo full"
+        },
+        {
+            "id": 170,
+            "nsu": "000000122",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T21:34:05.000000Z",
+            "gross_amount": "48.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 171,
+            "nsu": "000000995",
+            "terminal_code": "APTE0CD9",
+            "transaction_date": "2026-10-12T21:44:16.000000Z",
+            "gross_amount": "56.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 172,
+            "nsu": "000000123",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T22:13:25.000000Z",
+            "gross_amount": "67.00",
+            "modality": "cr?dito",
+            "brand": "visa"
+        },
+        {
+            "id": 173,
+            "nsu": "000000124",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T22:19:56.000000Z",
+            "gross_amount": "89.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 174,
+            "nsu": "000000125",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T22:31:08.000000Z",
+            "gross_amount": "102.00",
+            "modality": "d?bito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 175,
+            "nsu": "000000126",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T22:41:53.000000Z",
+            "gross_amount": "55.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 176,
+            "nsu": "000000127",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T23:00:44.000000Z",
+            "gross_amount": "108.00",
+            "modality": "cr?dito",
+            "brand": "visa"
+        },
+        {
+            "id": 177,
+            "nsu": "000000128",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T23:08:08.000000Z",
+            "gross_amount": "142.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 178,
+            "nsu": "000000996",
+            "terminal_code": "APTE0CD9",
+            "transaction_date": "2026-10-12T23:16:56.000000Z",
+            "gross_amount": "56.00",
+            "modality": "cr?dito",
+            "brand": "visa"
+        },
+        {
+            "id": 179,
+            "nsu": "000000129",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T23:23:08.000000Z",
+            "gross_amount": "74.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 180,
+            "nsu": "000000130",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T23:24:14.000000Z",
+            "gross_amount": "83.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 181,
+            "nsu": "000000131",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T23:25:19.000000Z",
+            "gross_amount": "89.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 182,
+            "nsu": "000000132",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T23:29:30.000000Z",
+            "gross_amount": "62.00",
+            "modality": "d?bito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 183,
+            "nsu": "000000133",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T23:30:11.000000Z",
+            "gross_amount": "34.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 184,
+            "nsu": "000000134",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-12T23:43:17.000000Z",
+            "gross_amount": "38.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 185,
+            "nsu": "000000135",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-13T00:00:43.000000Z",
+            "gross_amount": "48.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 186,
+            "nsu": "000000136",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-13T00:02:26.000000Z",
+            "gross_amount": "107.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 187,
+            "nsu": "000000137",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-13T00:02:39.000000Z",
+            "gross_amount": "107.00",
+            "modality": "cr?dito",
+            "brand": "visa"
+        },
+        {
+            "id": 188,
+            "nsu": "000502",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-13T00:04:37.000000Z",
+            "gross_amount": "19.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 189,
+            "nsu": "000000138",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-13T00:08:26.000000Z",
+            "gross_amount": "30.00",
+            "modality": "cr?dito",
+            "brand": "elo full"
+        },
+        {
+            "id": 190,
+            "nsu": "000000139",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-13T00:24:22.000000Z",
+            "gross_amount": "12.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 191,
+            "nsu": "000000140",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-13T00:55:36.000000Z",
+            "gross_amount": "58.00",
+            "modality": "d?bito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 192,
+            "nsu": "000000141",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-13T00:56:35.000000Z",
+            "gross_amount": "86.50",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 193,
+            "nsu": "000512",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-13T01:53:16.000000Z",
+            "gross_amount": "124.50",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 194,
+            "nsu": "000000143",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-14T22:45:02.000000Z",
+            "gross_amount": "37.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 195,
+            "nsu": "000000997",
+            "terminal_code": "APTE0CD9",
+            "transaction_date": "2026-10-14T23:12:12.000000Z",
+            "gross_amount": "43.00",
+            "modality": "cr?dito",
+            "brand": "visa"
+        },
+        {
+            "id": 196,
+            "nsu": "000000144",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-14T23:17:05.000000Z",
+            "gross_amount": "38.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 197,
+            "nsu": "000585",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-14T23:20:12.000000Z",
+            "gross_amount": "38.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 198,
+            "nsu": "000000145",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-14T23:59:48.000000Z",
+            "gross_amount": "35.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 199,
+            "nsu": "000589",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-15T00:18:30.000000Z",
+            "gross_amount": "93.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 200,
+            "nsu": "000000146",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-15T00:37:28.000000Z",
+            "gross_amount": "57.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 201,
+            "nsu": "000000147",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-15T00:40:35.000000Z",
+            "gross_amount": "31.00",
+            "modality": "d?bito",
+            "brand": "elo full"
+        },
+        {
+            "id": 202,
+            "nsu": "000000148",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-15T00:41:34.000000Z",
+            "gross_amount": "67.00",
+            "modality": "d?bito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 203,
+            "nsu": "000000150",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-15T22:39:54.000000Z",
+            "gross_amount": "80.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 204,
+            "nsu": "000000998",
+            "terminal_code": "APTE0CD9",
+            "transaction_date": "2026-10-15T22:47:59.000000Z",
+            "gross_amount": "36.00",
+            "modality": "cr?dito",
+            "brand": "visa"
+        },
+        {
+            "id": 205,
+            "nsu": "000000151",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-15T23:00:17.000000Z",
+            "gross_amount": "82.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 206,
+            "nsu": "000000152",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-15T23:18:58.000000Z",
+            "gross_amount": "59.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 207,
+            "nsu": "000610",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-15T23:43:19.000000Z",
+            "gross_amount": "30.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 208,
+            "nsu": "000000153",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-16T00:18:25.000000Z",
+            "gross_amount": "54.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        },
+        {
+            "id": 209,
+            "nsu": "000000154",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-16T00:23:46.000000Z",
+            "gross_amount": "19.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 210,
+            "nsu": "000615",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-16T00:51:05.000000Z",
+            "gross_amount": "96.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 211,
+            "nsu": "000000155",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-16T01:10:01.000000Z",
+            "gross_amount": "35.00",
+            "modality": "d?bito",
+            "brand": "mds"
+        },
+        {
+            "id": 212,
+            "nsu": "000619",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-16T01:19:33.000000Z",
+            "gross_amount": "10.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 230,
+            "nsu": "000648",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-17T00:45:46.000000Z",
+            "gross_amount": "10.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 272,
+            "nsu": "000748",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-20T02:19:27.000000Z",
+            "gross_amount": "500.00",
+            "modality": "via qrcode",
+            "brand": "pix"
+        },
+        {
+            "id": 290,
+            "nsu": "000001015",
+            "terminal_code": "APTE0CD9",
+            "transaction_date": "2026-10-22T22:04:33.000000Z",
+            "gross_amount": "44.00",
+            "modality": "cr?dito",
+            "brand": "mastercard"
+        },
+        {
+            "id": 295,
+            "nsu": "000000224",
+            "terminal_code": "APT0NV48",
+            "transaction_date": "2026-10-22T23:20:45.000000Z",
+            "gross_amount": "35.00",
+            "modality": "d?bito",
+            "brand": "visa"
+        }
+    ]
+}

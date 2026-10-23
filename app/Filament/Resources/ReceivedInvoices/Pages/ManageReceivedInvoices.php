@@ -4,26 +4,28 @@ namespace App\Filament\Resources\ReceivedInvoices\Pages;
 
 use App\Filament\Resources\ReceivedInvoices\ReceivedInvoiceResource;
 use App\Filament\Resources\ReceivedInvoices\Actions\ForceSefazSyncAction;
-use App\Filament\Pages\ImportInvoice;
 use App\Models\CompanySetting;
 use App\Models\ReceivedInvoice;
+use App\Services\Purchases\InvoiceImportService;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Resources\Pages\ManageRecords;
-use Illuminate\Support\Facades\Artisan;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components as SchemaComponents;
 use Illuminate\Database\Eloquent\Builder;
-use Livewire\Component;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use App\Filament\Traits\TeleportsTabs;
 use App\Filament\Traits\HasWelcomeModal;
 use Illuminate\Support\HtmlString;
+use Carbon\Carbon;
 
 class ManageReceivedInvoices extends ManageRecords
 {
     protected static string $resource = ReceivedInvoiceResource::class;
 
     use TeleportsTabs;
-    use HasWelcomeModal; // 🚀 Injetamos o Trait!
+    use HasWelcomeModal;
 
     public function mount(): void
     {
@@ -63,31 +65,142 @@ class ManageReceivedInvoices extends ManageRecords
                         "processed",
                         "rejected",
                         "canceled_by_supplier",
-                        "returned",       // 🚀 A nota de compra após você clicar em processar
-                        "return_receipt", // 🚀 O documento XML da devolução (escondido das pendências)
+                        "returned",
+                        "return_receipt",
                     ]),
                 ),
         ];
     }
 
     protected function getHeaderActions(): array
-        {
-            $setting = CompanySetting::getCached();
-            $hasCertificate = $setting && !empty($setting->certificate_path);
+    {
+        return [
+            $this->getWelcomeAction(),
 
-            return [
-                $this->getWelcomeAction(),
+            // 🚀 MODAL NATIVO DE UPLOAD MANUAL (MÚLTIPLOS XMLs)
+            Action::make("upload_manual")
+                ->label("Subir Manualmente")
+                ->icon("heroicon-o-arrow-up-tray")
+                ->color("primary")
+                ->modalHeading("Carregar Notas Fiscais (XML)")
+                ->modalDescription("Selecione um ou mais ficheiros XML completos (procNFe ou NFe) emitidos contra a sua empresa.")
+                ->modalSubmitActionLabel("Processar Ficheiros")
+                ->modalWidth("xl")
+                ->form([
+                    FileUpload::make("xml_files")
+                        ->label("Ficheiros XML da NF-e")
+                        ->multiple()
+                        ->acceptedFileTypes(['text/xml', 'application/xml', 'xml'])
+                        ->directory('temp_manual_xmls')
+                        ->required()
+                        ->helperText("Pode selecionar vários ficheiros em simultâneo no seu computador."),
+                ])
+                ->action(function (array $data) {
+                    $files = $data['xml_files'] ?? [];
+                    if (empty($files)) {
+                        return;
+                    }
 
-                Action::make("upload_manual")
-                    ->label("Subir Manualmente")
-                    ->icon("heroicon-o-arrow-up-tray")
-                    ->color("gray")
-                    ->url(fn() => ImportInvoice::getUrl())
-                    ->disabled(! $hasCertificate),
+                    $importedCount = 0;
+                    $updatedCount  = 0;
+                    $errorCount    = 0;
+                    $importService = app(InvoiceImportService::class);
 
-                ForceSefazSyncAction::make(),
-            ];
-        }
+                    foreach ($files as $filePath) {
+                        try {
+                            if (! Storage::exists($filePath)) {
+                                continue;
+                            }
+
+                            $xmlContent = Storage::get($filePath);
+                            Storage::delete($filePath);
+
+                            // Limpeza de namespaces para leitura fiável
+                            $cleanXml = preg_replace('/xmlns[^=]*="[^"]*"/i', '', $xmlContent);
+                            $xml = @simplexml_load_string($cleanXml);
+
+                            if (! $xml) {
+                                $errorCount++;
+                                continue;
+                            }
+
+                            $nfeNode = isset($xml->NFe) ? $xml->NFe : ($xml->getName() === 'NFe' ? $xml : null);
+                            if (! $nfeNode || ! isset($nfeNode->infNFe)) {
+                                $errorCount++;
+                                continue;
+                            }
+
+                            $inf         = $nfeNode->infNFe;
+                            $nfeKey      = str_replace('NFe', '', (string) $inf->attributes()->Id);
+                            $cnpj        = (string) ($inf->emit->CNPJ ?? '');
+                            $emitterName = (string) ($inf->emit->xNome ?? 'Fornecedor sem Razão Social');
+                            $totalValue  = (float) ($inf->total->ICMSTot->vNF ?? 0);
+
+                            $rawDate   = (string) ($inf->ide->dhEmi ?? $inf->ide->dEmi ?? '');
+                            $issueDate = ! empty($rawDate) ? Carbon::parse($rawDate) : now();
+
+                            // Verifica se a nota já existia na base de dados
+                            $invoice = ReceivedInvoice::where('nfe_key', $nfeKey)->first();
+
+                            if ($invoice) {
+                                // Atualiza a nota existente com o XML completo
+                                $invoice->update([
+                                    'emitter_cnpj' => $cnpj ?: $invoice->emitter_cnpj,
+                                    'emitter_name' => $emitterName ?: $invoice->emitter_name,
+                                    'issue_date'   => $issueDate,
+                                    'total_value'  => $totalValue ?: $invoice->total_value,
+                                    'xml_content'  => $xmlContent,
+                                    'has_full_xml' => true,
+                                    'status'       => 'ready',
+                                ]);
+                                $updatedCount++;
+                            } else {
+                                // Regista nova nota pronta para dar entrada no inventário
+                                $invoice = ReceivedInvoice::create([
+                                    'nfe_key'      => $nfeKey,
+                                    'emitter_cnpj' => $cnpj,
+                                    'emitter_name' => $emitterName,
+                                    'issue_date'   => $issueDate,
+                                    'total_value'  => $totalValue,
+                                    'xml_content'  => $xmlContent,
+                                    'has_full_xml' => true,
+                                    'status'       => 'ready',
+                                ]);
+                                $importedCount++;
+                            }
+
+                            // Tenta auto-aprovação de itens já mapeados anteriormente no histórico
+                            $importService->attemptAutoApproval($invoice);
+
+                        } catch (\Throwable $e) {
+                            $errorCount++;
+                        }
+                    }
+
+                    $totalSuccess = $importedCount + $updatedCount;
+
+                    if ($totalSuccess > 0) {
+                        Notification::make()
+                            ->title("Processamento Concluído")
+                            ->body(new HtmlString("
+                                <strong>{$importedCount}</strong> nova(s) nota(s) adicionada(s).<br>
+                                " . ($updatedCount > 0 ? "<strong>{$updatedCount}</strong> nota(s) atualizada(s) com XML completo.<br>" : "") . "
+                                " . ($errorCount > 0 ? "<span class='text-danger-500'>{$errorCount} ficheiro(s) inválido(s).</span>" : "") . "
+                            "))
+                            ->success()
+                            ->send();
+                    } else {
+                        Notification::make()
+                            ->title("Nenhum ficheiro válido importado")
+                            ->body("Verifique se os ficheiros selecionados correspondem a documentos NF-e válidos.")
+                            ->danger()
+                            ->send();
+                    }
+                }),
+
+            ForceSefazSyncAction::make(),
+        ];
+    }
 
     protected function getWelcomeMessage(): HtmlString
     {

@@ -4,6 +4,7 @@ namespace App\Filament\Pages\ImportInvoice\Schemas;
 
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\ToggleButtons;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\DatePicker;
@@ -31,7 +32,7 @@ class ItemRowSchema
             // ==========================================
             self::getXmlNameField(),         // 3 colunas
             self::getXmlQtyField(),          // 1 coluna
-            self::getDestinationTypeField(), // 2 colunas
+            self::getDestinationTypeField(), // 2 colunas (3 Toggle Buttons)
 
             // ==========================================
             // LINHA 2: CONTEXTO ESTOQUE / INSUMO
@@ -64,6 +65,7 @@ class ItemRowSchema
             Hidden::make("available_qty"),
             Hidden::make("is_matched"),
             Hidden::make("item_uuid"),
+            Hidden::make("is_personal")->default(false),
             Hidden::make("confirmation_step")->default(0),
             Hidden::make("factor_source")->default("manual"),
         ];
@@ -95,19 +97,35 @@ class ItemRowSchema
             ->columnSpan(1);
     }
 
-    private static function getDestinationTypeField(): Select
+    /**
+     * 🚀 3 TOGGLE BUTTONS: Alternância imediata com 1 clique
+     */
+    private static function getDestinationTypeField(): ToggleButtons
     {
-        return Select::make("destination_type")
+        return ToggleButtons::make("destination_type")
             ->label("Destino do Item")
             ->options([
-                'stock'    => '📦 Estoque / Insumo / Revenda',
-                'asset'    => '🏛️ Patrimônio (Ativo Imobilizado)',
-                'personal' => '👤 Uso Pessoal (Sócio)',
+                'stock'    => 'Estoque',
+                'asset'    => 'Patrimônio',
+                'personal' => 'Pessoal',
             ])
+            ->icons([
+                'stock'    => 'heroicon-m-archive-box',
+                'asset'    => 'heroicon-m-building-storefront',
+                'personal' => 'heroicon-m-user',
+            ])
+            ->colors([
+                'stock'    => 'primary',
+                'asset'    => 'warning',
+                'personal' => 'danger',
+            ])
+            ->inline()
+            ->grouped()
             ->default('stock')
             ->required()
             ->live()
             ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                $set("is_personal", $state === 'personal');
                 if ($state !== 'stock') {
                     $set("product_id", null);
                     $set("goods_receipt_item_id", null);
@@ -313,7 +331,7 @@ class ItemRowSchema
     }
 
     // ----------------------------------------------------
-    // AÇÃO DE CONFIRMAÇÃO
+    // AÇÃO DE CONFIRMAÇÃO REATIVA
     // ----------------------------------------------------
 
     private static function getConfirmItemAction(): Actions
@@ -323,7 +341,7 @@ class ItemRowSchema
                 ->label(function (Get $get) {
                     return match ($get("destination_type")) {
                         'asset'    => 'Tombá-lo',
-                        'personal' => 'Uso Pessoal',
+                        'personal' => 'Gerar Despesa',
                         default    => 'Associar',
                     };
                 })
@@ -337,7 +355,7 @@ class ItemRowSchema
                 ->color(function (Get $get) {
                     return match ($get("destination_type")) {
                         'asset'    => 'warning',
-                        'personal' => 'gray',
+                        'personal' => 'danger',
                         default    => 'primary',
                     };
                 })
@@ -354,6 +372,7 @@ class ItemRowSchema
                     return false;
                 })
                 ->action(function (Get $get, $livewire) {
+                    $destination = $get('destination_type') ?? 'stock';
                     $processQty = (float) ($get('xml_qty') ?? 0);
                     $availableQty = (float) ($get('available_qty') ?? 0);
 
@@ -378,8 +397,10 @@ class ItemRowSchema
                         return;
                     }
 
-                    $destination = $get('destination_type') ?? 'stock';
                     $productId = $get('product_id') ? (int) $get('product_id') : null;
+                    if ($destination === 'personal') {
+                        $productId = null;
+                    }
 
                     $payload = [
                         'item_uuid'             => (string) ($get('item_uuid') ?? ''),
