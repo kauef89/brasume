@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PaymentMethods\Schemas;
 
+use App\Enums\PaymentEngineType;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
@@ -20,15 +21,15 @@ class PaymentMethodForm
         return [
             Section::make("Configuração de Recebimento")
                 ->schema([
-                    // --- LINHA 1: NOME, DESTINO E COMPORTAMENTO ---
                     Grid::make(3)->schema([
                         TextInput::make("name")
                             ->label("Nome da Forma de Pagamento")
+                            ->placeholder("Ex: Cartão Débito Balcão, Pix Maquineta")
                             ->required()
                             ->columnSpan(1),
 
                         Select::make("destination_account_id")
-                            ->label("Conta de Destino (Onde o dinheiro cai?)")
+                            ->label("Conta de Liquidação / Destino")
                             ->options(fn() => BankAccount::pluck("name", "id"))
                             ->searchable()
                             ->preload()
@@ -36,39 +37,32 @@ class PaymentMethodForm
                             ->columnSpan(1),
 
                         Select::make("engine_type")
-                            ->label("Comportamento do Sistema")
-                            ->options([
-                                "money"            => "Dinheiro Físico (Abre Gaveta)",
-                                "manual"           => "Baixa Manual (Maquininha/Cartões)",
-                                "bank_api"         => "Integração Bancária (API)",
-                                "loss"             => "Perda / Cortesia",
-                                "internal"         => "Consumo Interno",
-                                "internal_loyalty" => "Cashback/Fidelidade",
-                            ])
+                            ->label("Motor de Captura (Comportamento)")
+                            ->options(PaymentEngineType::class)
                             ->live()
                             ->required()
+                            ->native(false)
                             ->columnSpan(1),
 
                         Select::make("gateway_driver")
-                            ->label("Integração (Qual API usar?)")
+                            ->label("Integração (Qual API bancária acionar?)")
                             ->options(PaymentGatewayManager::getAvailableGateways())
-                            ->visible(fn(Get $get) => $get("engine_type") === 'bank_api')
+                            ->visible(fn(Get $get) => $get("engine_type") === PaymentEngineType::BANK_API->value || $get("engine_type") === 'bank_api')
                             ->live()
-                            ->required(fn(Get $get) => $get("engine_type") === 'bank_api')
+                            ->required(fn(Get $get) => $get("engine_type") === PaymentEngineType::BANK_API->value || $get("engine_type") === 'bank_api')
                             ->columnSpanFull(),
 
                         Placeholder::make('integration_status')
-                            ->label('Status da Integração')
-                            ->visible(fn(Get $get) => $get("engine_type") === 'bank_api' && filled($get("gateway_driver")))
+                            ->label('Estado da Conexão API')
+                            ->visible(fn(Get $get) => ($get("engine_type") === PaymentEngineType::BANK_API->value || $get("engine_type") === 'bank_api') && filled($get("gateway_driver")))
                             ->content(fn(Get $get) => PaymentGatewayManager::getCredentialStatusHtml($get("gateway_driver")))
                             ->columnSpanFull(),
                     ]),
 
-                    // --- LINHA 2: CLASSIFICAÇÃO E FISCAL ---
                     Grid::make(2)->schema([
                         TextInput::make("category")
                             ->label("Categoria de Agrupamento")
-                            ->placeholder("Ex: Manual, Perdas")
+                            ->placeholder("Ex: Cartões, Pix, Perdas")
                             ->columnSpan(1),
 
                         Select::make("fiscal_code")
@@ -78,41 +72,41 @@ class PaymentMethodForm
                                 '04' => 'Cartão de Débito (04)',
                                 '03' => 'Cartão de Crédito (03)',
                                 '17' => 'PIX (17)',
+                                '10' => 'Vale Alimentação / Refeição (10)',
                                 '15' => 'Boleto Bancário (15)',
-                                '99' => 'Outros (99)',
+                                '99' => 'Outros / Ajustes (99)',
                             ])
                             ->searchable()
                             ->preload()
                             ->required()
-                            ->helperText("Este código será enviado à SEFAZ na emissão da nota.")
+                            ->helperText("Código enviado na tag <tPag> da NFC-e.")
                             ->placeholder("Selecione o código SEFAZ")
                             ->columnSpan(1),
                     ]),
                 ])
                 ->columnSpanFull(),
 
-            // --- LINHA 3: REGRAS OPERACIONAIS & FISCAIS ---
-            Section::make("Regras de Operação e Emissão")
+            Section::make("Regras Operacionais e Emissão")
                 ->schema([
                     Grid::make(4)->schema([
                         Toggle::make("show_on_pos")
-                            ->label("Mostrar no PDV?")
+                            ->label("Disponível no PDV?")
                             ->default(true)
                             ->inline(false),
 
                         Toggle::make("show_on_delivery")
-                            ->label("Mostrar no Delivery?")
+                            ->label("Disponível no Delivery?")
                             ->default(true)
                             ->inline(false),
 
                         Toggle::make("auto_fiscal_emission")
                             ->label("Emissão Fiscal Auto?")
-                            ->helperText("NFC-e imediata após fechar pedido")
+                            ->helperText("Gera NFC-e ao concluir o pedido")
                             ->default(true)
                             ->inline(false),
 
                         Toggle::make("is_active")
-                            ->label("Status (Ativo?)")
+                            ->label("Ativo?")
                             ->default(true)
                             ->inline(false),
                     ]),

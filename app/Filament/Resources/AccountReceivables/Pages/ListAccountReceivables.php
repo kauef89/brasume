@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\AccountReceivables\Pages;
 
 use App\Filament\Resources\AccountReceivables\AccountReceivableResource;
+use App\Filament\Resources\AccountReceivables\Actions\ImportAcquirerReportAction;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
@@ -14,6 +15,7 @@ class ListAccountReceivables extends ListRecords
     {
         return [
             CreateAction::make(),
+            ImportAcquirerReportAction::make(),
         ];
     }
 }

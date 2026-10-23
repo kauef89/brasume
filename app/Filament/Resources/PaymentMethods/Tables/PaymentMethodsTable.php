@@ -19,14 +19,19 @@ class PaymentMethodsTable
                     ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('destinationAccount.name')
-                    ->label('Conta Destino')
+                    ->label('Conta de Destino')
                     ->placeholder('Sem Vínculo (Perda/Cortesia)')
                     ->badge()
                     ->color(fn ($state) => filled($state) ? 'success' : 'gray'),
 
                 Tables\Columns\TextColumn::make('engine_type')
-                    ->label('Comportamento')
+                    ->label('Motor de Captura')
                     ->badge(),
+
+                Tables\Columns\TextColumn::make('fiscal_code')
+                    ->label('Cód. SEFAZ')
+                    ->badge()
+                    ->color('gray'),
 
                 Tables\Columns\ToggleColumn::make('show_on_pos')
                     ->label('PDV?'),
@@ -34,7 +39,6 @@ class PaymentMethodsTable
                 Tables\Columns\ToggleColumn::make('show_on_delivery')
                     ->label('Delivery?'),
 
-                // 🚀 Toggle rápido de contingência/emissão automática
                 Tables\Columns\ToggleColumn::make('auto_fiscal_emission')
                     ->label('Fiscal Auto?'),
 
