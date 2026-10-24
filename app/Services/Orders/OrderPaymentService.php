@@ -59,8 +59,10 @@ class OrderPaymentService
 
     public function resolveOrderCompletion(Order $order): void
     {
+        $isPosSource = in_array($order->source, [Order::SOURCE_POS_APP, Order::SOURCE_CASHIER], true);
+
         $shouldClose = ($order->status === 'dispatched' && $order->payment_status === 'paid')
-            || ($order->type === 'counter' && in_array($order->status, ['ready', 'dispatched']) && $order->payment_status === 'paid')
+            || ($order->type === 'counter' && $order->payment_status === 'paid' && ($isPosSource || in_array($order->status, ['ready', 'dispatched'])))
             || ($order->type === 'table' && $order->payment_status === 'paid');
 
         if (!$shouldClose) {

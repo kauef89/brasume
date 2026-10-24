@@ -1,0 +1,248 @@
+================================================================================
+RELATÓRIO CRU DE AUDITORIA DE CONCILIAÇÃO (TENANT: nativa)
+Data da geração: 23/10/2026 20:16:54
+================================================================================
+
+--- PARTE 1: AS TRANSAÇÕES AMBÍGUAS (DÚVIDAS) ---
+ID: 56   | NSU: 000000040  | Data: 04/10/2026 22:06:33 | Term: APT0NV48 | R$    19.00 | cr?dito mastercard
+   -> Pedido #1537  [counter ] | Pagamento #1110  | Criado: 21:19:09 (-47m) | Score: 40 | Cliente: MIkael
+   -> Pedido #1543  [counter ] | Pagamento #1118  | Criado: 22:58:23 (+52m) | Score: 40 | Cliente: Jutaí Estrázulas
+
+ID: 71   | NSU: 000000975  | Data: 07/10/2026 18:20:48 | Term: APTE0CD9 | R$    38.00 | d?bito visa
+   -> Pedido #1562  [table   ] | Pagamento #1143  | Criado: 19:42:03 (+81m) | Score:  0 | Cliente: Mesa 01
+
+ID: 121  | NSU: 000000987  | Data: 10/10/2026 20:30:51 | Term: APTE0CD9 | R$    42.00 | cr?dito mastercard
+   -> Pedido #1679  [delivery] | Pagamento #1249  | Criado: 22:17:16 (+106m) | Score: 40 | Cliente: Cleia
+   -> Pedido #1651  [delivery] | Pagamento #1254  | Criado: 22:20:31 (+110m) | Score: 40 | Cliente: Lucas
+
+ID: 137  | NSU: 000000988  | Data: 10/10/2026 21:47:46 | Term: APTE0CD9 | R$    42.00 | d?bito visa
+   -> Pedido #1679  [delivery] | Pagamento #1249  | Criado: 22:17:16 (+30m) | Score: 50 | Cliente: Cleia
+   -> Pedido #1651  [delivery] | Pagamento #1254  | Criado: 22:20:31 (+33m) | Score: 40 | Cliente: Lucas
+
+ID: 156  | NSU: 000000111  | Data: 11/10/2026 21:14:41 | Term: APT0NV48 | R$    38.00 | d?bito mds
+   -> Pedido #1712  [counter ] | Pagamento #1283  | Criado: 21:14:48 ( +0m) | Score: 70 | Cliente: Osmar
+   -> Pedido #1712  [counter ] | Pagamento #1284  | Criado: 21:14:48 ( +0m) | Score: 70 | Cliente: Osmar
+
+ID: 157  | NSU: 000000112  | Data: 11/10/2026 21:15:46 | Term: APT0NV48 | R$    12.00 | d?bito visa
+   -> Pedido #1714  [counter ] | Pagamento #1285  | Criado: 21:16:23 ( +1m) | Score: 70 | Cliente: Patricia Pizezdzieck Da Silva
+   -> Pedido #1715  [counter ] | Pagamento #1286  | Criado: 21:16:55 ( +1m) | Score: 70 | Cliente: Kayssa Mozena
+
+ID: 227  | NSU: 000000166  | Data: 16/10/2026 21:41:47 | Term: APT0NV48 | R$    97.50 | d?bito elo full
+   -> Pedido #1731  [table   ] | Pagamento #1324  | Criado: 21:42:33 ( +1m) | Score: 30 | Cliente: Mesa 17
+   -> Pedido #1731  [table   ] | Pagamento #1325  | Criado: 21:42:33 ( +1m) | Score: 30 | Cliente: Mesa 17
+
+ID: 228  | NSU: 000000167  | Data: 16/10/2026 21:41:58 | Term: APT0NV48 | R$    97.50 | d?bito visa
+   -> Pedido #1731  [table   ] | Pagamento #1324  | Criado: 21:42:33 ( +1m) | Score: 30 | Cliente: Mesa 17
+   -> Pedido #1731  [table   ] | Pagamento #1325  | Criado: 21:42:33 ( +1m) | Score: 30 | Cliente: Mesa 17
+
+ID: 229  | NSU: 000645     | Data: 16/10/2026 21:44:34 | Term: APT0NV48 | R$    76.00 | via qrcode pix
+   -> Pedido #1749  [counter ] | Pagamento #1330  | Criado: 22:07:09 (+23m) | Score: 50 | Cliente: Elionai
+
+ID: 233  | NSU: 000000172  | Data: 17/10/2026 19:24:25 | Term: APT0NV48 | R$    42.00 | d?bito mastercard
+   -> Pedido #1785  [delivery] | Pagamento #1358  | Criado: 21:48:46 (+144m) | Score:  0 | Cliente: Joice Luiza Correa
+   -> Pedido #1784  [table   ] | Pagamento #1359  | Criado: 21:53:40 (+149m) | Score:  0 | Cliente: Mesa 14
+   -> Pedido #1784  [table   ] | Pagamento #1360  | Criado: 21:53:40 (+149m) | Score:  0 | Cliente: Mesa 14
+   -> Pedido #1764  [table   ] | Pagamento #1367  | Criado: 22:50:19 (+206m) | Score:  0 | Cliente: Mesa 05
+
+ID: 235  | NSU: 000000174  | Data: 17/10/2026 19:41:28 | Term: APT0NV48 | R$    42.00 | d?bito mds
+   -> Pedido #1785  [delivery] | Pagamento #1358  | Criado: 21:48:46 (+127m) | Score:  0 | Cliente: Joice Luiza Correa
+   -> Pedido #1784  [table   ] | Pagamento #1359  | Criado: 21:53:40 (+132m) | Score:  0 | Cliente: Mesa 14
+   -> Pedido #1784  [table   ] | Pagamento #1360  | Criado: 21:53:40 (+132m) | Score:  0 | Cliente: Mesa 14
+   -> Pedido #1764  [table   ] | Pagamento #1367  | Criado: 22:50:19 (+189m) | Score:  0 | Cliente: Mesa 05
+
+ID: 244  | NSU: 000000181  | Data: 17/10/2026 21:53:02 | Term: APT0NV48 | R$    42.00 | d?bito visa
+   -> Pedido #1784  [table   ] | Pagamento #1359  | Criado: 21:53:40 ( +1m) | Score: 30 | Cliente: Mesa 14
+   -> Pedido #1784  [table   ] | Pagamento #1360  | Criado: 21:53:40 ( +1m) | Score: 30 | Cliente: Mesa 14
+   -> Pedido #1785  [delivery] | Pagamento #1358  | Criado: 21:48:46 ( -4m) | Score: 20 | Cliente: Joice Luiza Correa
+
+ID: 245  | NSU: 000000182  | Data: 17/10/2026 21:53:36 | Term: APT0NV48 | R$    42.00 | cr?dito mastercard
+   -> Pedido #1784  [table   ] | Pagamento #1359  | Criado: 21:53:40 ( +0m) | Score: 30 | Cliente: Mesa 14
+   -> Pedido #1784  [table   ] | Pagamento #1360  | Criado: 21:53:40 ( +0m) | Score: 30 | Cliente: Mesa 14
+   -> Pedido #1785  [delivery] | Pagamento #1358  | Criado: 21:48:46 ( -5m) | Score: 20 | Cliente: Joice Luiza Correa
+
+ID: 252  | NSU: 000711     | Data: 18/10/2026 18:49:12 | Term: APT0NV48 | R$    75.00 | via qrcode pix
+   -> Pedido #1800  [table   ] | Pagamento #1372  | Criado: 19:28:51 (+40m) | Score:  0 | Cliente: Mesa 19
+
+
+--- PARTE 2: TODAS AS 63 TRANSAÇÕES ÓRFÃS (MAQUININHA SEM CASAMENTO) ---
+ID   | NSU        | DATA / HORA         | TERMINAL | VALOR (R$) | MODAL    | BANDEIRA
+--------------------------------------------------------------------------------
+21   | 000000018  | 02/10/2026 22:18:24 | APT0NV48 |      87.00 | d?bito   | mds
+43   | 000000968  | 03/10/2026 21:59:39 | APTE0CD9 |      82.00 | d?bito   | visa
+51   | 000000036  | 04/10/2026 21:31:37 | APT0NV48 |      32.00 | cr?dito  | mastercard
+52   | 000000037  | 04/10/2026 21:31:49 | APT0NV48 |      20.00 | d?bito   | mds
+53   | 000000038  | 04/10/2026 21:34:43 | APT0NV48 |      89.00 | d?bito   | mds
+72   | 000000049  | 07/10/2026 19:00:53 | APT0NV48 |      73.00 | d?bito   | visa
+74   | 000000051  | 07/10/2026 19:33:03 | APT0NV48 |      72.00 | d?bito   | elo full
+90   | 000000979  | 08/10/2026 21:25:22 | APTE0CD9 |      36.00 | d?bito   | mds
+102  | 000000070  | 09/10/2026 20:56:16 | APT0NV48 |     126.00 | d?bito   | mastercard
+122  | 000000084  | 10/10/2026 20:33:30 | APT0NV48 |     165.00 | d?bito   | visa
+123  | 000385     | 10/10/2026 20:34:25 | APT0NV48 |     200.00 | via qrcode | pix
+139  | 000405     | 10/10/2026 21:59:21 | APT0NV48 |      97.00 | via qrcode | pix
+140  | 000000099  | 10/10/2026 22:15:39 | APT0NV48 |      97.00 | cr?dito  | mastercard
+146  | 000000105  | 11/10/2026 20:20:37 | APT0NV48 |      67.00 | d?bito   | visa
+161  | 000000116  | 11/10/2026 21:53:03 | APT0NV48 |     120.00 | cr?dito  | visa
+162  | 000000118  | 11/10/2026 21:55:47 | APT0NV48 |     105.00 | d?bito   | elo full
+170  | 000000122  | 12/10/2026 18:34:05 | APT0NV48 |      48.00 | d?bito   | mds
+171  | 000000995  | 12/10/2026 18:44:16 | APTE0CD9 |      56.00 | d?bito   | mds
+172  | 000000123  | 12/10/2026 19:13:25 | APT0NV48 |      67.00 | cr?dito  | visa
+173  | 000000124  | 12/10/2026 19:19:56 | APT0NV48 |      89.00 | d?bito   | mds
+174  | 000000125  | 12/10/2026 19:31:08 | APT0NV48 |     102.00 | d?bito   | mastercard
+175  | 000000126  | 12/10/2026 19:41:53 | APT0NV48 |      55.00 | d?bito   | visa
+176  | 000000127  | 12/10/2026 20:00:44 | APT0NV48 |     108.00 | cr?dito  | visa
+177  | 000000128  | 12/10/2026 20:08:08 | APT0NV48 |     142.00 | cr?dito  | mastercard
+178  | 000000996  | 12/10/2026 20:16:56 | APTE0CD9 |      56.00 | cr?dito  | visa
+179  | 000000129  | 12/10/2026 20:23:08 | APT0NV48 |      74.00 | cr?dito  | mastercard
+180  | 000000130  | 12/10/2026 20:24:14 | APT0NV48 |      83.00 | cr?dito  | mastercard
+181  | 000000131  | 12/10/2026 20:25:19 | APT0NV48 |      89.00 | cr?dito  | mastercard
+182  | 000000132  | 12/10/2026 20:29:30 | APT0NV48 |      62.00 | d?bito   | mastercard
+183  | 000000133  | 12/10/2026 20:30:11 | APT0NV48 |      34.00 | cr?dito  | mastercard
+184  | 000000134  | 12/10/2026 20:43:17 | APT0NV48 |      38.00 | d?bito   | mds
+185  | 000000135  | 12/10/2026 21:00:43 | APT0NV48 |      48.00 | d?bito   | visa
+186  | 000000136  | 12/10/2026 21:02:26 | APT0NV48 |     107.00 | cr?dito  | mastercard
+187  | 000000137  | 12/10/2026 21:02:39 | APT0NV48 |     107.00 | cr?dito  | visa
+188  | 000502     | 12/10/2026 21:04:37 | APT0NV48 |      19.00 | via qrcode | pix
+189  | 000000138  | 12/10/2026 21:08:26 | APT0NV48 |      30.00 | cr?dito  | elo full
+190  | 000000139  | 12/10/2026 21:24:22 | APT0NV48 |      12.00 | cr?dito  | mastercard
+191  | 000000140  | 12/10/2026 21:55:36 | APT0NV48 |      58.00 | d?bito   | mastercard
+192  | 000000141  | 12/10/2026 21:56:35 | APT0NV48 |      86.50 | d?bito   | mds
+193  | 000512     | 12/10/2026 22:53:16 | APT0NV48 |     124.50 | via qrcode | pix
+194  | 000000143  | 14/10/2026 19:45:02 | APT0NV48 |      37.00 | cr?dito  | mastercard
+195  | 000000997  | 14/10/2026 20:12:12 | APTE0CD9 |      43.00 | cr?dito  | visa
+196  | 000000144  | 14/10/2026 20:17:05 | APT0NV48 |      38.00 | cr?dito  | mastercard
+197  | 000585     | 14/10/2026 20:20:12 | APT0NV48 |      38.00 | via qrcode | pix
+198  | 000000145  | 14/10/2026 20:59:48 | APT0NV48 |      35.00 | d?bito   | mds
+199  | 000589     | 14/10/2026 21:18:30 | APT0NV48 |      93.00 | via qrcode | pix
+200  | 000000146  | 14/10/2026 21:37:28 | APT0NV48 |      57.00 | cr?dito  | mastercard
+201  | 000000147  | 14/10/2026 21:40:35 | APT0NV48 |      31.00 | d?bito   | elo full
+202  | 000000148  | 14/10/2026 21:41:34 | APT0NV48 |      67.00 | d?bito   | mastercard
+203  | 000000150  | 15/10/2026 19:39:54 | APT0NV48 |      80.00 | d?bito   | visa
+204  | 000000998  | 15/10/2026 19:47:59 | APTE0CD9 |      36.00 | cr?dito  | visa
+205  | 000000151  | 15/10/2026 20:00:17 | APT0NV48 |      82.00 | d?bito   | visa
+206  | 000000152  | 15/10/2026 20:18:58 | APT0NV48 |      59.00 | d?bito   | visa
+207  | 000610     | 15/10/2026 20:43:19 | APT0NV48 |      30.00 | via qrcode | pix
+208  | 000000153  | 15/10/2026 21:18:25 | APT0NV48 |      54.00 | d?bito   | visa
+209  | 000000154  | 15/10/2026 21:23:46 | APT0NV48 |      19.00 | cr?dito  | mastercard
+210  | 000615     | 15/10/2026 21:51:05 | APT0NV48 |      96.00 | via qrcode | pix
+211  | 000000155  | 15/10/2026 22:10:01 | APT0NV48 |      35.00 | d?bito   | mds
+212  | 000619     | 15/10/2026 22:19:33 | APT0NV48 |      10.00 | via qrcode | pix
+230  | 000648     | 16/10/2026 21:45:46 | APT0NV48 |      10.00 | via qrcode | pix
+272  | 000748     | 19/10/2026 23:19:27 | APT0NV48 |     500.00 | via qrcode | pix
+290  | 000001015  | 22/10/2026 19:04:33 | APTE0CD9 |      44.00 | cr?dito  | mastercard
+295  | 000000224  | 22/10/2026 20:20:45 | APT0NV48 |      35.00 | d?bito   | visa
+
+
+--- PARTE 3: PAGAMENTOS DE CARTÃO NO PDV SEM FILIPETA VINCULADA ---
+PAG_ID | PEDIDO | DATA / HORA         | VALOR (R$) | MÉTODO      | TIPO     | CLIENTE
+-------------------------------------------------------------------------------------
+1018   | #1449 | 01/10/2026 20:36:35 |      73.00 | Pix Máq     | delivery | Lidia Mara Jesuino
+1027   | #1458 | 02/10/2026 18:45:23 |      95.00 | Pix Máq     | delivery | Rosemeri Auersvaldt Liebel
+1032   | #1462 | 02/10/2026 19:28:18 |     121.00 | Pix Máq     | delivery | Rubimar Geron
+1034   | #1465 | 02/10/2026 19:39:21 |      69.00 | Pix Máq     | delivery | Leticia Cristine Schtoltz
+1036   | #1467 | 02/10/2026 20:06:30 |      84.00 | Pix Máq     | delivery | Sabrina Hille
+1038   | #1464 | 02/10/2026 20:28:17 |      40.00 | Pix Máq     | counter  | Ana Paula
+1039   | #1469 | 02/10/2026 20:40:08 |      50.00 | Pix Máq     | delivery | Vilmar Santos
+1041   | #1470 | 02/10/2026 20:47:47 |     117.00 | Pix Máq     | delivery | Laudiceia Lopes Camargo
+1042   | #1474 | 02/10/2026 21:15:55 |      65.00 | Pix Máq     | delivery | Carolina Cardoso Da Silva Rosa
+1044   | #1475 | 02/10/2026 21:37:22 |      84.00 | Pix Máq     | delivery | Carolina Cardoso Da Silva Rosa
+1050   | #1477 | 02/10/2026 22:20:12 |      75.00 | Débito      | table    | Mesa 21
+1053   | #1482 | 02/10/2026 22:40:32 |      64.00 | Pix Máq     | delivery | Elizandra Marta Tereza Fernandes
+1061   | #1484 | 03/10/2026 18:49:22 |      34.00 | Pix Máq     | table    | Mesa 13
+1062   | #1489 | 03/10/2026 18:51:13 |     112.00 | Pix Máq     | delivery | Renato Otto
+1063   | #1492 | 03/10/2026 19:14:37 |      75.00 | Pix Máq     | delivery | Dandara
+1064   | #1485 | 03/10/2026 19:23:46 |     191.00 | Pix Máq     | table    | Mesa 17
+1067   | #1497 | 03/10/2026 20:02:03 |      68.00 | Pix Máq     | delivery | João Carlos
+1072   | #1501 | 03/10/2026 20:21:19 |      70.00 | Pix Máq     | delivery | Janaina Conrado
+1085   | #1517 | 03/10/2026 21:57:51 |      10.00 | Débito      | counter  | Bruna Tamanini Barcelos
+1098   | #1511 | 03/10/2026 22:46:47 |      72.00 | Crédito     | delivery | Bruna Tamanini Barcelos
+1102   | #1524 | 04/10/2026 18:59:51 |     125.00 | Crédito     | table    | Mesa 06
+1103   | #1525 | 04/10/2026 19:19:24 |      49.00 | Pix Máq     | delivery | Alessandro Junior de Quadros
+1111   | #1536 | 04/10/2026 21:32:25 |      52.00 | Débito      | counter  | Patricia Pizezdzieck Da Silva
+1112   | #1535 | 04/10/2026 21:33:28 |      77.00 | Pix Máq     | table    | Mesa 17
+1113   | #1533 | 04/10/2026 21:35:15 |     144.00 | Débito      | table    | Mesa 21
+1118   | #1543 | 04/10/2026 22:58:23 |      19.00 | Crédito     | counter  | Jutaí Estrázulas
+1121   | #1532 | 04/10/2026 23:21:44 |      29.00 | Pix Máq     | delivery | Daiana Alzerina Lisboa
+1124   | #1531 | 04/10/2026 23:22:05 |      99.00 | Pix Máq     | delivery | Sidnei Stinghen
+1126   | #1548 | 05/10/2026 19:01:48 |      58.00 | Pix Máq     | delivery | Gabriel Da Silva
+1127   | #1549 | 05/10/2026 19:02:00 |      94.00 | Pix Máq     | delivery | Amauri Pedro Do Nascimento
+1131   | #1550 | 05/10/2026 20:01:19 |     129.00 | Crédito     | table    | Mesa 19
+1137   | #1554 | 05/10/2026 21:50:02 |      90.00 | Pix Máq     | delivery | Yasmin Kuhnen
+1139   | #1559 | 05/10/2026 22:22:55 |      49.00 | Pix Máq     | delivery | Marcelo
+1142   | #1565 | 07/10/2026 19:41:49 |      57.00 | Débito      | counter  | Paulo
+1143   | #1562 | 07/10/2026 19:42:03 |      38.00 | Débito      | table    | Mesa 01
+1144   | #1567 | 07/10/2026 19:55:02 |      43.00 | Pix Máq     | delivery | Amilton
+1145   | #1568 | 07/10/2026 19:55:34 |      68.00 | Pix Máq     | delivery | João Carlos
+1153   | #1576 | 07/10/2026 22:25:45 |      81.00 | Pix Máq     | counter  | Jaqueline Anastácio
+1162   | #1586 | 08/10/2026 20:27:33 |      92.00 | Pix Máq     | delivery | Cristiane Goncalves Dos Santos
+1165   | #1588 | 08/10/2026 20:32:19 |      48.00 | Pix Máq     | delivery | Vilmar Santos
+1167   | #1591 | 08/10/2026 22:29:09 |      20.00 | Pix Máq     | delivery | Marco Antônio Ottaiano Furtado
+1168   | #1583 | 08/10/2026 22:29:55 |      57.00 | Débito      | delivery | Flavio Ferreira Abade
+1170   | #1590 | 08/10/2026 22:29:55 |     136.00 | Débito      | delivery | Quézia Vitória
+1176   | #1598 | 09/10/2026 18:46:36 |      55.00 | Pix Máq     | delivery | Rubens Schier
+1187   | #1610 | 09/10/2026 20:56:31 |     111.00 | Débito      | counter  | Edevaldo Luis Tironi
+1188   | #1615 | 09/10/2026 21:00:33 |      72.00 | Pix Máq     | delivery | Joice Luiza Correa
+1192   | #1618 | 09/10/2026 21:25:33 |      43.00 | Pix Máq     | delivery | Cristiane Maria Maia
+1193   | #1619 | 09/10/2026 21:29:58 |      15.00 | Pix Máq     | counter  | Joice Luiza Correa
+1194   | #1617 | 09/10/2026 21:30:39 |      67.00 | Pix Máq     | counter  | Bruno
+1199   | #1614 | 09/10/2026 21:31:25 |      45.00 | Pix Máq     | delivery | Neuza
+1204   | #1625 | 10/10/2026 18:10:52 |      43.00 | Pix Máq     | delivery | Ednisia Lamor De Borba Miguel
+1206   | #1632 | 10/10/2026 18:26:55 |      96.00 | Pix Máq     | delivery | Janaina Conrado
+1207   | #1631 | 10/10/2026 18:32:48 |      69.00 | Pix Máq     | delivery | Patricia Do Nascimento
+1211   | #1640 | 10/10/2026 19:01:20 |     131.00 | Pix Máq     | delivery | João Carlos
+1212   | #1638 | 10/10/2026 19:02:13 |     114.00 | Pix Máq     | delivery | Andréa Proença Pereira
+1215   | #1642 | 10/10/2026 19:37:02 |      63.00 | Pix Máq     | delivery | Jane Marisa
+1225   | #1657 | 10/10/2026 20:26:29 |      91.00 | Pix Máq     | counter  | André de Jesus
+1227   | #1649 | 10/10/2026 20:34:47 |     365.00 | Débito      | table    | Mesa 03
+1231   | #1665 | 10/10/2026 20:48:57 |      53.00 | Pix Máq     | delivery | Patricia Buss
+1235   | #1666 | 10/10/2026 21:01:04 |      31.00 | Pix Máq     | delivery | Madiel Medeiros
+1242   | #1676 | 10/10/2026 21:34:11 |       9.00 | Pix Máq     | counter  | Gael
+1248   | #1682 | 10/10/2026 22:16:00 |      93.00 | Crédito     | counter  | Lourenço
+1249   | #1679 | 10/10/2026 22:17:16 |      42.00 | Crédito     | delivery | Cleia
+1251   | #1671 | 10/10/2026 22:19:04 |     187.00 | Débito      | table    | Mesa 15
+1254   | #1651 | 10/10/2026 22:20:31 |      42.00 | Crédito     | delivery | Lucas
+1256   | #1674 | 10/10/2026 22:20:31 |     106.00 | Crédito     | delivery | Michele Carvalho
+1264   | #1693 | 11/10/2026 19:13:32 |     142.00 | Pix Máq     | delivery | Lidia Mara Jesuino
+1265   | #1692 | 11/10/2026 19:13:41 |      54.00 | Pix Máq     | delivery | Patricia Pizezdzieck Da Silva
+1271   | #1703 | 11/10/2026 20:20:39 |      57.00 | Débito      | counter  | José
+1272   | #1705 | 11/10/2026 20:27:24 |      81.00 | Pix Máq     | delivery | Dirceu
+1281   | #1708 | 11/10/2026 20:56:02 |      75.00 | Pix Máq     | counter  | Hemelly Timm de Oliveira
+1284   | #1712 | 11/10/2026 21:14:48 |      38.00 | Débito      | counter  | Osmar
+1285   | #1714 | 11/10/2026 21:16:23 |      12.00 | Débito      | counter  | Patricia Pizezdzieck Da Silva
+1292   | #1711 | 11/10/2026 22:00:46 |      82.00 | Crédito     | table    | Mesa 16
+1294   | #1713 | 11/10/2026 22:01:24 |     143.00 | Crédito     | table    | Mesa 14
+1304   | #1727 | 16/10/2026 18:51:25 |      71.00 | Pix Máq     | delivery | Jane Marisa
+1308   | #1730 | 16/10/2026 19:49:27 |      63.00 | Pix Máq     | delivery | Margarida Bolduann
+1314   | #1740 | 16/10/2026 20:39:21 |      45.00 | Pix Máq     | delivery | Maria Inês de Oliveira
+1316   | #1743 | 16/10/2026 20:52:16 |      73.00 | Pix Máq     | delivery | Andre Gustavo Werner
+1322   | #1748 | 16/10/2026 21:33:42 |     109.00 | Pix Máq     | delivery | Janaina Conrado
+1324   | #1731 | 16/10/2026 21:42:33 |      97.50 | Débito      | table    | Mesa 17
+1325   | #1731 | 16/10/2026 21:42:33 |      97.50 | Débito      | table    | Mesa 17
+1329   | #1741 | 16/10/2026 21:58:27 |      80.00 | Débito      | delivery | Pamela Fernandes Silva Diel
+1328   | #1737 | 16/10/2026 21:58:27 |      99.00 | Crédito     | delivery | Andriele Stoebel
+1330   | #1749 | 16/10/2026 22:07:09 |      76.00 | Pix Máq     | counter  | Elionai
+1336   | #1765 | 17/10/2026 19:24:45 |      43.00 | Débito      | counter  | Carlos Nazareno Sperendio
+1341   | #1766 | 17/10/2026 19:54:43 |     129.00 | Pix Máq     | delivery | Silvana Stolf
+1342   | #1772 | 17/10/2026 20:01:25 |      55.50 | Pix Máq     | delivery | Vanessa Nicole Brisuela
+1343   | #1773 | 17/10/2026 20:01:42 |      88.00 | Pix Máq     | delivery | Gabriela Francener
+1347   | #1775 | 17/10/2026 20:10:45 |     122.00 | Pix Máq     | delivery | Michele Machado Carvalho
+1358   | #1785 | 17/10/2026 21:48:46 |      42.00 | Pix Máq     | delivery | Joice Luiza Correa
+1360   | #1784 | 17/10/2026 21:53:40 |      42.00 | Débito      | table    | Mesa 14
+1359   | #1784 | 17/10/2026 21:53:40 |      42.00 | Crédito     | table    | Mesa 14
+1367   | #1764 | 17/10/2026 22:50:19 |      42.00 | Débito      | table    | Mesa 05
+1372   | #1800 | 18/10/2026 19:28:51 |      75.00 | Pix Máq     | table    | Mesa 19
+1382   | #1803 | 18/10/2026 21:31:25 |      96.00 | Pix Máq     | counter  | Bruno
+1384   | #1814 | 18/10/2026 21:50:54 |      86.00 | Pix Máq     | delivery | Cristiane Goncalves Dos Santos
+1388   | #1818 | 18/10/2026 22:15:46 |      73.00 | Pix Máq     | delivery | Ariadni Talia Golembiewski Da Silva
+1392   | #1815 | 18/10/2026 23:17:52 |      43.00 | Débito      | delivery | Bruno Luis Pereira
+1394   | #1822 | 19/10/2026 18:42:19 |     122.00 | Pix Máq     | delivery | Amauri Pedro Do Nascimento
+1395   | #1821 | 19/10/2026 18:43:35 |      21.00 | Pix Máq     | counter  | Mari
+1396   | #1823 | 19/10/2026 18:53:08 |      43.00 | Pix Máq     | delivery | Ednisia Lamor De Borba Miguel
+1399   | #1828 | 19/10/2026 20:05:43 |      67.00 | Pix Máq     | delivery | Janaice De Souza
+1401   | #1830 | 19/10/2026 20:58:58 |      98.00 | Pix Máq     | delivery | Jenifer Carolini De Souza
+1410   | #1838 | 19/10/2026 23:20:18 |     182.00 | Pix Máq     | table    | Mesa 13
+1412   | #1837 | 19/10/2026 23:20:43 |     318.00 | Pix Máq     | table    | Mesa 17
+1413   | #1839 | 21/10/2026 18:50:51 |      61.00 | Pix Máq     | table    | Mesa 20
+1415   | #1844 | 21/10/2026 19:25:58 |      24.00 | Pix Máq     | delivery | Paula Trindade Cavalcanti
+1416   | #1844 | 21/10/2026 19:26:13 |      24.00 | Pix Máq     | delivery | Paula Trindade Cavalcanti
+1438   | #1868 | 22/10/2026 19:57:01 |      96.50 | Pix Máq     | delivery | Claudinei Bellarmino
+1446   | #1860 | 22/10/2026 21:44:59 |      42.00 | Crédito     | delivery | Davi Borba

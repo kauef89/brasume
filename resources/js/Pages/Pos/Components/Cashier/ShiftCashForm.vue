@@ -18,6 +18,16 @@
                         {{ isOpenMode ? 'Informe as cédulas e moedas do fundo de troco.' : 'Realize a contagem do dinheiro físico presente na gaveta.' }}
                     </p>
                 </div>
+                <button
+                    v-if="hasValues"
+                    type="button"
+                    @click="resetForm"
+                    class="ml-auto px-3 py-1.5 rounded-xl bg-surface-1 hover:bg-danger-500/10 text-surface-muted hover:text-danger-500 text-xs font-bold transition-all flex items-center gap-1.5 border border-surface-border/50 cursor-pointer outline-none"
+                    title="Zerar contagem atual"
+                >
+                    <i class="pi pi-refresh text-[10px]"></i>
+                    <span>Zerar</span>
+                </button>
             </div>
 
             <!-- AVISO DE CONTAGEM CEGA (APENAS FECHAMENTO EM MODO FUNCIONÁRIO) -->
@@ -202,11 +212,44 @@ const emit = defineEmits(['update:data', 'submit']);
 
 const isOpenMode = computed(() => props.mode === 'open');
 
-const simpleTotal = ref(0);
-const retainedCoins = ref(0);
+const storageKey = computed(() => `pos_shift_cash_${props.mode}`);
+
+const loadPersistedData = () => {
+    try {
+        const raw = localStorage.getItem(`pos_shift_cash_${props.mode}`);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch (e) {
+        return null;
+    }
+};
+
+const initialSaved = loadPersistedData();
+
+const simpleTotal = ref(initialSaved?.simpleTotal ?? 0);
+const retainedCoins = ref(initialSaved?.retainedCoins ?? 0);
 const counts = ref({
     b200: null, b100: null, b50: null, b20: null, b10: null, b5: null, b2: null,
-    c1: null, c50: null, c25: null, c10: null, c5: null
+    c1: null, c50: null, c25: null, c10: null, c5: null,
+    ...(initialSaved?.counts || {})
+});
+
+const hasValues = computed(() => {
+    if (props.companySettings.cash_opening_mode === 'total') {
+        return Number(simpleTotal.value) > 0 || Number(retainedCoins.value) > 0;
+    }
+    return Object.values(counts.value).some(v => v !== null && v > 0);
+});
+
+watch(() => props.mode, () => {
+    const saved = loadPersistedData();
+    simpleTotal.value = saved?.simpleTotal ?? 0;
+    retainedCoins.value = saved?.retainedCoins ?? 0;
+    counts.value = {
+        b200: null, b100: null, b50: null, b20: null, b10: null, b5: null, b2: null,
+        c1: null, c50: null, c25: null, c10: null, c5: null,
+        ...(saved?.counts || {})
+    };
 });
 
 // Reseta o form: chamável do componente pai
@@ -216,6 +259,9 @@ const resetForm = () => {
     Object.keys(counts.value).forEach(key => {
         counts.value[key] = null;
     });
+    try {
+        localStorage.removeItem(storageKey.value);
+    } catch (e) {}
 };
 
 defineExpose({
@@ -293,6 +339,13 @@ const isConfirmDisabled = computed(() => {
 
 // Sincroniza em tempo real com o painel lateral da direita
 watch([counts, simpleTotal, retainedCoins, calculatedTotal, coinsTotal, isConfirmDisabled], () => {
+    try {
+        localStorage.setItem(storageKey.value, JSON.stringify({
+            counts: counts.value,
+            simpleTotal: simpleTotal.value,
+            retainedCoins: retainedCoins.value
+        }));
+    } catch (e) {}
     const isDetailed = props.companySettings.cash_opening_mode !== 'total';
     const finalAmount = isDetailed ? calculatedTotal.value : Number(simpleTotal.value || 0);
 

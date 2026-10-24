@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Models\AcquirerTransaction;
 
 class Order extends Model
 {
@@ -270,5 +271,10 @@ class Order extends Model
     public function cashShift(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(CashShift::class, 'cash_shift_id');
+    }
+
+    public function acquirerTransactions(): HasMany
+    {
+        return $this->hasMany(AcquirerTransaction::class);
     }
 }

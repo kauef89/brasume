@@ -117,7 +117,12 @@ class ShiftAttendanceService
 
         $syncData = [];
         foreach ($attendees as $att) {
-            $userId = $att['user_id'] ?? $att['id'] ?? null;
+            if (is_numeric($att)) {
+                $userId = (int) $att;
+                $att = ['user_id' => $userId];
+            } else {
+                $userId = $att['user_id'] ?? $att['id'] ?? null;
+            }
             if (!$userId) continue;
 
             $existing = $currentAttendees->get($userId);

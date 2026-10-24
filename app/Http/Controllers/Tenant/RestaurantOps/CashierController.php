@@ -107,6 +107,11 @@ class CashierController extends Controller
             return back()->withErrors(['error' => $msg, 'shift' => $msg]);
         }
 
+        // 3. Sincronização da Equipa no Fecho
+        if ($request->filled('attendees')) {
+            $attendanceService->syncShiftAttendees($request->input('attendees'), $shift);
+        }
+
         // 4. Execução do fechamento
         try {
             $operator = $this->getOperator();

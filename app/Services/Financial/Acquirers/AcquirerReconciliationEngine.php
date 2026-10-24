@@ -3,12 +3,9 @@
 namespace App\Services\Financial\Acquirers;
 
 use App\Enums\AcquirerMatchStatus;
-use App\Enums\PaymentEngineType;
 use App\Models\Device;
 use App\Models\Payment;
 use App\Models\Order;
-use App\Models\CashShift;
-use App\Models\PaymentMethod;
 use App\Models\AccountReceivable;
 use App\Models\AcquirerTransaction;
 use Illuminate\Support\Collection;
@@ -34,9 +31,10 @@ class AcquirerReconciliationEngine
             ->get()
             ->keyBy('terminal_code');
 
+        $matchedPaymentIdsThisRun = [];
+
         foreach ($transactions as $dto) {
             /** @var AcquirerTransactionDTO $dto */
-
             $device = $devicesByCode->get($dto->terminalCode);
 
             $acquirerTx = AcquirerTransaction::firstOrCreate(
@@ -66,7 +64,7 @@ class AcquirerReconciliationEngine
                 continue;
             }
 
-            $scored = $this->findCandidatesFor($acquirerTx);
+            $scored = $this->findCandidatesFor($acquirerTx, $matchedPaymentIdsThisRun);
 
             if ($scored->isEmpty()) {
                 $acquirerTx->update(['status' => AcquirerMatchStatus::ORPHAN]);
@@ -78,7 +76,13 @@ class AcquirerReconciliationEngine
             $secondCandidate = $scored->get(1);
 
             $isTied = $secondCandidate && ($topCandidate['score'] - $secondCandidate['score']) < 15;
-            if ($scored->count() > 1 && $isTied) {
+
+            // 🚀 DESEMPATE INTELIGENTE: Se empatou, mas todos os candidatos são do MESMO PEDIDO (racha de conta),
+            // não é ambíguo! Associa ao primeiro pagamento disponível daquela comanda.
+            $uniqueOrderIds = $scored->pluck('order.id')->unique()->filter();
+            $isSameOrderTie = $uniqueOrderIds->count() === 1;
+
+            if ($scored->count() > 1 && $isTied && ! $isSameOrderTie) {
                 $acquirerTx->update([
                     'status' => AcquirerMatchStatus::AMBIGUOUS,
                     'notes'  => "Encontrados {$scored->count()} pedidos com valor idêntico no mesmo horário. Requer confirmação manual.",
@@ -87,11 +91,14 @@ class AcquirerReconciliationEngine
                 continue;
             }
 
+            // Casa com o candidato eleito
+            /** @var Payment $matchedPayment */
             $matchedPayment = $topCandidate['payment'];
+            $order = $topCandidate['order'];
+            $matchedPaymentIdsThisRun[] = $matchedPayment->id;
 
-            DB::transaction(function () use ($dto, $matchedPayment, $acquirerTx, $device) {
-                $order = $matchedPayment->order;
-                $deviceName = $device ? "{$device->name} ({$dto->terminalCode})" : "Terminal {$dto->terminalCode}";
+            DB::transaction(function () use ($acquirerTx, $matchedPayment, $order, $dto, $device) {
+                $deviceName = $device?->name ?? 'Maquininha';
                 $desc = "Repasse " . strtoupper($dto->acquirerName) . " - " . strtoupper($dto->modality) . " (NSU {$dto->nsu} | {$deviceName})";
 
                 $receivable = AccountReceivable::create([
@@ -128,32 +135,31 @@ class AcquirerReconciliationEngine
     }
 
     /**
-     * Localiza e pontua pedidos candidatos para uma transação da maquininha.
+     * Encontra e pontua candidatos a pagamento para uma transação de maquininha.
      */
-    public function findCandidatesFor(AcquirerTransaction $acquirerTx): Collection
+    public function findCandidatesFor(AcquirerTransaction $acquirerTx, array $excludePaymentIds = []): Collection
     {
         $windowStart = $acquirerTx->transaction_date->copy()->subMinutes(25);
         $windowEnd   = $acquirerTx->transaction_date->copy()->addMinutes(25);
 
-        // Busca pagamentos de mesmo valor na janela de tempo
-        $candidates = Payment::query()
+        // 1. Busca na janela de tolerância de 25 minutos
+        $query = Payment::query()
             ->with(['order.deliveryAddress', 'order.customer', 'paymentMethod'])
             ->where('amount', $acquirerTx->gross_amount)
             ->whereBetween('created_at', [$windowStart, $windowEnd])
-            ->whereDoesntHave('order.accountReceivables', function ($q) use ($acquirerTx) {
-                $q->where('description', 'like', "%NSU {$acquirerTx->nsu}%");
-            })
-            ->get();
+            ->whereDoesntHave('acquirerTransaction')
+            ->when(!empty($excludePaymentIds), fn ($q) => $q->whereNotIn('id', $excludePaymentIds));
 
-        // Se não encontrar na janela de 25 min, busca em todo o dia
+        $candidates = $query->get();
+
+        // 2. Fallback: se não achar na janela imediata, busca em todo o dia
         if ($candidates->isEmpty()) {
             $candidates = Payment::query()
                 ->with(['order.deliveryAddress', 'order.customer', 'paymentMethod'])
                 ->where('amount', $acquirerTx->gross_amount)
                 ->whereDate('created_at', $acquirerTx->transaction_date->toDateString())
-                ->whereDoesntHave('order.accountReceivables', function ($q) use ($acquirerTx) {
-                    $q->where('description', 'like', "%NSU {$acquirerTx->nsu}%");
-                })
+                ->whereDoesntHave('acquirerTransaction')
+                ->when(!empty($excludePaymentIds), fn ($q) => $q->whereNotIn('id', $excludePaymentIds))
                 ->get();
         }
 
@@ -179,37 +185,31 @@ class AcquirerReconciliationEngine
             $diffSeconds = abs($acquirerTx->transaction_date->diffInSeconds($payment->created_at));
             if ($diffSeconds <= 120) {
                 $score += 30;
-            } elseif ($diffSeconds <= 300) {
+            } elseif ($diffSeconds <= 600) {
                 $score += 20;
-            } elseif ($diffSeconds <= 900) {
+            } elseif ($diffSeconds <= 1800) {
                 $score += 10;
             }
 
             return [
                 'payment' => $payment,
                 'order'   => $order,
-                'score'   => min($score, 100),
+                'score'   => $score,
             ];
         })->sortByDesc('score')->values();
     }
 
-    /**
-     * Vincula manualmente uma transação a um pedido específico.
-     */
     public function linkManually(AcquirerTransaction $acquirerTx, Order $order, ?Payment $payment = null): void
     {
         DB::transaction(function () use ($acquirerTx, $order, $payment) {
             $device = $acquirerTx->device;
-            $deviceName = $device ? "{$device->name} ({$acquirerTx->terminal_code})" : "Terminal {$acquirerTx->terminal_code}";
+            $deviceName = $device?->name ?? 'Maquininha';
             $desc = "Repasse " . strtoupper($acquirerTx->acquirer_name) . " - " . strtoupper($acquirerTx->modality) . " (NSU {$acquirerTx->nsu} | {$deviceName})";
-
-            $destinationAccountId = $payment?->paymentMethod?->destination_account_id
-                ?? BankAccount::first()?->id;
 
             $receivable = AccountReceivable::create([
                 'order_id'        => $order->id,
                 'customer_id'     => $order->customer_id,
-                'bank_account_id' => $destinationAccountId,
+                'bank_account_id' => $payment?->paymentMethod?->destination_account_id,
                 'description'     => $desc,
                 'gross_amount'    => $acquirerTx->gross_amount,
                 'fee_amount'      => $acquirerTx->fee_amount,
@@ -228,42 +228,37 @@ class AcquirerReconciliationEngine
         });
     }
 
-    /**
-     * Cria um pedido retroativo de balcão quando a venda ocorreu na maquininha sem registro no caixa.
-     */
     public function createRetroactiveOrder(AcquirerTransaction $acquirerTx, ?string $observation = null): Order
     {
         return DB::transaction(function () use ($acquirerTx, $observation) {
-            $shift = CashShift::where('status', 'open')->latest()->first()
-                ?? CashShift::whereDate('opened_at', $acquirerTx->transaction_date->toDateString())->latest()->first()
-                ?? CashShift::latest()->first();
-
-            $method = PaymentMethod::where('engine_type', PaymentEngineType::SMART_POS)
-                ->orWhere('engine_type', PaymentEngineType::POS_MANUAL)
-                ->first();
+            $notes = "Venda retroativa criada via conciliação de maquininha (NSU {$acquirerTx->nsu}).";
+            if ($observation) {
+                $notes .= " Obs: {$observation}";
+            }
 
             $order = Order::create([
                 'type'           => 'counter',
-                'status'         => 'closed',
+                'source'         => Order::SOURCE_CASHIER,
+                'status'         => 'delivered',
                 'payment_status' => 'paid',
-                'customer_name'  => 'Venda Maquininha (Consumidor)',
-                'subtotal'       => $acquirerTx->gross_amount,
                 'total'          => $acquirerTx->gross_amount,
-                'cash_shift_id'  => $shift?->id,
-                'notes'          => $observation ?: "Lançamento avulso gerado pela auditoria da maquininha (NSU {$acquirerTx->nsu})",
+                'subtotal'       => $acquirerTx->gross_amount,
+                'notes'          => $notes,
                 'created_at'     => $acquirerTx->transaction_date,
-                'closed_at'      => $acquirerTx->transaction_date,
+                'updated_at'     => $acquirerTx->transaction_date,
             ]);
+
+            $paymentMethod = PaymentMethod::where('engine_type', 'pos_card')->first()
+                ?? PaymentMethod::where('name', 'like', '%cart%')->first();
 
             $payment = Payment::create([
                 'order_id'          => $order->id,
-                'cash_shift_id'     => $shift?->id,
-                'payment_method_id' => $method?->id,
+                'payment_method_id' => $paymentMethod?->id,
                 'amount'            => $acquirerTx->gross_amount,
-                'method'            => strtoupper("{$acquirerTx->modality} {$acquirerTx->brand}"),
+                'status'            => 'completed',
                 'is_paid'           => true,
-                'status'            => 'paid',
                 'created_at'        => $acquirerTx->transaction_date,
+                'updated_at'        => $acquirerTx->transaction_date,
             ]);
 
             $this->linkManually($acquirerTx, $order, $payment);
@@ -272,14 +267,11 @@ class AcquirerReconciliationEngine
         });
     }
 
-    /**
-     * Marca uma transação para ser ignorada na auditoria.
-     */
-    public function ignore(AcquirerTransaction $acquirerTx, ?string $reason = null): void
+    public function ignore(AcquirerTransaction $acquirerTx): void
     {
         $acquirerTx->update([
             'status' => AcquirerMatchStatus::IGNORED,
-            'notes'  => $reason ?: 'Transação ignorada pelo operador.',
+            'notes'  => 'Marcado como ignorado pelo operador.',
         ]);
     }
 }

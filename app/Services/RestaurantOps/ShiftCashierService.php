@@ -92,9 +92,10 @@ class ShiftCashierService
         }
 
         // 2. Verificação de comandas pendentes de pagamento
-        $blockingOrders = Order::whereNotIn('status', ['closed', 'cancelled'])
+        $blockingOrders = Order::where('cash_shift_id', CashShift::where('status', 'open')->latest('id')->value('id'))
+            ->whereNotIn('status', ['closed', 'cancelled'])
             ->whereHas('items', fn ($iq) => $iq->where('status', '!=', 'cancelled'))
-            ->where(fn ($q) => $q->where('payment_status', '!=', 'paid')->orWhere('total', '>', 0.01))
+            ->where('payment_status', '!=', 'paid')
             ->get();
 
         if ($blockingOrders->isNotEmpty()) {

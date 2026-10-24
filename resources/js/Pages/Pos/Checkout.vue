@@ -249,12 +249,25 @@ const checkoutPrintMode = computed(() => props.companySettings?.checkout_print_m
 const isPostPaymentPhase = ref(false);
 
 watch(
-    () => [liveOrder.value?.payment_status, liveOrder.value?.status, liveOrder.value?.total, liveOrder.value?.paid_amount],
-    ([payStatus, orderStatus, totalStr, paidStr]) => {
+    () => [
+        liveOrder.value?.payment_status,
+        liveOrder.value?.status,
+        liveOrder.value?.total,
+        liveOrder.value?.total_paid,
+        liveOrder.value?.payments
+    ],
+    ([payStatus, orderStatus, totalStr, totalPaidVal, paymentsList]) => {
         const orderTotal = Number(totalStr || 0);
-        const orderPaid = Number(paidStr || 0);
 
-        if (orderStatus === 'closed' || orderStatus === 'cancelled' || (payStatus === 'paid' && orderPaid >= orderTotal - 0.01)) {
+        // Calcula o total pago através do total_paid ou pela soma dos pagamentos efetuados
+        const calcPaid = totalPaidVal !== undefined && totalPaidVal !== null
+            ? Number(totalPaidVal)
+            : (Array.isArray(paymentsList) ? paymentsList.filter(p => p.status !== 'cancelled').reduce((acc, p) => acc + Number(p.amount || 0), 0) : 0);
+
+        const isFullyPaid = payStatus === 'paid' || (calcPaid >= orderTotal - 0.05 && orderTotal > 0);
+        const isClosedOrFinal = ['closed', 'completed', 'delivered'].includes(orderStatus);
+
+        if (isClosedOrFinal || isFullyPaid) {
             isPostPaymentPhase.value = true;
         } else {
             isPostPaymentPhase.value = false;

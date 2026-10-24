@@ -48,6 +48,11 @@ class CashShift extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
     public function getDifferenceAttribute(): float
     {
         if ($this->status === 'open' || is_null($this->closing_balance_expected) || is_null($this->closing_balance_actual)) {

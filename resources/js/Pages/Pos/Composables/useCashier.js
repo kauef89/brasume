@@ -224,14 +224,24 @@ export function useCashier(props, { onShiftStaged } = {}) {
         const endpoint = isClosing ? route('operations.cashier.close') : route('operations.cashier.open');
 
         router.post(endpoint, finalPayload, {
-            preserveState: isClosing,
+            preserveState: true,
+            preserveScroll: true,
             onSuccess: () => {
                 isShiftModalVisible.value = false;
                 pendingShiftPayload.value = null;
 
+                try {
+                    localStorage.removeItem('pos_shift_cash_open');
+                    localStorage.removeItem('pos_shift_cash_close');
+                    localStorage.removeItem('pos_shift_obs_open');
+                    localStorage.removeItem('pos_shift_obs_close');
+                } catch (e) {}
+
                 if (isClosing) {
                     toast.add({ severity: 'success', summary: 'Turno Fechado', detail: 'O turno foi encerrado com sucesso!', life: 4000 });
                     isLogoutPromptVisible.value = true;
+                } else {
+                    toast.add({ severity: 'success', summary: 'Caixa Aberto', detail: 'Turno aberto com sucesso!', life: 4000 });
                 }
             },
             onError: (e) => {

@@ -106,8 +106,28 @@ const emit = defineEmits(['confirm', 'cancel', 'back-to-attendance']);
 const confirm = useConfirm();
 
 const isOpenMode = computed(() => props.mode === 'open');
-const observation = ref('');
+const storageObsKey = computed(() => `pos_shift_obs_${props.mode}`);
+
+const getInitialObs = () => {
+    try {
+        return localStorage.getItem(`pos_shift_obs_${props.mode}`) || '';
+    } catch (e) {
+        return '';
+    }
+};
+
+const observation = ref(getInitialObs());
 const isConfirming = ref(false);
+
+watch(() => props.mode, () => {
+    observation.value = getInitialObs();
+});
+
+watch(observation, (newVal) => {
+    try {
+        localStorage.setItem(storageObsKey.value, newVal || '');
+    } catch (e) {}
+});
 
 const formatMoney = (val) => Number(val || 0).toFixed(2).replace('.', ',');
 
