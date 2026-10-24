@@ -4,7 +4,7 @@
         class="relative overflow-hidden p-option group w-full rounded-2xl transition-all duration-300 shrink-0 flex flex-col justify-center cursor-pointer outline-none p-3.5 border"
         :class="[
             isWaitingPix
-                ? 'border-warning-500/80 bg-warning-500/10 shadow-lg shadow-warning-500/10 ring-2 ring-warning-500/40 hover:bg-warning-500/15 animate-pulse'
+                ? 'border-warning-500/80 bg-warning-500/10 shadow-warning-500/10 ring-2 ring-warning-500/40 hover:bg-warning-500/15 animate-pulse'
                 : (isPaymentUndefined && !isTeamMode ? 'bg-warning-500/10 border-warning-500/40 hover:bg-warning-500/20' : 'border-transparent bg-surface-2 hover:bg-surface-3'),
             isHighlighted ? 'ring-4 ring-purple-500 z-10 scale-[1.02] animate-pulse' : ''
         ]"
@@ -67,17 +67,17 @@
                     <div class="flex items-center gap-1.5 shrink-0 max-w-[50%] truncate justify-end">
 
                         <!-- 0. AGUARDANDO PIX -->
-                        <span v-if="isWaitingPix" class="text-[9px] font-black uppercase tracking-wider text-warning-400 bg-warning-500/20 px-2 py-0.5 rounded border border-warning-500/40 shadow-sm flex items-center gap-1 animate-pulse" title="Aguardando confirmação do Pix">
-                            <i class="pi pi-clock text-[8px]"></i> Aguardando Pix
+                        <span v-if="isWaitingPix" class="text-[9px] font-black uppercase tracking-wider text-warning-400 bg-warning-500/20 px-2 py-0.5 rounded border border-warning-500/40  flex items-center gap-1 animate-pulse" title="Aguardando confirmação do Pix">
+                            <i class="pi pi-hourglass text-[8px]"></i> Pix
                         </span>
 
                         <!-- 1. PAGO 100% -->
-                        <span v-else-if="isPaid" class="text-[9px] font-black uppercase tracking-widest text-green-700 dark:text-green-300 bg-green-500/20 px-2 py-0.5 rounded border border-green-500/30 shadow-sm flex items-center gap-1">
+                        <span v-else-if="isPaid" class="text-[9px] font-black uppercase tracking-widest text-green-700 dark:text-green-300 bg-green-500/20 px-2 py-0.5 rounded border border-green-500/30  flex items-center gap-1">
                             <i class="pi pi-check text-[8px]"></i> Pago
                         </span>
 
                         <!-- 2. NÃO DEFINIDO -->
-                        <span v-else-if="isPaymentUndefined" class="text-[9px] font-black uppercase tracking-widest text-warning-700 dark:text-warning-300 bg-warning-500/20 px-2 py-0.5 rounded border border-warning-500/30 shadow-sm animate-pulse flex items-center gap-1">
+                        <span v-else-if="isPaymentUndefined" class="text-[9px] font-black uppercase tracking-widest text-warning-700 dark:text-warning-300 bg-warning-500/20 px-2 py-0.5 rounded border border-warning-500/30  animate-pulse flex items-center gap-1">
                             <i class="pi pi-exclamation-triangle text-[8px]"></i> Não Definido
                         </span>
 

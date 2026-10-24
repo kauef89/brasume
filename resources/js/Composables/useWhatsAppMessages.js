@@ -84,7 +84,7 @@ export function useWhatsAppMessages() {
     // 💬 Mensagem direta ao cliente: usa o primeiro nome
     const notifyDeliveryOut = (order) => {
         const name = getFirstName(order.customer_name || order.customer?.name);
-        const baseMsg = `Olá ${name}, o seu pedido #${formatNumber(order.id)} saiu para entrega e logo chegará até você! 🛵`;
+        const baseMsg = `${name}, o seu pedido #${formatNumber(order.id)} saiu para entrega e logo chegará até você! 🛵`;
         const fullMsg = `${baseMsg}${reviewInviteText.value}`;
         sendWhatsApp(order.customer?.phone || order.customer_phone, fullMsg);
     };
@@ -92,13 +92,30 @@ export function useWhatsAppMessages() {
     // 💬 Mensagem direta ao cliente: usa o primeiro nome
     const notifyPickupReady = (order) => {
         const name = getFirstName(order.customer_name || order.customer?.name);
-        const baseMsg = `Olá ${name}, o seu pedido #${formatNumber(order.id)} já está pronto e embalado! Pode vir retirar no balcão. 🍔`;
+        const baseMsg = `${name}, o seu pedido #${formatNumber(order.id)} já está pronto e embalado! Pode vir retirar no balcão. 🍔`;
         const fullMsg = `${baseMsg}${reviewInviteText.value}`;
         sendWhatsApp(order.customer?.phone || order.customer_phone, fullMsg);
+    };
+    // 💰 Envia a cobrança e o código PIX Copia e Cola para o cliente
+    const sendPixBilling = (order, amount, pixCode) => {
+        const name = getFirstName(order.customer_name || order.customer?.name);
+        const phone = order.customer_phone || order.customer?.phone;
+        
+        if (!phone) {
+            alert('Não há número de WhatsApp vinculado a este pedido.');
+            return false;
+        }
+
+        const formattedAmount = Number(amount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        
+        const msg = `Olá, ${name}!\n\nSegue o código PIX Copia e Cola para o pagamento do seu pedido #${formatNumber(order.id)} no valor de *${formattedAmount}*.\n\n*Cole o código abaixo no app do seu banco:*\n\n${pixCode}`;
+        
+        return sendWhatsApp(phone, msg);
     };
 
     return {
         hasSupport, abbreviateName, formatAddress, getFirstName, getTenantBaseUrl,
+        sendPixBilling,
         sendWhatsApp, openSupport, dispatchCourier, notifyDeliveryOut, notifyPickupReady
     };
 }

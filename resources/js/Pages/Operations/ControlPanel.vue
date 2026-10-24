@@ -349,6 +349,28 @@ const handleItemReprint = (item) => {
 };
 
 const handleKeydown = (e) => {
+    if (!props.isActive) return;
+
+    if (e.key === 'Escape') {
+        const activeTag = document.activeElement?.tagName;
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
+            document.activeElement.blur();
+            return;
+        }
+
+        if (isTransformerVisible.value) { isTransformerVisible.value = false; return; }
+        if (isPaymentModalVisible.value) { isPaymentModalVisible.value = false; return; }
+        if (isChangeAddressModalVisible.value) { isChangeAddressModalVisible.value = false; return; }
+        if (isTransferModalVisible.value) { isTransferModalVisible.value = false; return; }
+        if (contextMenuVisible.value) { contextMenuVisible.value = false; return; }
+
+        if (focusedOrderId.value) {
+            e.preventDefault();
+            focusedOrderId.value = null;
+            return;
+        }
+    }
+
     const activeTag = document.activeElement.tagName;
     if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
     if (e.key.toLowerCase() === 'n') {

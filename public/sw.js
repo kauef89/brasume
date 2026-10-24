@@ -71,22 +71,31 @@ self.addEventListener('fetch', (event) => {
 });
 
 // 📡 Notificação Push vinda do Servidor
+// 📡 Notificação Push vinda do Servidor (Anti-Spam & Branding)
 self.addEventListener('push', (event) => {
     if (!(self.Notification && self.Notification.permission === 'granted')) {
         return;
     }
 
-    const data = event.data ? event.data.json() : {};
-    const title = data.title || 'Atualização do Pedido';
+    const payload = event.data ? event.data.json() : {};
+    const title = payload.title || 'Atualização do Pedido';
+
+    // Resgata os metadados do payload suportando o wrapper do WebPushMessage
+    const customData = payload.data || {};
+    const actionUrl = customData.action_url || customData.url || payload.action_url || payload.url || '/customer/orders';
+    const tag = payload.tag || customData.tag || 'general-notification';
 
     const options = {
-        body: data.body || 'Seu pedido teve uma alteração.',
-        icon: data.icon || '/icon-192x192.png',
-        badge: data.badge || '/icon-192x192.png',
-        vibrate: [200, 100, 200, 100, 200, 100, 400],
+        body: payload.body || 'Seu pedido teve uma alteração.',
+        icon: payload.icon || '/icon-192x192.png',
+        badge: payload.badge || payload.icon || '/icon-192x192.png',
+        tag: tag, // 🚀 Substitui a notificação anterior do mesmo pedido, eliminando empilhamento de spam
+        renotify: true, // Avisa o usuário suavemente da mudança de status
+        vibrate: [100, 50, 100], // Padrão leve e discreto em conformidade com as diretrizes do Android
+        requireInteraction: false,
         data: {
-            // Preserva a rota específica do pedido vinda do backend
-            url: data.action_url || data.url || '/customer/orders'
+            url: actionUrl,
+            timestamp: Date.now()
         }
     };
 

@@ -510,9 +510,68 @@ const handleTabReset = (event) => {
 };
 
 const closeOrderDetails = () => { emit('close'); };
+// ⌨️ ATALHO ESC: Navegação em Cascata (Configurador -> Produtos -> Subcategoria -> Categorias)
+const handleKeydown = (e) => {
+    if (!props.isActive) return;
+
+    if (e.key === 'Escape') {
+        const activeEl = document.activeElement;
+        const activeTag = activeEl?.tagName;
+
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
+            if (activeEl && searchQuery.value) {
+                searchQuery.value = '';
+            }
+            activeEl.blur();
+            e.preventDefault();
+            return;
+        }
+
+        // 1. Fecha Configurador de Modificadores ou Combo Wizard
+        if (isModifiersVisible.value || isComboVisible.value) {
+            e.preventDefault();
+            closeConfigurators();
+            return;
+        }
+
+        // 2. Fecha modais ou visões laterais de pagamento/gestão
+        if (activeCartSidebarView.value === 'payment') {
+            e.preventDefault();
+            activeCartSidebarView.value = 'cart';
+            return;
+        }
+
+        if (isCategoryManagerActive.value) {
+            e.preventDefault();
+            isCategoryManagerActive.value = false;
+            return;
+        }
+
+        if (isFavoritesViewActive.value) {
+            e.preventDefault();
+            isFavoritesViewActive.value = false;
+            return;
+        }
+
+        // 3. Limpa pesquisa de produtos se ativa
+        if (searchQuery.value && searchQuery.value.trim() !== '') {
+            e.preventDefault();
+            searchQuery.value = '';
+            return;
+        }
+
+        // 4. Volta hierarquia de categorias (Subcategoria -> Categoria Pai -> Grid Raiz)
+        if (selectedCategory.value) {
+            e.preventDefault();
+            goBackCategory();
+            return;
+        }
+    }
+};
 
 onMounted(() => {
     isMounted.value = true;
+    window.addEventListener('keydown', handleKeydown);
     window.addEventListener('pos-tab-reset', handleTabReset);
     window.addEventListener('pos-append-to-order', handleAppendOrderEvent);
     window.addEventListener('pos-close-order-details', closeOrderDetails);
@@ -530,6 +589,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleKeydown);
     window.removeEventListener('pos-tab-reset', handleTabReset);
     window.removeEventListener('pos-append-to-order', handleAppendOrderEvent);
     window.removeEventListener('pos-close-order-details', closeOrderDetails);
@@ -544,7 +604,7 @@ onBeforeUnmount(() => {
 });
 
 const {
-    searchQuery, selectedCategory, breadcrumbs,
+    searchQuery, selectedCategory, breadcrumbs, goBackCategory,
     visibleGridCategories, shouldShowCategoryGrid, shouldShowProductGrid
 } = useMenuNavigation(() => props.initialCategories, () => props.initialProducts, settings);
 

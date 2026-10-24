@@ -122,8 +122,28 @@ const toast = useToast();
 
 const customerAddresses = computed(() => {
     if (!props.customer) return [];
-    const fresh = props.customers.find(c => c.id === props.customer.id);
-    return fresh?.addresses || props.customer.addresses || [];
+
+    const list = [];
+    const seen = new Set();
+    const addToList = (addr) => {
+        if (addr && addr.id && !seen.has(String(addr.id))) {
+            seen.add(String(addr.id));
+            list.push(addr);
+        }
+    };
+
+    // Prioridade 1: Endereços do cliente ativo no pedido
+    (props.customer.addresses || []).forEach(addToList);
+    if (props.customer.address) addToList(props.customer.address);
+
+    // Prioridade 2: Endereço selecionado na rota
+    if (props.address) addToList(props.address);
+
+    // Prioridade 3: Endereços da lista global de clientes
+    const fresh = props.customers?.find(c => c.id === props.customer.id);
+    (fresh?.addresses || []).forEach(addToList);
+
+    return list;
 });
 
 const activeAddresses = computed(() => {

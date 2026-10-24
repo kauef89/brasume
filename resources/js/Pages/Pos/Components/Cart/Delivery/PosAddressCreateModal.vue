@@ -317,11 +317,21 @@ const handleSubmit = () => {
         preserveState: true,
         preserveScroll: true,
         onSuccess: (page) => {
-            const created = page.props.flash?.createdAddress || {
+            const rawCreated = page.props.flash?.createdAddress || {
                 id: `temp_${Date.now()}`,
                 ...payload,
                 full_address: `${streetName}, ${payload.number}`
             };
+
+            const fee = Number(rawCreated.delivery_fee ?? rawCreated.neighborhood?.delivery_fee ?? detectedDeliveryFee.value ?? 0);
+            const created = {
+                ...rawCreated,
+                delivery_fee: fee,
+                neighborhood: rawCreated.neighborhood || detectedNeighborhoodName.value,
+                neighborhood_id: rawCreated.neighborhood_id || form.neighborhood_id,
+                full_address: rawCreated.full_address || `${streetName}, ${form.no_number ? 'S/N' : form.number}${form.complement ? ' - ' + form.complement : ''}`
+            };
+
             emit('success', created);
             close();
         },

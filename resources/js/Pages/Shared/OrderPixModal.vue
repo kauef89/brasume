@@ -66,15 +66,26 @@
                     />
                 </div>
 
-                <!-- Botão Copia e Cola -->
-                <button
-                    @click="copyCode"
-                    type="button"
-                    class="w-full h-11 rounded-xl bg-surface-2 hover:bg-surface-3 text-surface-text font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors border border-surface-border cursor-pointer outline-none"
-                >
-                    <i class="pi" :class="copied ? 'pi-check text-emerald-500' : 'pi-copy'"></i>
-                    <span>{{ copied ? 'Código Copiado!' : 'Copiar PIX Copia e Cola' }}</span>
-                </button>
+                                <!-- Botões de Ação (Copiar / WhatsApp) -->
+                <div class="w-full flex gap-2">
+                    <button
+                        @click="copyCode"
+                        type="button"
+                        class="flex-1 h-11 rounded-xl bg-surface-2 hover:bg-surface-3 text-surface-text font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors border border-surface-border cursor-pointer outline-none"
+                    >
+                        <i class="pi" :class="copied ? 'pi-check text-emerald-500' : 'pi-copy'"></i>
+                        <span>{{ copied ? 'Copiado!' : 'Copiar PIX' }}</span>
+                    </button>
+                    
+                    <button
+                        @click="shareViaWhatsApp"
+                        type="button"
+                        class="w-11 h-11 rounded-xl bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] border border-[#25D366]/30 flex items-center justify-center transition-colors cursor-pointer outline-none shrink-0"
+                        title="Enviar no WhatsApp do Cliente"
+                    >
+                        <i class="pi pi-whatsapp text-lg"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -97,6 +108,14 @@ import axios from 'axios';
 import QrcodeVue from 'qrcode.vue';
 import AdaptiveModal from '@/Components/UI/AdaptiveModal.vue';
 import { useTenantEcho } from '@/Composables/useTenantEcho';
+import { useWhatsAppMessages } from '@/Composables/useWhatsAppMessages';
+
+const { sendPixBilling } = useWhatsAppMessages();
+
+const shareViaWhatsApp = () => {
+    if (!qrCodeString.value || !props.order) return;
+    sendPixBilling(props.order, pixAmount.value, qrCodeString.value);
+};
 
 const props = defineProps({
     visible: Boolean,

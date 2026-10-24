@@ -179,7 +179,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch , onBeforeUnmount } from "vue";
 import { router, usePage } from "@inertiajs/vue3";
 import { useToast } from "primevue/usetoast";
 import Button from "primevue/button";
@@ -425,6 +425,26 @@ const canSubmitCheckout = computed(() => {
 });
 
 const handleManualClose = () => { emit('close'); };
+// ⌨️ ATALHO ESC: Fecha subpainéis ou retorna para o ControlPanel
+const handleKeydown = (e) => {
+    if (e.key === 'Escape') {
+        const activeEl = document.activeElement;
+        const activeTag = activeEl?.tagName;
+
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
+            activeEl.blur();
+            return;
+        }
+
+        if (isNewCustomerModalVisible.value) { isNewCustomerModalVisible.value = false; return; }
+        if (isLinkCustomerModalVisible.value) { isLinkCustomerModalVisible.value = false; return; }
+        if (isCouponModalVisible.value) { isCouponModalVisible.value = false; return; }
+        if (isReasonModalVisible.value) { isReasonModalVisible.value = false; return; }
+
+        e.preventDefault();
+        handleManualClose();
+    }
+};
 const handleAddPayment = (method) => { addPayment(method, toast); };
 
 const handleQuickAdd = (item) => {
@@ -539,7 +559,12 @@ const {
 
 onMounted(() => {
     isMounted.value = true;
+    window.addEventListener('keydown', handleKeydown);
     autoStagePayments(liveOrder.value, props.paymentMethods);
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleKeydown);
 });
 </script>
 

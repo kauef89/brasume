@@ -173,33 +173,34 @@ class KitchenDispatchService
     protected function sortItemsForKitchenProduction(Collection $items): Collection
     {
         return $items->sort(function ($a, $b) {
-            $catA = $a->product?->category;
-            $catB = $b->product?->category;
+            // 1. Prioridade: Cozinha / Praça de Produção
+            $kitchenA = $a->kitchen ?? $a->product?->kitchen;
+            $kitchenB = $b->kitchen ?? $b->product?->kitchen;
 
-            // 1. Ordem numérica da categoria (se configurada)
-            $orderA = $catA?->order ?? $catA?->sort_order ?? 999;
-            $orderB = $catB?->order ?? $catB?->sort_order ?? 999;
-            if ($orderA !== $orderB) {
-                return $orderA <=> $orderB;
+            $kitchenNameA = strtolower((string) ($kitchenA?->name ?? 'geral'));
+            $kitchenNameB = strtolower((string) ($kitchenB?->name ?? 'geral'));
+
+            if ($kitchenNameA !== $kitchenNameB) {
+                return strcmp($kitchenNameA, $kitchenNameB);
             }
 
-            // 2. Nome da categoria alfabético
-            $catNameA = $catA?->name ?? 'Geral';
-            $catNameB = $catB?->name ?? 'Geral';
-            $cmpCat = strcasecmp($catNameA, $catNameB);
-            if ($cmpCat !== 0) {
-                return $cmpCat;
+            // 2. Categoria do Produto
+            $catA = strtolower((string) ($a->product?->category?->name ?? ''));
+            $catB = strtolower((string) ($b->product?->category?->name ?? ''));
+
+            if ($catA !== $catB) {
+                return strcmp($catA, $catB);
             }
 
-            // 3. Nome do produto alfabético (agrupa itens idênticos)
-            $prodNameA = $a->product_name ?? $a->product?->name ?? '';
-            $prodNameB = $b->product_name ?? $b->product?->name ?? '';
-            $cmpProd = strcasecmp($prodNameA, $prodNameB);
-            if ($cmpProd !== 0) {
-                return $cmpProd;
+            // 3. Nome do Produto
+            $prodNameA = strtolower((string) ($a->product_name ?: ($a->product?->name ?? '')));
+            $prodNameB = strtolower((string) ($b->product_name ?: ($b->product?->name ?? '')));
+
+            if ($prodNameA !== $prodNameB) {
+                return strcmp($prodNameA, $prodNameB);
             }
 
-            // 4. Critério de desempate estável
+            // 4. ID do Item (ordem de inserção)
             return $a->id <=> $b->id;
         })->values();
     }

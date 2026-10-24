@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col h-full bg-surface-2 rounded-4xl p-4 md:p-6 gap-4 md:gap-6 overflow-hidden w-full">
+    <div class="flex flex-col h-full bg-surface-2 rounded-4xl p-4 md:p-6 gap-4 md:gap-4 overflow-hidden w-full">
 
         <div class="flex justify-between items-center shrink-0">
             <div>

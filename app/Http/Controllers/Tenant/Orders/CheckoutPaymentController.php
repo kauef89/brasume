@@ -108,7 +108,7 @@ class CheckoutPaymentController extends Controller
         return back()->with('success', 'Pagamento estornado com sucesso.');
     }
 
-    public function generatePix(Order $order, SicrediPixGateway $pixGateway): JsonResponse
+    public function generatePix(Order $order, \Illuminate\Http\Request $request, SicrediPixGateway $pixGateway): JsonResponse
     {
         $settings = CompanySetting::getCached() ?? CompanySetting::first();
 
@@ -117,10 +117,18 @@ class CheckoutPaymentController extends Controller
         }
 
         $alreadyPaid = (float) $order->payments()->sum('amount');
-        $balanceDue = max(0, round((float) $order->total - $alreadyPaid, 2));
+        $totalOutstanding = max(0, round((float) $order->total - $alreadyPaid, 2));
 
-        if ($balanceDue <= 0.01) {
+        if ($totalOutstanding <= 0.01) {
             return response()->json(['success' => false, 'message' => 'Este pedido já está quitado.'], 422);
+        }
+
+        // 🚀 Permite que o Frontend solicite o pagamento de apenas uma fração da conta (PIX Parcial)
+        $requestedAmount = $request->input('amount') ? (float) $request->input('amount') : $totalOutstanding;
+        $balanceDue = min($requestedAmount, $totalOutstanding);
+        
+        if ($balanceDue < 0.01) {
+            return response()->json(['success' => false, 'message' => 'O valor solicitado é inválido.'], 422);
         }
 
         try {

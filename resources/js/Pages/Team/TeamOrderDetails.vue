@@ -31,6 +31,14 @@
             <!-- CHIPS DE ATALHO RÁPIDO DO GARÇOM -->
             <div class="flex items-center gap-1.5 overflow-x-auto hide-scrollbar pt-1">
                 <button
+                    v-if="companySettings?.sicredi_is_active && companySettings?.sicredi_enable_waiter_pix && !isPaid"
+                    @click="isPixModalOpen = true"
+                    class="h-8 px-3 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-black flex items-center gap-1.5 shrink-0 transition-colors"
+                >
+                    <i class="pi pi-qrcode text-[10px]"></i>
+                    <span>Cobrar via PIX</span>
+                </button>
+                <button
                     v-if="order?.type === 'table'"
                     @click="handleOpenTransferAll"
                     class="h-8 px-3 rounded-full bg-surface-3 hover:bg-surface-border text-surface-text text-xs font-bold flex items-center gap-1.5 shrink-0 transition-colors"
@@ -159,6 +167,11 @@
             @cancel="isReasonModalVisible = false"
             @confirm="handleConfirmAuth"
         />
+            <OrderPixModal
+            v-if="order"
+            v-model:visible="isPixModalOpen"
+            :order="order"
+        />
     </div>
 </template>
 
@@ -173,6 +186,9 @@ import TransferItemsModal from "@/Pages/Shared/Order/TransferItemsModal.vue";
 import OrderTransformer from "@/Pages/Shared/Order/OrderTransformer.vue";
 import OperationReasonModal from "@/Pages/Pos/Components/Checkout/OperationReasonModal.vue";
 import AdaptiveModal from "@/Components/UI/AdaptiveModal.vue";
+import OrderPixModal from "@/Pages/Shared/OrderPixModal.vue";
+
+const isPixModalOpen = ref(false);
 
 import { useOrderFormatting } from "@/Pages/Shared/Composables/useOrderFormatting";
 import { useItemActions } from "@/Pages/Shared/Composables/useItemActions";

@@ -352,26 +352,52 @@ const handleOpenNewAddress = () => {
 const handleAddressCreated = (newAddress) => {
     isAddressCreateVisible.value = false;
 
+    const fee = Number(newAddress.delivery_fee ?? newAddress.neighborhood?.delivery_fee ?? 0);
     const streetName = newAddress.street?.name || newAddress.street || '';
     const neighborhoodName = newAddress.neighborhood?.name || newAddress.neighborhood || '';
     const formattedText = newAddress.full_address || `${streetName}, ${newAddress.number || 'S/N'}${neighborhoodName ? ' - ' + neighborhoodName : ''}`;
 
     const completeAddress = {
         ...newAddress,
+        delivery_fee: fee,
         full_address: formattedText
     };
 
-    orderMetadata.value = {
-        ...orderMetadata.value,
-        address: completeAddress
-    };
-
-    if (orderMetadata.value.customer?.is_temporary) {
+    // 1. Adiciona sempre na lista de endereços do cliente ativo
+    if (orderMetadata.value.customer) {
         if (!Array.isArray(orderMetadata.value.customer.addresses)) {
             orderMetadata.value.customer.addresses = [];
         }
-        orderMetadata.value.customer.addresses.push(completeAddress);
+        const existingIdx = orderMetadata.value.customer.addresses.findIndex(a => String(a.id) === String(completeAddress.id));
+        if (existingIdx >= 0) {
+            orderMetadata.value.customer.addresses.splice(existingIdx, 1, completeAddress);
+        } else {
+            orderMetadata.value.customer.addresses.push(completeAddress);
+        }
+        orderMetadata.value.customer.address = completeAddress;
     }
+
+    // 2. Sincroniza com o array global de clientes caso exista
+    if (props.customers && orderMetadata.value.customer?.id) {
+        const custInList = props.customers.find(c => c.id === orderMetadata.value.customer.id);
+        if (custInList) {
+            if (!Array.isArray(custInList.addresses)) custInList.addresses = [];
+            const existingIdx = custInList.addresses.findIndex(a => String(a.id) === String(completeAddress.id));
+            if (existingIdx >= 0) {
+                custInList.addresses.splice(existingIdx, 1, completeAddress);
+            } else {
+                custInList.addresses.push(completeAddress);
+            }
+            custInList.address = completeAddress;
+        }
+    }
+
+    // 3. Define como endereço ativo e recalcula rota
+    orderMetadata.value = {
+        ...orderMetadata.value,
+        address: completeAddress,
+        address_id: completeAddress.id
+    };
 
     isRoutingValid.value = true;
     isRoutingProcessOpen.value = false;
@@ -461,9 +487,10 @@ const isTaxEnabledForChannel = computed(() => {
 
 const deliveryFee = computed(() => {
     if (isAppending.value) return 0;
-    return props.orderType === 'delivery' && orderMetadata.value?.address?.delivery_fee
-        ? Number(orderMetadata.value.address.delivery_fee)
-        : 0;
+    const addr = orderMetadata.value?.address;
+    if (props.orderType !== 'delivery' || !addr) return 0;
+    const fee = addr.delivery_fee ?? addr.neighborhood?.delivery_fee ?? 0;
+    return Number(fee);
 });
 
 const serviceFee = computed(() => {

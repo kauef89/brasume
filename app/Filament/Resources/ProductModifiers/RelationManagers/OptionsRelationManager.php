@@ -82,6 +82,18 @@ class OptionsRelationManager extends RelationManager
                 ->numeric()
                 ->default(0),
 
+            FormComponents\Toggle::make("show_on_pos")
+                ->label("Exibir no PDV / Salão (TeamApp)")
+                ->helperText("Visível para os garçons e atendentes.")
+                ->default(true)
+                ->inline(false),
+
+            FormComponents\Toggle::make("show_on_delivery")
+                ->label("Exibir no Delivery (App Cliente)")
+                ->helperText("Visível no cardápio online do cliente.")
+                ->default(true)
+                ->inline(false),
+
             FormComponents\Toggle::make("is_active")
                 ->label("Ativo?")
                 ->default(true)
@@ -163,6 +175,12 @@ class OptionsRelationManager extends RelationManager
                     ->money("BRL")
                     ->placeholder("-")
                     ->color("warning"),
+
+                Tables\Columns\ToggleColumn::make("show_on_pos")
+                    ->label("PDV / Salão"),
+
+                Tables\Columns\ToggleColumn::make("show_on_delivery")
+                    ->label("Delivery"),
 
                 Tables\Columns\ToggleColumn::make("is_active")->label("Ativa"),
             ])

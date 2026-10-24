@@ -7,10 +7,11 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 use NotificationChannels\WebPush\WebPushChannel;
+use App\Notifications\Concerns\HasTenantWebPush;
 
 class SystemPushNotification extends Notification implements ShouldQueue
 {
-    use Queueable;
+    use Queueable, HasTenantWebPush;
 
     public string $title;
     public string $message;
@@ -30,19 +31,25 @@ class SystemPushNotification extends Notification implements ShouldQueue
 
     public function toWebPush($notifiable, $notification): WebPushMessage
     {
-        // Resgata o ícone da empresa no cache
-        $settings = \App\Models\CompanySetting::getCached();
-        $badgeUrl = $settings && $settings->push_badge_path
-            ? '/media/file?path=' . $settings->push_badge_path
-            : '/icon-192x192.png';
+        $this->applyTenantVapidSubject();
+
+        $iconUrl = $this->resolveTenantIconUrl();
+        $badgeUrl = $this->resolveTenantBadgeUrl();
+        $fullActionUrl = str_starts_with($this->actionUrl, 'http')
+            ? $this->actionUrl
+            : $this->resolveTenantActionUrl($this->actionUrl);
 
         return (new WebPushMessage)
             ->title($this->title)
-            ->icon('/icon-192x192.png')
+            ->icon($iconUrl)
             ->badge($badgeUrl)
             ->body($this->message)
-            ->data(['action_url' => $this->actionUrl])
-            ->action('Abrir Sistema', $this->actionUrl)
+            ->tag('system_notice')
+            ->data([
+                'action_url' => $fullActionUrl,
+                'tag'        => 'system_notice'
+            ])
+            ->action('Abrir Sistema', $fullActionUrl)
             ->options(['TTL' => 3600]);
     }
 }

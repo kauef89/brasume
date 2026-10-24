@@ -63,8 +63,15 @@
                                 <i class="pi pi-check-circle text-xs"></i>
                                 <span>Confirmar Entrega</span>
                             </button>
-                        </div>
-                    </template>
+                                <!-- 🚀 MODAL PIX DO MOTOBOY -->
+        <OrderPixModal
+            v-if="selectedPixOrder"
+            v-model:visible="isPixModalOpen"
+            :order="selectedPixOrder"
+            @payment-success="isPixModalOpen = false"
+        />
+    </div>
+</template>
                 </DeliveryDriverCard>
             </div>
         </div>
@@ -150,8 +157,15 @@
                                 <i class="pi pi-check-circle text-xs"></i>
                                 <span>Confirmar Entrega</span>
                             </button>
-                        </div>
-                    </template>
+                                <!-- 🚀 MODAL PIX DO MOTOBOY -->
+        <OrderPixModal
+            v-if="selectedPixOrder"
+            v-model:visible="isPixModalOpen"
+            :order="selectedPixOrder"
+            @payment-success="isPixModalOpen = false"
+        />
+    </div>
+</template>
                 </DeliveryDriverCard>
             </div>
         </div>
@@ -216,6 +230,13 @@
                 />
             </div>
         </div>
+            <!-- 🚀 MODAL PIX DO MOTOBOY -->
+        <OrderPixModal
+            v-if="selectedPixOrder"
+            v-model:visible="isPixModalOpen"
+            :order="selectedPixOrder"
+            @payment-success="isPixModalOpen = false"
+        />
     </div>
 </template>
 
@@ -225,6 +246,15 @@ import { usePage, router } from '@inertiajs/vue3';
 import { useToast } from 'primevue/usetoast';
 import { useTenantEcho } from '@/Composables/useTenantEcho';
 import DeliveryDriverCard from '@/Pages/Team/DeliveryDriverCard.vue';
+import OrderPixModal from '@/Pages/Shared/OrderPixModal.vue';
+
+const isPixModalOpen = ref(false);
+const selectedPixOrder = ref(null);
+
+const openPixModal = (order) => {
+    selectedPixOrder.value = order;
+    isPixModalOpen.value = true;
+};
 
 const page = usePage();
 const toast = useToast();
