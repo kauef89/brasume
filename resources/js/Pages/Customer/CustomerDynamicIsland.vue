@@ -11,7 +11,7 @@
             <!-- ESTADO 1: NAVEGAÇÃO NORMAL -->
             <div
                 v-show="!isCartMode && !configuratorType"
-                class="flex items-center gap-1 shrink-0"
+                class="flex items-center shrink-0"
             >
                 <!-- MODO PADRÃO: Exibe Home -->
                 <template v-if="!isTableMode && showAdvancedTabs">

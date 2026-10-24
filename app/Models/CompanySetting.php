@@ -61,6 +61,8 @@ class CompanySetting extends Model
         'sicredi_enable_driver_pix'  => 'boolean',
         'sicredi_enable_pos_pix'     => 'boolean',
         'sicredi_enable_waiter_pix'  => 'boolean',
+        'team_order_channels'        => 'array',
+        'team_counter_mode'          => 'string',
     ];
 
     /**
@@ -165,6 +167,21 @@ class CompanySetting extends Model
         try {
             event(new SettingsUpdated($tenantId));
         } catch (\Throwable $e) {}
+    }
+
+    
+    public function getTeamOrderChannelsAttribute($value)
+    {
+        if (empty($value)) {
+            return ['table', 'counter'];
+        }
+        $decoded = is_string($value) ? json_decode($value, true) : $value;
+        return is_array($decoded) && !empty($decoded) ? $decoded : ['table', 'counter'];
+    }
+
+    public function getTeamCounterModeAttribute($value)
+    {
+        return $value ?: 'simple';
     }
 
     protected static function booted(): void

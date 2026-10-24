@@ -113,4 +113,9 @@ class User extends Authenticatable implements HasTenants, FilamentUser
                     ->wherePivot('status', 'active')
                     ->exists();
     }
+
+    public function pushSubscriptions(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(PushSubscription::class, 'subscribable');
+    }
 }

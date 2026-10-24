@@ -2,6 +2,8 @@
 
 namespace App\Services\Orders;
 
+use App\Enums\PaymentEngineType;
+
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Transaction;
@@ -120,14 +122,14 @@ class OrderPaymentService
                 $paymentMethod = PaymentMethod::find($methodId);
                 $methodName = $paymentMethod->name ?? 'Outros';
 
-                if ($paymentMethod && $paymentMethod->engine_type === 'internal_loyalty') {
+                if ($paymentMethod && ($paymentMethod->engine_type === PaymentEngineType::INTERNAL_LOYALTY || $paymentMethod->engine_type?->value === 'internal_loyalty')) {
                     $alreadyRegistered = $order->payments()->where('payment_method_id', $methodId)->exists();
                     if ($alreadyRegistered) {
                         continue;
                     }
                 }
 
-                $isInternalAllowance = $paymentMethod && $paymentMethod->engine_type === 'internal';
+                $isInternalAllowance = $paymentMethod && ($paymentMethod->engine_type === PaymentEngineType::INTERNAL || $paymentMethod->engine_type === PaymentEngineType::ALLOWANCE || in_array($paymentMethod->engine_type?->value, ['internal', 'allowance']));
 
                 if ($isInternalAllowance) {
                     if (!$order->customer) {
@@ -171,14 +173,14 @@ class OrderPaymentService
 
                 $createdPayments[] = $orderPayment;
 
-                $isCash = ($paymentMethod && $paymentMethod->engine_type !== 'loss' && in_array($paymentMethod->engine_type, ['money', 'cash']))
+                $isCash = ($paymentMethod && ($paymentMethod->engine_type === PaymentEngineType::MONEY || in_array($paymentMethod->engine_type?->value, ['money', 'cash'])))
                     || str_contains(mb_strtolower($methodName), 'dinheiro');
 
                 if ($isCash) {
                     $cashPaidThisRun += (float) $payment['amount'];
                 }
 
-                if ($paymentMethod && !in_array($paymentMethod->engine_type, ['internal_loyalty', 'internal', 'loss'])) {
+                if ($paymentMethod && !in_array($paymentMethod->engine_type?->value ?? $paymentMethod->engine_type, ['internal_loyalty', 'internal', 'allowance', 'loss'])) {
                     Transaction::create([
                         'bank_account_id'  => $shift->bank_account_id,
                         'cash_shift_id'    => $shift->id,

@@ -136,10 +136,6 @@ const page = usePage();
 const currentType = ref(props.modelValue || null);
 const activeAddress = ref(props.selectedAddress || null);
 
-watch(() => props.modelValue, (val) => {
-    currentType.value = val || null;
-});
-
 const availableChannels = computed(() => {
     let channels = page.props.storeStatus?.active_channels;
     if (typeof channels === 'string') {
@@ -163,32 +159,14 @@ const customerAddresses = computed(() => {
     return props.customer?.addresses || [];
 });
 
-// 🚀 O SEGREDO DO BUG RESOLVIDO: Memória Rastreável de Endereços
-const knownAddressIds = ref(props.customer?.addresses?.map(a => a.id) || []);
-
-watch(() => props.customer?.addresses, (newAddresses) => {
-    if (!newAddresses) return;
-
-    const currentIds = newAddresses.map(a => a.id);
-
-    // Descobre se algum ID novo e inédito acabou de chegar via Props (cliente recém-salvou)
-    const addedIds = currentIds.filter(id => !knownAddressIds.value.includes(id));
-
-    if (currentType.value === 'delivery') {
-        if (addedIds.length > 0) {
-            // 🚀 Endereço novo criado! Pula nele e seleciona instantaneamente
-            const newAddr = newAddresses.find(a => a.id === addedIds[addedIds.length - 1]);
-            if (newAddr) chooseAddress(newAddr);
-        } else if (!activeAddress.value && newAddresses.length > 0) {
-            // Fallback: se não tiver nada ativo (primeiro carregamento), pega o padrão ou o primeiro
-            const defaultAddr = newAddresses.find(a => a.is_default) || newAddresses[0];
-            chooseAddress(defaultAddr);
-        }
-    }
-
-    // Sincroniza a memória com o estado atual para não rodar duas vezes
-    knownAddressIds.value = currentIds;
-}, { deep: true, immediate: true });
+// ==============================================================
+// 1. MÉTODOS DECLARADOS ANTES DOS OBSERVADORES (EVITA TDZ)
+// ==============================================================
+const chooseAddress = (addr) => {
+    if (!addr) return;
+    activeAddress.value = addr;
+    emit('routing-change', { type: 'delivery', address: addr });
+};
 
 const selectChannel = (type) => {
     currentType.value = type;
@@ -207,11 +185,6 @@ const selectChannel = (type) => {
     }
 };
 
-const chooseAddress = (addr) => {
-    activeAddress.value = addr;
-    emit('routing-change', { type: 'delivery', address: addr });
-};
-
 const confirmDeliveryStep = () => {
     if (!activeAddress.value) return;
     emit('apply', { type: 'delivery', address: activeAddress.value });
@@ -220,4 +193,34 @@ const confirmDeliveryStep = () => {
 const confirmCounterStep = () => {
     emit('apply', { type: 'counter', address: null });
 };
+
+// ==============================================================
+// 2. OBSERVADORES E MEMÓRIA RASTREÁVEL
+// ==============================================================
+watch(() => props.modelValue, (val) => {
+    currentType.value = val || null;
+});
+
+const knownAddressIds = ref(props.customer?.addresses?.map(a => a.id) || []);
+
+watch(() => props.customer?.addresses, (newAddresses) => {
+    if (!newAddresses || !Array.isArray(newAddresses)) return;
+
+    const currentIds = newAddresses.map(a => a.id);
+    const addedIds = currentIds.filter(id => !knownAddressIds.value.includes(id));
+
+    if (currentType.value === 'delivery') {
+        if (addedIds.length > 0) {
+            // Endereço recém-adicionado
+            const newAddr = newAddresses.find(a => a.id === addedIds[addedIds.length - 1]);
+            if (newAddr) chooseAddress(newAddr);
+        } else if (!activeAddress.value && newAddresses.length > 0) {
+            // Primeiro carregamento: seleciona o padrão ou o primeiro disponível
+            const defaultAddr = newAddresses.find(a => a.is_default) || newAddresses[0];
+            chooseAddress(defaultAddr);
+        }
+    }
+
+    knownAddressIds.value = currentIds;
+}, { deep: true, immediate: true });
 </script>

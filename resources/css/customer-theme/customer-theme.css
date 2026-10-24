@@ -73,7 +73,7 @@
 
     /* Estado Ativo: Fundo branco translúcido e ícone branco */
     .c-island-btn-active {
-        @apply bg-white/10 text-white shadow-sm;
+        @apply bg-white/5 text-white;
     }
 
     /* Estado Inativo: Ícone suave com feedback rápido no toque */

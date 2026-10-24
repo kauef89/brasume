@@ -37,7 +37,7 @@
             <div class="flex md:hidden items-center justify-between w-full h-full gap-1.5">
                 <div class="flex-1 min-w-0">
                     <SlideToConfirm
-                        text="Deslize p/ Zerar"
+                        text="Zerar"
                         success-text="Esgotado!"
                         color="danger"
                         icon="pi-trash"

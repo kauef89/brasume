@@ -1,4 +1,3 @@
-cat << 'EOF' > resources/js/Pages/Pos/Cashier.vue
 <template>
     <div class="grid h-full min-h-0 w-full bg-surface-1 text-surface-text overflow-hidden font-sans p-2 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] grid-cols-1 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_400px] gap-2">
 

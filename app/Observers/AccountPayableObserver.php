@@ -9,7 +9,12 @@ class AccountPayableObserver
 {
     public function created(AccountPayable $payable): void
     {
-        // 1. Lógica do Colaborador (Migrada do Model)
+        // 🛡️ GUARDA: Diárias de turno operacional têm extrato e baixa geridos pelo ShiftAttendanceService
+        if ($payable->accounting_category === 'equipe' && in_array($payable->accounting_subcategory, ['extras', 'Diárias Extras'])) {
+            return;
+        }
+
+        // 1. Lógica do Colaborador para lançamentos avulsos/administrativos
         if ($payable->employee_id) {
             $desc = strtolower($payable->description);
             $isVale = str_contains($desc, "vale") || str_contains($desc, "adiantamento");
@@ -23,7 +28,7 @@ class AccountPayableObserver
             }
         }
 
-        // 2. Lógica Bancária: Se já nasceu PAGO, gera transação de saída
+        // 2. Lógica Bancária: Se já nasceu PAGO via conta bancária avulsa, gera transação de saída
         if ($payable->status === 'paid' && $payable->bank_account_id) {
             $this->createBankTransaction($payable);
         }
@@ -32,7 +37,11 @@ class AccountPayableObserver
     public function updated(AccountPayable $payable): void
     {
         if ($payable->isDirty('status')) {
-            
+            // 🛡️ GUARDA: Diárias de turno operacional têm estorno gerido pelo fluxo de caixa/turno
+            if ($payable->accounting_category === 'equipe' && in_array($payable->accounting_subcategory, ['extras', 'Diárias Extras'])) {
+                return;
+            }
+
             // 1. Lógica do Colaborador
             if ($payable->employee_id) {
                 if ($payable->status === "paid") {
@@ -47,7 +56,7 @@ class AccountPayableObserver
             if ($payable->status === 'paid' && $payable->bank_account_id) {
                 $this->createBankTransaction($payable);
             }
-            
+
             // 3. Lógica Bancária: Estornou (voltou pra pendente ou cancelado)
             if (in_array($payable->status, ['pending', 'cancelled']) && $payable->getOriginal('status') === 'paid') {
                 Transaction::where('description', 'LIKE', "Baixa de Conta a Pagar #{$payable->id}%")->delete();
@@ -57,6 +66,10 @@ class AccountPayableObserver
 
     public function deleting(AccountPayable $payable): void
     {
+        if ($payable->accounting_category === 'equipe' && in_array($payable->accounting_subcategory, ['extras', 'Diárias Extras'])) {
+            return;
+        }
+
         // 1. Lógica do Colaborador
         if ($payable->employee_id && $payable->status === 'pending') {
             $payable->launchLedger("debit", "Cancelamento Administrativo de Serviço: " . $payable->description);
@@ -71,14 +84,14 @@ class AccountPayableObserver
      */
     private function createBankTransaction(AccountPayable $payable): void
     {
-        $beneficiary = $payable->employee_id 
-            ? ($payable->employee?->name ?? 'Colaborador') 
+        $beneficiary = $payable->employee_id
+            ? ($payable->employee?->name ?? 'Colaborador')
             : ($payable->supplier?->trade_name ?? $payable->supplier?->name ?? 'Fornecedor');
 
         Transaction::create([
             'bank_account_id'  => $payable->bank_account_id,
             'type'             => 'out',
-            'category'         => 'payable_settlement', // Ou 'supplier_payment' se preferir
+            'category'         => 'payable_settlement',
             'amount'           => $payable->amount,
             'description'      => "Baixa de Conta a Pagar #{$payable->id} - {$beneficiary} ({$payable->description})",
             'operator_name'    => auth()->user()?->name ?? 'Sistema',

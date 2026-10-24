@@ -55,6 +55,7 @@ class Payment extends Model
             'order_payment_id',
             'order_item_id'
         )
+        ->using(OrderPaymentItem::class)
         ->withPivot('quantity', 'amount')
         ->withTimestamps();
     }
@@ -85,5 +86,10 @@ class Payment extends Model
     public function acquirerTransaction(): HasOne
     {
         return $this->hasOne(AcquirerTransaction::class);
+    }
+
+    public function paymentItems(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(OrderPaymentItem::class, 'order_payment_id');
     }
 }

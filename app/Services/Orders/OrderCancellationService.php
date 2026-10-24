@@ -2,6 +2,8 @@
 
 namespace App\Services\Orders;
 
+use App\Enums\PaymentEngineType;
+
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -334,12 +336,12 @@ class OrderCancellationService
             foreach ($order->payments as $payment) {
                 $pm = $payment->payment_method_id ? PaymentMethod::find($payment->payment_method_id) : null;
 
-                if ($pm && $pm->engine_type === 'internal_loyalty') {
+                if ($pm && ($pm->engine_type === PaymentEngineType::INTERNAL_LOYALTY || $pm->engine_type?->value === 'internal_loyalty')) {
                     app(LoyaltyService::class)->refundOrderCashback($order);
                     continue;
                 }
 
-                if ($pm && $pm->engine_type === 'internal') {
+                if ($pm && ($pm->engine_type === PaymentEngineType::INTERNAL || $pm->engine_type === PaymentEngineType::ALLOWANCE || in_array($pm->engine_type?->value, ['internal', 'allowance']))) {
                     if ($order->customer) {
                         $employee = Employee::where('cpf', preg_replace('/\D/', '', $order->customer->cpf ?? ''))
                             ->orWhere('email', $order->customer->email)
@@ -360,7 +362,7 @@ class OrderCancellationService
                     continue;
                 }
 
-                $isCash = ($pm && in_array($pm->engine_type, ['money', 'cash']))
+                $isCash = ($pm && ($pm->engine_type === PaymentEngineType::MONEY || in_array($pm->engine_type?->value, ['money', 'cash'])))
                     || str_contains(mb_strtolower($payment->method ?? ''), 'dinheiro');
 
                 $amountToRefund = (float) $payment->amount;

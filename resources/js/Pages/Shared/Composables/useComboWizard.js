@@ -39,11 +39,22 @@ export function useComboWizard(props, emit) {
             newVal.combo_groups.forEach((g) => { selections.value[g.id] = []; });
         }
 
-        if (newVal?.cartItem?.comboItems) {
+        if (newVal?.cartItem?.comboItems && Array.isArray(newVal.cartItem.comboItems)) {
             newVal.cartItem.comboItems.forEach(cItem => {
-                let targetGroup = newVal.combo_groups.find(g => g.items.some(i => i.product_id === cItem.product_id));
+                let targetGroup = null;
+                if (cItem.group_id) {
+                    targetGroup = newVal.combo_groups.find(g => String(g.id) === String(cItem.group_id));
+                }
+                if (!targetGroup) {
+                    targetGroup = newVal.combo_groups.find(g => {
+                        const currentCount = (selections.value[g.id] || []).length;
+                        const max = Number(g.max_choices || 1);
+                        return g.items.some(i => Number(i.product_id) === Number(cItem.product_id)) && currentCount < max;
+                    }) || newVal.combo_groups.find(g => g.items.some(i => Number(i.product_id) === Number(cItem.product_id)));
+                }
+
                 if (targetGroup) {
-                    const originalItem = targetGroup.items.find(i => i.product_id === cItem.product_id);
+                    const originalItem = targetGroup.items.find(i => Number(i.product_id) === Number(cItem.product_id));
                     if (originalItem) {
                         const extra = (cItem.structuredModifiers || []).reduce((sum, m) => sum + (Number(m.price) * Number(m.qty || 1)), 0);
                         selections.value[targetGroup.id].push({
@@ -58,6 +69,11 @@ export function useComboWizard(props, emit) {
                     }
                 }
             });
+
+            // 🚀 ABRE DIRETO NO RESUMO se o combo veio com subitens pré-populados
+            if (newVal.cartItem.comboItems.length > 0) {
+                showMobileSummary.value = true;
+            }
         }
     }, { immediate: true });
 

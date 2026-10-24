@@ -237,8 +237,7 @@ const handleDeliveryPaymentConfirm = async (payload) => {
         const result = await handleInlinePaymentConfirm(payload);
         const resolvedId = result?.order?.id || result?.id || result?.data?.id || targetId;
 
-        if (typeof clearCart === 'function') clearCart();
-        if (typeof handleClearWorkspace === 'function') handleClearWorkspace();
+        resetAppendState();
 
         if (payload?.intent === 'pay_now') {
             if (resolvedId) {
@@ -264,8 +263,7 @@ const onCartCheckout = async (checkoutPayload) => {
         isPendingCheckoutSubmission.value = true;
 
         // 🚀 O FIX: Esvazia a memória do carrinho e reseta os configuradores antes de sair
-        if (typeof clearCart === 'function') clearCart();
-        if (typeof handleClearWorkspace === 'function') handleClearWorkspace();
+        resetAppendState();
 
         window.dispatchEvent(new CustomEvent('pos-tab-changed', { detail: 'orders' }));
         emit('order-created');

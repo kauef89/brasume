@@ -51,8 +51,18 @@ class Employee extends Model
         return $this->belongsToMany(Kitchen::class);
     }
 
-    public function schedules(): HasMany
+        public function schedules(): HasMany
     {
         return $this->hasMany(EmployeeSchedule::class, 'employee_id');
+    }
+
+    public function accountPayables(): HasMany
+    {
+        return $this->hasMany(AccountPayable::class);
+    }
+
+    public function payables(): HasMany
+    {
+        return $this->accountPayables();
     }
 }

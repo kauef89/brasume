@@ -17,6 +17,9 @@ class FiscalDocument extends Model
 {
     protected $guarded = [];
 
+    protected $hidden = ['xml_content'];
+
+
     protected $casts = [
         'issue_date' => 'datetime', // ou 'date', dependendo se você quer hora também
         'total_value' => 'decimal:2',

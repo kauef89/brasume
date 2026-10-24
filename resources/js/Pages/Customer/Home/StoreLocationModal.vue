@@ -1,14 +1,7 @@
 <template>
     <AdaptiveModal :visible="visible" @update:visible="$emit('update:visible', $event)">
 
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="font-black text-xl text-surface-text">Nossa Localização</h3>
-            <button @click="$emit('update:visible', false)" class="w-8 h-8 rounded-full text-surface-muted flex items-center justify-center transition-colors cursor-pointer border-none outline-none">
-                <i class="pi pi-times"></i>
-            </button>
-        </div>
-
-        <div class="flex flex-col items-center text-center gap-3">
+        <div class="flex flex-col items-center text-center p-6 gap-3">
             <div class="w-16 h-16 rounded-full bg-primary-500/10 text-primary-500 flex items-center justify-center mb-2 text-3xl">
                 <i class="pi pi-map-marker"></i>
             </div>

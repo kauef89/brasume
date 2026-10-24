@@ -29,7 +29,7 @@
         <div v-show="viewMode === 'cards'" class="flex-1 flex flex-col min-h-0 pt-2">
             <EmptyState
                 v-if="sortedOrders.length === 0"
-                icon="pi-coffee"
+                icon="pi-thumbs-up"
                 title="Nenhuma mesa ou comanda aberta."
             />
 

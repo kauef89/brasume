@@ -248,7 +248,7 @@ class AcquirerReconciliationEngine
                 'updated_at'     => $acquirerTx->transaction_date,
             ]);
 
-            $paymentMethod = PaymentMethod::where('engine_type', 'pos_card')->first()
+            $paymentMethod = PaymentMethod::whereIn('engine_type', ['smart_pos', 'manual', 'tef'])->first()
                 ?? PaymentMethod::where('name', 'like', '%cart%')->first();
 
             $payment = Payment::create([

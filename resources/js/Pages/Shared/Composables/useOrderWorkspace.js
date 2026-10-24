@@ -41,8 +41,18 @@ export function useOrderWorkspace(cartContext, favoritesContext, editOrderData) 
         activeCartSidebarView.value = 'cart';
         stashedCheckoutData.value = null;
 
-        if (window.location.search) {
-            window.history.replaceState({}, document.title, window.location.pathname);
+        if (draftRouting.value) {
+            draftRouting.value.order_id = null;
+            draftRouting.value.existing_order_id = null;
+            draftRouting.value.append_to_order = null;
+        }
+
+        if (typeof window !== 'undefined' && window.location.search) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('append_to_order');
+            url.searchParams.delete('order_id');
+            const cleanSearch = url.searchParams.toString() ? `?${url.searchParams.toString()}` : '';
+            window.history.replaceState({}, document.title, `${url.pathname}${cleanSearch}`);
         }
     };
 
@@ -111,8 +121,9 @@ export function useOrderWorkspace(cartContext, favoritesContext, editOrderData) 
             safePayload.meta.type = isDelivery ? 'delivery' : 'counter';
             stashedCheckoutData.value = safePayload;
             activeCartSidebarView.value = 'payment';
+            return Promise.resolve();
         } else {
-            submitOrder(safePayload);
+            return submitOrder(safePayload);
         }
     };
 

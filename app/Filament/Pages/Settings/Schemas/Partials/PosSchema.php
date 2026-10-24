@@ -8,6 +8,7 @@ use Filament\Schemas\Components\Group;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Schemas\Components\Utilities\Get;
 
 class PosSchema
@@ -90,6 +91,35 @@ class PosSchema
                         ]),
                 ]),
 
+                        Section::make("Atendimento pelo App da Equipe (Garçom / TeamApp)")
+                ->description("Defina quais canais e fluxos de atendimento estão disponíveis no aplicativo da equipe.")
+                ->schema([
+                    Grid::make(2)->schema([
+                        CheckboxList::make('team_order_channels')
+                            ->label('Canais Permitidos no App da Equipe')
+                            ->helperText('Selecione os tipos de pedido que os garçons/atendentes podem abrir.')
+                            ->options([
+                                'table'    => 'Mesa (Salão)',
+                                'counter'  => 'Balcão (Retirada)',
+                                'delivery' => 'Delivery',
+                            ])
+                            ->default(['table', 'counter'])
+                            ->columns(3)
+                            ->live()
+                            ->columnSpan(1),
+
+                        Select::make('team_counter_mode')
+                            ->label('Identificação no Balcão (App da Equipe)')
+                            ->helperText('Escolha se o garçom usa apenas o nome ou o cadastro completo.')
+                            ->options([
+                                'simple' => 'Modo Simples (Apenas Nome do Cliente)',
+                                'full'   => 'Modo Completo (Pesquisar / Rápido / Novo)',
+                            ])
+                            ->default('simple')
+                            ->visible(fn(Get $get) => in_array('counter', $get('team_order_channels') ?? []))
+                            ->columnSpan(1),
+                    ]),
+                ]),
             Section::make("Regras de Atendimento")->schema([
                 Grid::make(4)->schema([
                     Toggle::make("has_service_tax")

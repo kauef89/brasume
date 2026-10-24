@@ -88,4 +88,16 @@ class CashShift extends Model
     {
         return static::open()->latest('id')->first();
     }
+
+    public function dailyPayables(): \Illuminate\Database\Eloquent\Relations\HasManyThrough
+    {
+        return $this->hasManyThrough(
+            AccountPayable::class,
+            ShiftAttendance::class,
+            'cash_shift_id',
+            'id',
+            'id',
+            'account_payable_id'
+        );
+    }
 }

@@ -44,7 +44,15 @@ export function useCustomerCheckoutNavigation(props, cartContext, activeTab, isC
                 title = checkoutState.step === 'pix' ? 'Pagamento PIX da Mesa' : 'Como prefere pagar?';
             }
 
-            return { title, current, max };
+            
+    watch(() => cart.value, () => {
+        if (checkoutState.step === 'pix') {
+            checkoutState.step = 'payment';
+            activePixData.value = null;
+        }
+    }, { deep: true });
+
+    return { title, current, max };
         }
 
         const max = isGuest ? 4 : 2;
@@ -69,7 +77,15 @@ export function useCustomerCheckoutNavigation(props, cartContext, activeTab, isC
             else title = 'Como prefere pagar?';
         }
 
-        return { title, current, max };
+        
+    watch(() => cart.value, () => {
+        if (checkoutState.step === 'pix') {
+            checkoutState.step = 'payment';
+            activePixData.value = null;
+        }
+    }, { deep: true });
+
+    return { title, current, max };
     });
 
     const goBack = () => {
@@ -156,12 +172,14 @@ export function useCustomerCheckoutNavigation(props, cartContext, activeTab, isC
         }
     };
 
-    const openCheckout = () => {
+        const openCheckout = () => {
         const isGuest = props.isGuest || !page.props.auth?.user;
         const needsAuth = isGuest && !props.customer;
 
-        if (isTableMode.value) {
-            checkoutState.step = needsAuth ? 'auth' : 'payment';
+        if (needsAuth) {
+            checkoutState.step = 'auth';
+        } else if (isTableMode.value) {
+            checkoutState.step = 'payment';
             checkoutState.orderType = 'table';
             checkoutState.routingMeta = {
                 type: 'table',
@@ -169,22 +187,28 @@ export function useCustomerCheckoutNavigation(props, cartContext, activeTab, isC
                 table: page.props.tableMode
             };
         } else {
-            checkoutState.step = needsAuth ? 'auth' : 'logistics';
+            // Se já definiu logística (endereço selecionado ou retirada no balcão), retoma DIRETO no pagamento
+            const hasLogistics = checkoutState.orderType && (
+                checkoutState.orderType !== 'delivery' ||
+                checkoutState.routingMeta?.address ||
+                checkoutState.routingMeta?.address_id
+            );
+
+            if (hasLogistics) {
+                checkoutState.step = 'payment';
+            } else {
+                checkoutState.step = 'logistics';
+            }
         }
 
         checkoutState.authSubStep = 'methods';
         checkoutState.addressSubStep = 1;
-        checkoutState.selectedMethod = null;
-        checkoutState.cashChangeTarget = '';
         checkoutState.isTypingCoupon = false;
-        checkoutState.useCashbackToggle = false;
 
         sessionStorage.setItem('customer_pending_checkout', 'true');
         trackInitiateCheckout(cartSubtotal.value);
 
         isCheckoutModalVisible.value = true;
-        activePixData.value = null;
-        activeOrderId.value = null;
     };
 
     watch(isCheckoutModalVisible, (visible) => {
@@ -241,6 +265,14 @@ export function useCustomerCheckoutNavigation(props, cartContext, activeTab, isC
             }, 250);
         }
     });
+
+    
+    watch(() => cart.value, () => {
+        if (checkoutState.step === 'pix') {
+            checkoutState.step = 'payment';
+            activePixData.value = null;
+        }
+    }, { deep: true });
 
     return {
         checkoutState,

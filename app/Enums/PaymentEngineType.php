@@ -23,6 +23,7 @@ enum PaymentEngineType: string implements HasLabel, HasIcon, HasColor
 
     // Convênios, Crédito da Casa e Ajustes
     case CUSTOMER_CREDIT  = 'customer_credit'; // Fiado / Convênio (Conta a Receber)
+    case ALLOWANCE        = 'allowance';     // Vale-Alimentação / Benefício Refeição RH
     case INTERNAL         = 'internal';         // Vale-Refeição / Consumo de Colaborador (RH Ledger)
     case INTERNAL_LOYALTY = 'internal_loyalty'; // Resgate de Cashback / Programa de Pontos
     case LOSS             = 'loss';             // Cortesia, Degustação, Bonificação ou Descarte
@@ -38,7 +39,8 @@ enum PaymentEngineType: string implements HasLabel, HasIcon, HasColor
             self::PIX_STATIC       => 'Pix Chave / Balcão (Conferência Visual)',
             self::PIX_MACHINE      => 'Pix na Maquininha (QR Code da Credenciadora)',
             self::CUSTOMER_CREDIT  => 'Fiado / Convênio (Conta a Receber)',
-            self::INTERNAL         => 'Consumo de Colaborador (Vale-Refeição RH)',
+            self::ALLOWANCE        => 'Vale-Alimentação (Benefício Refeição RH)',
+            self::INTERNAL         => 'Consumo de Colaborador (Fiado / Desconto RH)',
             self::INTERNAL_LOYALTY => 'Fidelidade / Cashback',
             self::LOSS             => 'Perda / Cortesia / Degustação',
         };
@@ -55,6 +57,7 @@ enum PaymentEngineType: string implements HasLabel, HasIcon, HasColor
             self::PIX_STATIC       => 'heroicon-o-qr-code',
             self::PIX_MACHINE      => 'heroicon-o-receipt-percent',
             self::CUSTOMER_CREDIT  => 'heroicon-o-book-open',
+            self::ALLOWANCE        => 'heroicon-o-identification',
             self::INTERNAL         => 'heroicon-o-user-group',
             self::INTERNAL_LOYALTY => 'heroicon-o-gift',
             self::LOSS             => 'heroicon-o-hand-raised',
@@ -72,7 +75,7 @@ enum PaymentEngineType: string implements HasLabel, HasIcon, HasColor
             self::PIX_STATIC,
             self::PIX_MACHINE      => 'info',
             self::CUSTOMER_CREDIT  => 'danger',
-            self::INTERNAL         => 'purple',
+            self::ALLOWANCE, self::INTERNAL => 'purple',
             self::INTERNAL_LOYALTY => 'amber',
             self::LOSS             => 'rose',
         };
@@ -90,6 +93,6 @@ enum PaymentEngineType: string implements HasLabel, HasIcon, HasColor
 
     public function isDeductibleOrInternal(): bool
     {
-        return in_array($this, [self::INTERNAL, self::INTERNAL_LOYALTY, self::LOSS]);
+        return in_array($this, [self::ALLOWANCE, self::INTERNAL, self::INTERNAL_LOYALTY, self::LOSS]);
     }
 }

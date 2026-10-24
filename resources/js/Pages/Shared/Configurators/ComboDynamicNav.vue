@@ -12,7 +12,7 @@
                     v-if="canGoBack"
                     @click="$emit('back')"
                     type="button"
-                    class="w-11 h-11 shrink-0 rounded-full bg-surface-1/50 hover:bg-surface-2 text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
+                    class="w-11 h-11 shrink-0 rounded-full text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
                     title="Voltar"
                 >
                     <i class="pi pi-arrow-left text-sm"></i>
@@ -77,14 +77,14 @@
         <!-- 👤 ESTRUTURA 2: CUSTOMER APP (1 ROW COMPACTA - LARGURA ORGÂNICA GARANTIDA) -->
         <div
             v-else
-            class="flex items-center gap-2 select-none px-1 whitespace-nowrap"
+            class="flex items-center gap-2 select-none whitespace-nowrap"
         >
             <!-- Botão Voltar -->
             <button
                 v-if="canGoBack"
                 @click="$emit('back')"
                 type="button"
-                class="w-11 h-11 shrink-0 rounded-full bg-surface-1/50 hover:bg-surface-2 text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
+                class="w-11 h-11 shrink-0 rounded-full text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
                 title="Voltar"
             >
                 <i class="pi pi-arrow-left text-sm"></i>
@@ -95,11 +95,10 @@
                 v-if="!showSummary"
                 @click="$emit('toggle-summary')"
                 type="button"
-                class="h-11 px-4 rounded-full font-black text-[11px] uppercase tracking-widest transition-all outline-none cursor-pointer border-none flex items-center justify-center gap-2 active:scale-95 bg-surface-1/50 text-surface-text hover:bg-surface-2 shadow-sm whitespace-nowrap"
+                class="h-11 px-4 rounded-full font-black text-[11px] uppercase tracking-widest transition-all outline-none cursor-pointer border-none flex items-center justify-center gap-2 active:scale-95 bg-primary-500/10 text-surface-text hover:bg-surface-2 shadow-sm whitespace-nowrap"
             >
-                <i class="pi pi-list text-sm"></i>
                 <span>Conferir</span>
-                <span class="bg-primary-500 text-white px-1.5 py-0.5 rounded-full leading-none text-[10px] min-w-[18px] text-center font-black">
+                <span class="bg-primary-500/60 text-white p-1 rounded-full leading-none text-[10px] min-w-[18px] text-center font-black">
                     {{ itemsCountDisplay }}
                 </span>
             </button>

@@ -106,8 +106,8 @@ const cardClasses = computed(() => {
         const shape = 'flex items-center justify-center px-5 py-2.5 rounded-full w-auto min-w-[max-content]';
 
         if (props.glassMode) {
-            if (props.isSelected) return `${base} ${shape} bg-primary-500/10 text-primary-300`;
-            return `${base} ${shape} bg-white/10 text-surface-text`;
+            if (props.isSelected) return `${base} ${shape} backdrop-blur-xl bg-primary-500/10 text-primary-300`;
+            return `${base} ${shape} bg-white/10 backdrop-blur-xl text-surface-text`;
         } else {
             if (props.isSelected) return `${base} ${shape} bg-primary-500 text-white`;
             return `${base} ${shape} bg-surface-3 hover:bg-primary-500/20 text-surface-text`;

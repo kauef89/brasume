@@ -43,7 +43,7 @@
 
             <!-- TELA 1: FAVORITOS -->
             <div v-show="isFavoritesActive && favorites.length > 0" class="pb-8">
-                <CustomerFavoritesGrid :favorites="favorites" @favorite-click="$emit('favorite-click', $event)"/>
+                <CustomerFavoritesGrid :favorites="favorites" :layout="productCardLayout" @favorite-click="$emit('favorite-click', $event)"/>
             </div>
 
             <!-- TELA 2: ORGANIZADOR DE CATEGORIAS INLINE -->

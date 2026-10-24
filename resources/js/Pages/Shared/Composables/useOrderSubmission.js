@@ -48,6 +48,25 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
                     // 🚀 Limpa o storage global e o localStorage
                     resetDraftState();
 
+                    // 🧹 PURGA IMEDIATA DA URL E EMISSÃO DE CONCLUSÃO
+                    if (typeof window !== 'undefined') {
+                        const url = new URL(window.location.href);
+                        url.searchParams.delete('append_to_order');
+                        url.searchParams.delete('order_id');
+                        url.searchParams.delete('order');
+                        url.searchParams.delete('checkout');
+                        url.searchParams.delete('edit_item');
+                        url.searchParams.delete('edit_qty');
+                        url.searchParams.delete('original_qty');
+                        url.searchParams.delete('is_combo');
+                        url.searchParams.delete('auth_reason');
+                        url.searchParams.delete('is_loss');
+                        const cleanSearch = url.searchParams.toString() ? `?${url.searchParams.toString()}` : '';
+                        window.history.replaceState({}, document.title, `${url.pathname}${cleanSearch}`);
+
+                        window.dispatchEvent(new CustomEvent('pos-order-completed', { detail: { orderId: createdOrderId } }));
+                    }
+
                     const resultData = { order: { id: createdOrderId }, id: createdOrderId };
 
                     const isPayNow = payload.frontend_intent === 'pay_now'

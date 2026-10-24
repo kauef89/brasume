@@ -17,6 +17,17 @@
 
         <div v-show="!isTypingCoupon" class="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
 
+        <LoyaltyCashbackWidget
+            v-if="isLoyaltyActive && availableBalance > 0 && !isGuest"
+            :is-active="isLoyaltyActive"
+            :can-redeem="canRedeem"
+            :available-balance="availableBalance"
+            :customer-points="customerPoints"
+            :missing-amount="missingAmount"
+            :model-value="useCashbackToggle"
+            @update:model-value="$emit('update:useCashbackToggle', $event)"
+        />
+
             <div v-if="isGuestRestricted && !selectedMethod"
                  :class="{ 'animate-shake ring-2 ring-warning-400/50 shadow-[0_0_15px_rgba(251,191,36,0.3)]': isShaking }"
                  class="p-5 c-glass-card !bg-warning-500/15 backdrop-blur-xl flex flex-col gap-4 text-warning-300 transition-all duration-300">

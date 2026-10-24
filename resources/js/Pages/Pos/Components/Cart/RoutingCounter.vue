@@ -3,7 +3,7 @@
 
         <!-- FASE 1: NENHUM CLIENTE SELECIONADO NO BALCÃO -->
         <div v-if="!currentCustomer" class="flex flex-col gap-3">
-            <div class="w-full flex justify-center mb-1">
+            <div v-if="!isSimpleMode" class="w-full flex justify-center mb-1">
                 <SegmentedControl
                     v-model="activeSubTab"
                     :options="counterSubTabOptions"
@@ -12,7 +12,7 @@
 
             <!-- 1. PESQUISAR CLIENTE EXISTENTE -->
             <DeliveryCustomerSearch
-                v-if="activeSubTab === 'search'"
+                v-if="!isSimpleMode && activeSubTab === 'search'"
                 :customers="customers"
                 @select="handleCustomerSelected"
                 @go-to-new="handleGoToNew"
@@ -20,7 +20,8 @@
 
             <!-- 2. CADASTRO RÁPIDO (WhatsApp Opcional no Balcão) -->
             <DeliveryCustomerQuick
-                v-else-if="activeSubTab === 'quick'"
+                v-else-if="isSimpleMode || activeSubTab === 'quick'"
+                :simple-mode="isSimpleMode"
                 :company-settings="companySettings"
                 :customers="customers"
                 order-type="counter"
@@ -30,7 +31,7 @@
 
             <!-- 3. CADASTRO NOVO COMPLETO -->
             <DeliveryCustomerNew
-                v-else-if="activeSubTab === 'new'"
+                v-else-if="!isSimpleMode && activeSubTab === 'new'"
                 :company-settings="companySettings"
                 :customers="customers"
                 :initial-name="newCustomerSeedName"
@@ -40,7 +41,7 @@
         </div>
 
         <!-- FASE 2: CLIENTE SELECIONADO NO BALCÃO -->
-        <div v-else class="flex flex-col gap-3 p-4 bg-surface-1 rounded-2xl border border-surface-border animate-in fade-in duration-200">
+        <div v-else class="flex flex-col gap-3 p-4 bg-surface-3 rounded-2xl animate-in fade-in duration-200">
             <div class="flex items-center justify-between">
                 <span class="text-[10px] font-black uppercase tracking-widest text-surface-muted flex items-center gap-1.5">
                     <i class="pi pi-shopping-bag text-primary-500"></i> Cliente do Balcão
@@ -116,7 +117,9 @@ const props = defineProps({
     modelValue: [Object, String],
     customer: Object,
     customers: { type: Array, default: () => [] },
-    isCustomerMode: { type: Boolean, default: false }
+    isCustomerMode: { type: Boolean, default: false },
+    isTeamMode: { type: Boolean, default: false },
+    isWaiterMode: { type: Boolean, default: false }
 });
 
 const emit = defineEmits([
@@ -129,6 +132,12 @@ const emit = defineEmits([
 
 const page = usePage();
 const companySettings = computed(() => page.props.companySettings || {});
+
+const isSimpleMode = computed(() => {
+    if (!props.isTeamMode && !props.isWaiterMode) return false;
+    const mode = companySettings.value?.team_counter_mode || 'simple';
+    return mode === 'simple';
+});
 
 const activeSubTab = ref('search');
 const newCustomerSeedName = ref('');

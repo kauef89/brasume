@@ -1,5 +1,5 @@
 <template>
-    <div class="inline-flex w-fit mx-auto bg-primary-500/10 p-1 rounded-full gap-1 items-center overflow-x-auto hide-scrollbar">
+    <div class="inline-flex w-fit mx-auto bg-primary-500/10 p-1 rounded-full backdrop-blur-xl gap-1 items-center overflow-x-auto hide-scrollbar">
         <button
             v-for="opt in options"
             :key="opt.value"

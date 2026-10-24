@@ -2,7 +2,7 @@
     <div class="flex flex-col gap-3">
         <div class="flex items-stretch justify-center gap-3 w-full">
             <button
-                v-for="option in orderTypeOptions"
+                v-for="option in filteredOrderTypeOptions"
                 :key="option.value"
                 type="button"
                 @click="handleTabChange(option.value)"
@@ -39,6 +39,8 @@
 
             <RoutingCounter
                 v-if="localOrderType === 'counter'"
+                :is-team-mode="isTeamMode"
+                :is-waiter-mode="isWaiterMode"
                 :model-value="sharedCustomer"
                 @update:model-value="setSharedCustomer"
                 :customer="sharedCustomer"
@@ -68,7 +70,9 @@
 </template>
 
 <script setup>
-import { watch } from 'vue';
+import { computed, unref, watch } from 'vue';
+import { usePage } from '@inertiajs/vue3';
+
 import RoutingTable from "@/Pages/Pos/Components/Cart/RoutingTable.vue";
 import RoutingCounter from "@/Pages/Pos/Components/Cart/RoutingCounter.vue";
 import RoutingDelivery from "@/Pages/Pos/Components/Cart/RoutingDelivery.vue";
@@ -82,7 +86,8 @@ const props = defineProps({
     tableAreas: { type: Array, default: () => [] },
     customers: { type: Array, default: () => [] },
     isWaiterMode: { type: Boolean, default: false },
-    routingMeta: { type: Object, default: null } // 🚀 Adicionado para absorver o estado do TeamApp
+    isTeamMode: { type: Boolean, default: false },
+    routingMeta: { type: Object, default: null }
 });
 
 const emit = defineEmits([
@@ -97,6 +102,9 @@ const emit = defineEmits([
     "open"
 ]);
 
+const page = usePage();
+const companySettings = computed(() => page.props.companySettings || {});
+
 const {
     localOrderType, resetTableTrigger, orderTypeOptions, selectedTable, tableIdentifier,
     sharedCustomer, deliveryAddress, selectOrderType, handleApply,
@@ -105,6 +113,26 @@ const {
 } = useOrderRouting(props, emit);
 
 const { draftRouting } = useCart();
+
+// 🚀 CANAIS PERMITIDOS:
+// No POS (desktop), TODOS os canais estão sempre liberados ('table', 'counter', 'delivery').
+// No TeamApp (garçom), respeita rigorosamente a configuração team_order_channels do tenant.
+const allowedChannels = computed(() => {
+    if (!props.isTeamMode && !props.isWaiterMode) {
+        return ['table', 'counter', 'delivery'];
+    }
+
+    const channels = companySettings.value?.team_order_channels;
+    if (Array.isArray(channels) && channels.length > 0) {
+        return channels;
+    }
+    return ['table', 'counter'];
+});
+
+const filteredOrderTypeOptions = computed(() => {
+    const all = unref(orderTypeOptions) || [];
+    return all.filter(opt => allowedChannels.value.includes(opt.value));
+});
 
 // Sincronização direta caso o TeamApp envie atualizações via props.routingMeta
 watch(() => props.routingMeta, (newMeta) => {
@@ -156,7 +184,6 @@ const handleAddressChange = (newAddress) => {
 };
 
 const handleTabChange = (type) => {
-    // Se clicar na aba já ativa, alterna abrir/fechar as opções
     if (type === localOrderType.value) {
         emit('toggle-open');
         return;
@@ -193,8 +220,17 @@ const handleTabChange = (type) => {
     }
 
     emit('update:modelValue', type);
-    emit('open'); // 🚀 Abre o drawer automaticamente ao mudar de canal
+    emit('open');
 };
+
+// Se o canal ativo não estiver entre os permitidos para o garçom, comuta automaticamente
+watch(allowedChannels, (channels) => {
+    if (props.isTeamMode || props.isWaiterMode) {
+        if (channels && channels.length > 0 && !channels.includes(localOrderType.value)) {
+            handleTabChange(channels[0]);
+        }
+    }
+}, { immediate: true });
 
 const handleCreateNewCustomer = (query = '') => {
     emit('open-new-customer', query);

@@ -1,8 +1,8 @@
 <template>
     <div v-if="favorites && favorites.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
         <CustomerProductCard
-            v-for="item in favorites"
-            :key="item.id"
+            v-for="(item, index) in favorites"
+            :key="item.variant_signature || (item.id + '_' + index)"
             :product="item"
             layout="list"
             @click="$emit('favorite-click', $event)"

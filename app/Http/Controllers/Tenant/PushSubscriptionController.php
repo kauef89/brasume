@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Models\PushSubscription;
+
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -39,9 +41,9 @@ class PushSubscriptionController extends Controller
         }
 
         // Salva diretamente na tabela do banco do Tenant ativo
-        DB::table('push_subscriptions')->where('endpoint', $request->endpoint)->delete();
+        PushSubscription::where('endpoint', $request->endpoint)->delete();
 
-        DB::table('push_subscriptions')->insert([
+        PushSubscription::create([
             'subscribable_type' => $subscribableType,
             'subscribable_id'   => $subscribableId,
             'endpoint'          => $request->endpoint,
@@ -59,7 +61,7 @@ class PushSubscriptionController extends Controller
     public function unsubscribe(Request $request)
     {
         $request->validate(['endpoint' => 'required']);
-        DB::table('push_subscriptions')->where('endpoint', $request->endpoint)->delete();
+        PushSubscription::where('endpoint', $request->endpoint)->delete();
         return response()->json(['success' => true]);
     }
 }

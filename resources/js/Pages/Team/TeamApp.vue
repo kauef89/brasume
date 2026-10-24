@@ -484,6 +484,7 @@ onMounted(() => {
     window.addEventListener('team-tab-changed', handleTabChange);
     window.addEventListener('team-open-checkout', handleOpenCheckoutEvent);
     window.addEventListener('popstate', handlePopState);
+    window.addEventListener('pos-order-completed', handleClearCart);
 
     if (!props.isOnDuty) {
         handleClearCart();
@@ -519,6 +520,7 @@ onBeforeUnmount(() => {
     window.removeEventListener('team-tab-changed', handleTabChange);
     window.removeEventListener('team-open-checkout', handleOpenCheckoutEvent);
     window.removeEventListener('popstate', handlePopState);
+    window.removeEventListener('pos-order-completed', handleClearCart);
 });
 
 const onProductClick = (product) => {

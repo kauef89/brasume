@@ -19,7 +19,7 @@
                 v-if="filteredItems.length === 0"
                 :title="activeView === 'pending' ? 'Copa Livre' : 'Sem Histórico'"
                 :subtitle="activeView === 'pending' ? 'Nenhuma bebida aguardando preparo.' : 'Nenhum item finalizado no turno.'"
-                :icon="activeView === 'pending' ? 'pi-check-circle' : 'pi-clock'"
+                :icon="activeView === 'pending' ? 'pi-thumbs-up' : 'pi-clock'"
                 class="mt-10"
             />
 

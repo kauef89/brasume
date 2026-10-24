@@ -60,4 +60,9 @@ class OrderItem extends Model
             ->withPivot('quantity', 'amount')
             ->withTimestamps();
     }
+
+    public function paymentAllocations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(OrderPaymentItem::class, 'order_item_id');
+    }
 }

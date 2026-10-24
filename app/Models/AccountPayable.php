@@ -66,8 +66,18 @@ class AccountPayable extends Model
         return $this->belongsTo(BankAccount::class);
     }
 
-    public function recurringExpense()
+        public function recurringExpense()
     {
         return $this->belongsTo(RecurringExpense::class, 'recurring_expense_id');
+    }
+
+    public function shiftAttendance()
+    {
+        return $this->hasOne(ShiftAttendance::class, 'account_payable_id');
+    }
+
+    public function schedule()
+    {
+        return $this->hasOne(EmployeeSchedule::class, 'payable_id');
     }
 }

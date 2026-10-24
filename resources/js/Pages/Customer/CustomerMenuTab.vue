@@ -242,11 +242,41 @@ const enrichedFavorites = computed(() => {
                 cleanedSelections = tempCleaned;
             }
 
+            const rawComboItems = fav.combo_items || fav.comboItems || [];
+            let hydratedComboItems = null;
+
+            if (rawComboItems.length > 0) {
+                hydratedComboItems = rawComboItems.map(c => {
+                    const rawSubMods = c.modifiers || c.structured_modifiers || c.structuredModifiers || [];
+                    const structuredModifiers = rawSubMods.map(m => ({
+                        id: m.id ?? m.modifier_option_id ?? null,
+                        group_id: m.group_id ?? m.modifier_group_id ?? null,
+                        name: m.name,
+                        price: Number(m.price || 0),
+                        qty: Number(m.qty || m.quantity || 1)
+                    }));
+                    const modifiersText = structuredModifiers.map(m => (m.qty > 1 ? `${m.qty}x ` : "") + m.name).join(", ");
+
+                    return {
+                        id: c.id,
+                        product_id: Number(c.product_id),
+                        name: c.name || c.product_name,
+                        group_id: c.group_id ? Number(c.group_id) : null,
+                        modifiersText: modifiersText,
+                        structuredModifiers: structuredModifiers
+                    };
+                });
+            }
+
             return {
                 ...realProduct,
+                variant_signature: fav.variant_signature || `${fav.id}`,
                 favorite_selections: cleanedSelections,
+                combo_items: hydratedComboItems,
+                notes: fav.notes || "",
                 cartItem: {
                     qty: fav.quantity || 1,
+                    notes: fav.notes || "",
                     isTakeaway: false,
                     structuredModifiers: cleanedSelections.map(m => ({
                         id: m.id,
@@ -255,7 +285,8 @@ const enrichedFavorites = computed(() => {
                         qty: Number(m.quantity || m.qty || 1),
                         is_joker: !m.is_joker,
                         group_id: m.group_id || m.modifier_group_id || null
-                    }))
+                    })),
+                    comboItems: hydratedComboItems
                 }
             };
         })

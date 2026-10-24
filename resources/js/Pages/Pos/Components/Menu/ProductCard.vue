@@ -7,7 +7,7 @@
             layout === 'list'
                 ? 'w-full flex items-stretch p-3 rounded-[1.5rem] bg-surface-1 hover:bg-surface-2 gap-4'
                 : 'w-full aspect-[3/4] rounded-2xl flex flex-col justify-between p-3.5 bg-surface-2 shadow-sm hover:shadow-xl',
-            isBlocked ? 'grayscale opacity-60 cursor-not-allowed' : 'cursor-pointer'
+            isBlocked ? 'grayscale cursor-not-allowed' : 'cursor-pointer'
         ]"
     >
         <template v-if="layout !== 'list'">
@@ -21,45 +21,35 @@
                 <i class="pi pi-image text-4xl"></i>
             </div>
 
-            <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-transparent z-[1] pointer-events-none"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/55 to-transparent z-[1] pointer-events-none"></div>
 
-            <div class="relative z-10 flex items-start justify-between gap-2 w-full">
-                <span
-                    v-if="isPaused"
-                    class="bg-warning-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md shadow-sm"
-                >
-                    Pausado
-                </span>
-                <span
-                    v-else-if="isOutOfStock"
-                    class="bg-danger-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md shadow-sm"
-                >
-                    Esgotado
-                </span>
-                <span
-                    v-if="product?.promo_price > 0"
-                    class="bg-warning-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md shadow-sm ml-auto"
-                >
+            <div v-if="product?.promo_price > 0" class="relative z-10 flex items-start justify-end gap-2 w-full">
+                <span class="bg-warning-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md shadow-sm">
                     Promo
                 </span>
             </div>
 
-            <div class="relative z-10 mt-auto flex flex-col gap-1.5 w-full">
-                <h3 class="font-black text-sm text-white line-clamp-2 leading-tight drop-shadow-sm">
+            <div class="relative z-10 mt-auto flex flex-col gap-1 w-full">
+                <h3 class="font-black text-sm text-white line-clamp-1 leading-tight drop-shadow-sm">
                     {{ product?.name }}
                 </h3>
+
+                <!-- 🌟 EXIBIÇÃO DE MODIFICADORES / ANOTAÇÕES NO GRID DO POS -->
+                <p v-if="displayDescription" class="text-[11px] font-medium text-white/80 line-clamp-2 leading-tight drop-shadow-xs mb-1">
+                    {{ displayDescription }}
+                </p>
 
                 <div class="flex items-end justify-between gap-2 pt-1">
                     <div class="flex flex-col">
                         <span v-if="product?.promo_price > 0" class="text-[10px] text-white/70 line-through font-medium leading-none">
-                            {{ $formatCurrency(originalTotal ) }}
+                            {{ $formatCurrency(originalTotal) }}
                         </span>
                         <span class="font-black text-white text-base leading-tight drop-shadow-sm">
-                            {{ $formatCurrency(finalTotal ) }}
+                            {{ $formatCurrency(finalTotal) }}
                         </span>
                     </div>
 
-                    <div v-if="!isBlocked" class="w-8 h-8 rounded-full bg-white/5 backdrop-blur-md text-white flex items-center justify-center group-hover:bg-primary-500 transition-colors shadow-sm shrink-0 active:scale-90">
+                    <div v-if="!isBlocked" class="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center group-hover:bg-primary-500 transition-colors shadow-sm shrink-0 active:scale-90">
                         <i class="pi pi-plus text-xs font-black"></i>
                     </div>
                 </div>
@@ -71,29 +61,27 @@
                 <img v-if="finalImageUrl" :src="finalImageUrl" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="" />
                 <i v-else class="pi pi-image text-surface-muted opacity-20 text-2xl"></i>
 
-
-
                 <div v-if="product?.promo_price > 0" class="absolute top-1.5 right-1.5 bg-warning-500 text-white text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md z-10">
                     Promo
                 </div>
             </div>
 
             <div class="flex flex-col flex-1 min-w-0 w-full justify-center py-1">
-                <h3 class="font-medium text-sm text-surface-text w-full line-clamp-2">
+                <h3 class="font-medium text-sm text-surface-text w-full line-clamp-1">
                     {{ product?.name }}
                 </h3>
 
-                <p v-if="modifiersText || product?.description" class="text-xs font-medium line-clamp-2 leading-snug w-full mt-0.5" :class="modifiersText ? 'text-surface-text' : 'text-surface-muted'">
-                    {{ modifiersText || product?.description }}
+                <p v-if="displayDescription" class="text-xs font-medium line-clamp-2 leading-snug w-full mt-0.5" :class="selections.length > 0 ? 'text-surface-text' : 'text-surface-muted'">
+                    {{ displayDescription }}
                 </p>
 
                 <div class="mt-auto flex items-end justify-between gap-2 w-full pt-1">
                     <div class="flex flex-col">
                         <span v-if="product?.promo_price > 0" class="text-[10px] text-surface-muted line-through font-medium">
-                            {{ $formatCurrency(originalTotal ) }}
+                            {{ $formatCurrency(originalTotal) }}
                         </span>
                         <span class="font-black text-primary-700 dark:text-primary-300 text-base">
-                            {{ $formatCurrency(finalTotal ) }}
+                            {{ $formatCurrency(finalTotal) }}
                         </span>
                     </div>
 
@@ -109,6 +97,7 @@
 <script setup>
 import { computed } from 'vue';
 import { usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/formatters';
 
 const props = defineProps({
     product: Object,
@@ -162,14 +151,39 @@ const selections = computed(() => {
     return [];
 });
 
-const modifiersText = computed(() => {
+const displayDescription = computed(() => {
+    // 🍔 Se for combo com subitens:
+    const comboList = props.product?.cartItem?.comboItems || props.product?.combo_items;
+    if (comboList && Array.isArray(comboList) && comboList.length > 0) {
+        return comboList.map(c => {
+            const mod = c.modifiersText ? ` (${c.modifiersText})` : "";
+            const qty = Number(c.qty || c.quantity || 1);
+            return (qty > 1 ? `${qty}x ` : "") + (c.name || c.product_name) + mod;
+        }).join(" + ");
+    }
+
     const list = selections.value;
-    if (!list || list.length === 0) return '';
-    const names = list.map(m => m.name).filter(Boolean);
-    if (names.length === 0) return '';
-    if (names.length === 1) return names[0];
-    const last = names.pop();
-    return names.join(', ') + ' e ' + last;
+    const parts = [];
+
+    if (list && list.length > 0) {
+        const names = list.map(m => {
+            const qty = Number(m.qty || m.quantity || 1);
+            return qty > 1 ? `${qty}x ${m.name}` : m.name;
+        }).filter(Boolean);
+
+        if (names.length === 1) parts.push(names[0]);
+        else if (names.length > 1) parts.push(names.join(', ').replace(/, ([^,]*)$/, ' e $1'));
+    }
+
+    if (props.product?.notes && String(props.product.notes).trim() !== '') {
+        parts.push(`Obs: ${props.product.notes.trim()}`);
+    }
+
+    if (parts.length > 0) {
+        return parts.join(' • ');
+    }
+
+    return props.product?.description || '';
 });
 
 const extraPrice = computed(() => {

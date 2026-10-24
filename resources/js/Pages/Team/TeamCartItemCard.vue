@@ -1,5 +1,5 @@
 <template>
-    <div class="p-4 bg-surface-2 rounded-[1.5rem] flex flex-col gap-3">
+    <div class="p-4 bg-surface-3 rounded-[1.5rem] flex flex-col gap-3">
         <!-- CABEÇALHO DO ITEM: Nome, Preço e Badge P/ Viagem -->
         <div class="flex justify-between items-start gap-3">
             <div class="flex flex-col min-w-0 flex-1">

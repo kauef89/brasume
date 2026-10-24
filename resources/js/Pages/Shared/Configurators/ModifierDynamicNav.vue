@@ -8,7 +8,7 @@
                 <button
                     @click="$emit('back')"
                     type="button"
-                    class="w-11 h-11 shrink-0 rounded-full bg-surface-1/50 hover:bg-surface-2 text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
+                    class="w-11 h-11 shrink-0 rounded-full text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
                     title="Voltar"
                 >
                     <i class="pi pi-arrow-left text-sm"></i>
@@ -50,11 +50,11 @@
         </div>
 
         <!-- 👤 CUSTOMER APP: 1 LINHA COMPACTA (SlideToConfirm tipo SHORT abraçando o conteúdo) -->
-        <div v-else class="flex items-center gap-2 select-none px-1 whitespace-nowrap">
+        <div v-else class="flex items-center gap-2 select-none whitespace-nowrap">
             <button
                 @click="$emit('back')"
                 type="button"
-                class="w-11 h-11 shrink-0 rounded-full bg-surface-1/50 hover:bg-surface-2 text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
+                class="w-11 h-11 shrink-0 rounded-full text-surface-text flex items-center justify-center transition-colors border-none outline-none cursor-pointer shadow-sm active:scale-90"
                 title="Voltar"
             >
                 <i class="pi pi-arrow-left text-sm"></i>

@@ -26,7 +26,7 @@
             >
                 <button
                     @click.prevent="emit('update:activeTab', 'menu')"
-                    class="c-island-btn shrink-0 !bg-surface-1 text-surface-text hover:bg-surface-2"
+                    class="c-island-btn shrink-0 text-surface-text hover:bg-surface-2"
                     title="Voltar ao Cardápio"
                 >
                     <i class="pi pi-arrow-left"></i>
@@ -35,7 +35,7 @@
                 <SlideToConfirm
                     class="w-56 sm:w-64 !h-11 transition-all"
                     :color="isAllowanceMode ? 'primary' : 'success'"
-                    :text="isAllowanceMode ? 'Deslize p/ Debitar' : 'Deslize p/ Confirmar'"
+                    :text="isAllowanceMode ? 'Debitar' : 'Confirmar'"
                     :success-text="isAllowanceMode ? 'Debitado!' : 'Enviado!'"
                     :icon="isAllowanceMode ? 'pi-wallet' : 'pi-send'"
                     format="long"
@@ -100,7 +100,7 @@
             >
                 <button
                     @click.prevent="handleRestockBack"
-                    class="c-island-btn shrink-0 !bg-surface-1 text-surface-text hover:bg-surface-2"
+                    class="c-island-btn shrink-0 text-surface-text hover:bg-surface-2"
                     title="Voltar"
                 >
                     <i class="pi pi-arrow-left"></i>
@@ -139,7 +139,7 @@
             <!-- 5. NAVEGAÇÃO DA EQUIPE -->
             <div
                 v-else
-                class="flex items-center gap-1 shrink-0"
+                class="flex items-center shrink-0"
             >
                 <!-- 🛵 MODO MOTOBOY EXCLUSIVO -->
                 <template v-if="resolvedIsDriver">

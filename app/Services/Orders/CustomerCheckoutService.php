@@ -2,6 +2,8 @@
 
 namespace App\Services\Orders;
 
+use App\Enums\PaymentEngineType;
+
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\PaymentMethod;
@@ -98,7 +100,7 @@ class CustomerCheckoutService
 
             $paymentMethodId = $routing['payment_method_id'] ?? null;
             $paymentMethod = $paymentMethodId ? PaymentMethod::find($paymentMethodId) : null;
-            $isBankApi = $paymentMethod && $paymentMethod->engine_type === 'bank_api';
+            $isBankApi = $paymentMethod && ($paymentMethod->engine_type === PaymentEngineType::BANK_API || $paymentMethod->engine_type?->value === 'bank_api');
 
             // 🚀 SONDA 2 E TRAVA DE SEGURANÇA B2C
             $previewTotal = round((float)$financials['subtotal'] + (float)($financials['deliveryFee'] ?? 0) + $serviceFee - $discount - $cashbackUsed, 2);
@@ -233,10 +235,16 @@ class CustomerCheckoutService
                 // 🔥 CRIAR O REGISTO DO PAGAMENTO AQUI:
                 $order->payments()->create([
                     'payment_method_id' => $paymentMethod->id,
-                    'amount' => $remainingBalance,
-                    'status' => 'pending',
-                    'txid' => $pixData['txid'],
-                    'pix_payload' => $pixData['qr_code']
+                    'method'            => $paymentMethod->name ?? 'Pix',
+                    'amount'            => $remainingBalance,
+                    'status'            => 'pending',
+                    'is_paid'           => false,
+                    'txid'              => $pixData['txid'],
+                    'pix_payload'       => $pixData['qr_code']
+                ]);
+
+                $order->update([
+                    'txid' => $pixData['txid']
                 ]);
 
                 Log::info('📍 [SONDA CHECKOUT B2C - 5] PIX Gerado com Sucesso!', ['txid' => $pixData['txid']]);

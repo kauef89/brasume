@@ -110,7 +110,7 @@
                     <!-- 🛡️ 1. SLIDE PARA LIBERAR / AUTORIZAR ACESSO -->
                     <SlideToConfirm
                         v-if="device.is_waiting || device.status !== 'operating'"
-                        :text="device.is_waiting ? 'Deslize p/ Autorizar' : 'Deslize p/ Liberar'"
+                        :text="device.is_waiting ? 'Autorizar' : 'Liberar'"
                         success-text="Liberado!"
                         icon="pi-unlock"
                         :color="device.is_waiting ? 'warning' : 'primary'"
@@ -124,7 +124,7 @@
                     <!-- 🛑 2. SLIDE PARA BLOQUEAR SESSÃO OPERANTE -->
                     <SlideToConfirm
                         v-else
-                        text="Deslize p/ Bloquear"
+                        text="Bloquear"
                         success-text="Bloqueado!"
                         icon="pi-lock"
                         color="danger"

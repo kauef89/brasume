@@ -7,8 +7,8 @@
             <!-- BADGE DE STATUS DA OPERAÇÃO -->
             <div class="flex items-center gap-2">
                 <span
-                    class="w-2.5 h-2.5 rounded-full"
-                    :class="isOpenMode ? 'bg-primary-500 animate-pulse' : 'bg-danger-500'"
+                    class="w-2.5 h-2.5 rounded-full bg-primary-500"
+                    :class="isOpenMode ? 'animate-pulse' : ''"
                 ></span>
                 <span class="text-xs font-black uppercase tracking-widest text-surface-muted">
                     {{ isOpenMode ? 'Abertura de Turno (Passo 2 de 2)' : 'Fechamento de Turno (Passo 1 de 2)' }}
@@ -21,8 +21,7 @@
                     {{ isOpenMode ? 'Fundo de Troco Conferido' : 'Total Contado em Gaveta' }}
                 </span>
                 <div
-                    class="text-4xl font-black tracking-tight mt-1"
-                    :class="isOpenMode ? 'text-primary-smart' : 'text-surface-text'"
+                    class="text-4xl font-black tracking-tight mt-1 text-primary-smart"
                 >
                     {{ $formatCurrency(amount) }}
                 </div>
@@ -61,7 +60,7 @@
                 :class="[
                     !isValid || isConfirming
                         ? 'opacity-50 cursor-not-allowed bg-surface-3 text-surface-muted'
-                        : (isOpenMode ? 'bg-primary-500 hover:bg-primary-600 active:scale-[0.98] shadow-primary-500/25 cursor-pointer' : 'bg-danger-500 hover:bg-danger-600 active:scale-[0.98] shadow-danger-500/25 cursor-pointer')
+                        : 'bg-primary-500 hover:bg-primary-600 active:scale-[0.98] shadow-primary-500/25 cursor-pointer'
                 ]"
             >
                 <i :class="['pi text-sm', isOpenMode ? 'pi-check' : 'pi-arrow-right']"></i>
@@ -88,7 +87,7 @@
 
 <script setup>
 import SecureActionButton from '@/Components/UI/SecureActionButton.vue';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useConfirm } from 'primevue/useconfirm';
 import { formatCurrency } from '@/Utils/formatters';
 
@@ -156,7 +155,6 @@ const triggerConfirmation = () => {
             onHide: rejectCallback
         });
     } else {
-        // No fechamento, avança diretamente para a etapa de acertos
         isConfirming.value = false;
         emit('confirm', { observation: observation.value });
     }

@@ -152,11 +152,23 @@ export function useOrderFlow(props, cartContext, autoCheckoutCallback = null) {
             localStorage.removeItem('pos_swap_context');
         }
 
+        // Preserva comboItems e notas de favoritos
+        if (product.cartItem?.comboItems) {
+            productWithContext.cartItem = { ...product.cartItem };
+        } else if (product.combo_items && product.combo_items.length > 0) {
+            productWithContext.cartItem = {
+                qty: 1,
+                notes: product.notes || null,
+                comboItems: product.combo_items
+            };
+        }
+
         activeProduct.value = productWithContext;
         editItemIndex.value = null;
 
         const typeStr = String(product.type || '').toLowerCase();
-        const isActuallyACombo = typeStr === 'combo' || hasComboGroups(product) || product.isCombo === true;
+        const hasSubItems = Boolean(productWithContext.cartItem?.comboItems?.length > 0);
+        const isActuallyACombo = typeStr === 'combo' || hasComboGroups(product) || product.isCombo === true || hasSubItems;
 
         if (isActuallyACombo) {
             isComboVisible.value = true;
@@ -190,6 +202,7 @@ export function useOrderFlow(props, cartContext, autoCheckoutCallback = null) {
             ...originalProduct,
             cartItem: {
                 qty: 1,
+                notes: favorite.notes || favorite.cartItem?.notes || null,
                 structuredModifiers: structuredMods,
                 comboItems: comboItems && comboItems.length > 0 ? comboItems : null
             }

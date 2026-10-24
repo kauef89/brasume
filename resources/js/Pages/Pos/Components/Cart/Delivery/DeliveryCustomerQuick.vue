@@ -1,10 +1,10 @@
 <template>
-    <div class="flex flex-col gap-3 p-4 bg-surface-1 rounded-2xl border border-surface-border">
+    <div class="flex flex-col gap-3 p-4 bg-surface-3 rounded-2xl">
         <div class="flex items-center justify-between mb-1">
             <span class="text-xs font-black uppercase tracking-wider text-surface-muted flex items-center gap-1.5">
-                <i class="pi pi-bolt text-amber-500"></i> Cadastro Rápido
+                <i class="pi pi-bolt text-amber-500"></i> {{ simpleMode ? "Identificação do Cliente" : "Cadastro Rápido" }}
             </span>
-            <span v-if="isCounter" class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+            <span v-if="isCounter && !simpleMode" class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                 WhatsApp opcional
             </span>
         </div>
@@ -17,13 +17,13 @@
                 v-model="name"
                 type="text"
                 placeholder="Ex: João Silva"
-                class="w-full h-11 px-3.5 rounded-xl bg-surface-2 border border-surface-border text-surface-text text-sm font-bold placeholder:text-surface-muted/50 outline-none focus:border-primary-500 transition-colors"
+                class="w-full h-11 px-3.5 rounded-xl bg-surface-1 border border-surface-border text-surface-text text-sm font-bold placeholder:text-surface-muted/50 outline-none focus:border-primary-500 transition-colors"
                 @keydown.enter.prevent="handleEnterKey"
             />
         </div>
 
         <!-- Campo WhatsApp -->
-        <div class="flex flex-col gap-1">
+        <div v-if="!simpleMode" class="flex flex-col gap-1">
             <div class="flex items-center justify-between">
                 <label class="text-[11px] font-bold text-surface-muted uppercase">
                     WhatsApp {{ isCounter ? '(Opcional)' : '*' }}
@@ -43,10 +43,10 @@
             @click="handleSubmit"
             type="button"
             :disabled="!isValid || isSubmitting"
-            class="w-full h-12 mt-1 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 outline-none border-none shadow-sm"
+            class="w-full h-12 mt-1 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 outline-none border-none"
             :class="isValid && !isSubmitting
                 ? 'bg-primary-500 hover:bg-primary-600 text-white cursor-pointer active:scale-98'
-                : 'bg-surface-3 text-surface-muted cursor-not-allowed opacity-60'"
+                : 'grayscale text-surface-muted cursor-not-allowed'"
         >
             <i class="pi" :class="isSubmitting ? 'pi-spinner pi-spin' : 'pi-check'"></i>
             <span>{{ isSubmitting ? 'Salvando...' : 'Confirmar e Usar' }}</span>
@@ -64,7 +64,8 @@ const props = defineProps({
     companySettings: { type: Object, default: () => ({}) },
     customers: { type: Array, default: () => [] },
     orderType: { type: String, default: 'delivery' },
-    allowEmptyPhone: { type: Boolean, default: false }
+    allowEmptyPhone: { type: Boolean, default: false },
+    simpleMode: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['success']);
@@ -83,6 +84,10 @@ const isValid = computed(() => {
     const hasName = name.value.trim().length >= 2;
     if (!hasName) return false;
 
+    if (props.simpleMode) {
+        return true;
+    }
+
     // No balcão: Se vazio, é válido. Se preenchido, exige 10 ou 11 dígitos.
     if (isCounter.value) {
         if (!rawPhone.value) return true;
@@ -94,7 +99,7 @@ const isValid = computed(() => {
 });
 
 const handleEnterKey = () => {
-    if (isCounter.value && !phone.value) {
+    if (props.simpleMode || (isCounter.value && !phone.value)) {
         handleSubmit();
     }
 };

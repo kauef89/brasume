@@ -150,7 +150,10 @@ const timeElapsed = computed(() => {
 // 🚀 REGRAS FINANCEIRAS INTELIGENTES DO CARD
 const isPaid = computed(() => {
     if (props.order?.payment_status === 'paid') return true;
-    const totalPaid = (props.order?.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    if (props.order?.payment_intent_status === 'pix_waiting' || props.order?.status === 'pending_payment') return false;
+    const totalPaid = (props.order?.payments || [])
+        .filter(p => p.is_paid === true || p.is_paid === 1 || p.status === 'completed' || p.status === 'paid')
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
     const orderTotal = Number(props.order?.total || 0);
     return orderTotal > 0 && totalPaid >= (orderTotal - 0.05);
 });

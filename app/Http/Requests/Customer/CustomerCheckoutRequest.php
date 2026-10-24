@@ -138,7 +138,6 @@ class CustomerCheckoutRequest extends FormRequest
             'routing.payment_engine' => [
                 Rule::requiredIf($requiresPayment),
                 'nullable',
-                'string'
             ],
             'routing.change_target' => ['nullable', 'numeric'],
             'routing.cash_change_target' => ['nullable', 'numeric'],
@@ -169,6 +168,15 @@ class CustomerCheckoutRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $routing = $this->input('routing', []);
+        if (isset($routing['payment_engine'])) {
+            if ($routing['payment_engine'] instanceof \BackedEnum) {
+                $routing['payment_engine'] = $routing['payment_engine']->value;
+            } elseif (is_array($routing['payment_engine'])) {
+                $routing['payment_engine'] = reset($routing['payment_engine']);
+            }
+            $this->merge(['routing' => $routing]);
+        }
         $routing = $this->input('routing', []);
         $financials = $this->input('financials', []);
         $items = $this->input('items', []);
@@ -313,7 +321,7 @@ class CustomerCheckoutRequest extends FormRequest
         if (!empty($routing['payment_method_id'])) {
             $paymentMethod = PaymentMethod::find((int) $routing['payment_method_id']);
             if ($paymentMethod) {
-                $routing['payment_engine'] = $paymentMethod->engine_type;
+                $routing['payment_engine'] = $paymentMethod->engine_type instanceof \BackedEnum ? $paymentMethod->engine_type->value : (string) ($paymentMethod->engine_type ?? 'local');
                 $routing['payment_method_name'] = $paymentMethod->name;
             }
         }

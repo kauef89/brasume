@@ -3,7 +3,7 @@
         @click="$emit('click', product)"
         :disabled="isBlocked"
         class="c-glass-card-interactive flex items-stretch p-3 md:p-4 gap-4 w-full text-left relative transition-all duration-200"
-        :class="isBlocked ? 'grayscale opacity-50 cursor-not-allowed' : ''"
+        :class="isBlocked ? 'grayscale cursor-not-allowed' : ''"
     >
         <!-- 🖼️ IMAGEM -->
         <div class="relative bg-white/5 flex items-center justify-center shrink-0 overflow-hidden w-24 h-24 md:w-28 md:h-28 rounded-2xl">
@@ -14,9 +14,6 @@
                 loading="lazy"
             />
             <i v-else class="pi pi-image text-white/20 text-3xl"></i>
-
-            <!-- Badges de Disponibilidade / Promo -->
-
 
             <div v-if="product?.promo_price > 0" class="absolute top-2 left-2 c-badge bg-warning-500/90 text-white font-black text-[9px] uppercase tracking-widest">
                 Promo
@@ -39,10 +36,10 @@
             <div class="mt-auto flex items-end justify-between gap-2 w-full pt-2">
                 <div class="flex flex-col">
                     <span v-if="product?.promo_price > 0" class="text-[10px] text-white/40 line-through font-medium">
-                        {{ $formatCurrency(originalTotal ) }}
+                        {{ $formatCurrency(originalTotal) }}
                     </span>
                     <span class="font-black text-lg text-white/80 tracking-tight">
-                        {{ $formatCurrency(finalTotal ) }}
+                        {{ $formatCurrency(finalTotal) }}
                     </span>
                 </div>
             </div>
@@ -82,6 +79,16 @@ const finalImageUrl = computed(() => {
 const selections = computed(() => props.product?.favorite_selections || props.product?.cartItem?.structuredModifiers || []);
 
 const displayDescription = computed(() => {
+    // 🍔 Se for combo com subitens:
+    const comboList = props.product?.cartItem?.comboItems || props.product?.combo_items;
+    if (comboList && Array.isArray(comboList) && comboList.length > 0) {
+        return comboList.map(c => {
+            const mod = c.modifiersText ? ` (${c.modifiersText})` : "";
+            const qty = Number(c.qty || c.quantity || 1);
+            return (qty > 1 ? `${qty}x ` : "") + (c.name || c.product_name) + mod;
+        }).join(" + ");
+    }
+
     const list = selections.value;
     if (list && list.length > 0) {
         const names = list.map(m => m.name).filter(Boolean);

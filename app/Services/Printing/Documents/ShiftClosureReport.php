@@ -177,7 +177,7 @@ class ShiftClosureReport
             ->whereHas('order', fn($q) => $q->whereIn('status', ['closed', 'completed', 'dispatched', 'preparing']))
             ->get();
 
-        $revenuePayments = $payments->reject(fn($p) => $p->paymentMethod?->engine_type === 'loss');
+        $revenuePayments = $payments->reject(fn($p) => ($p->paymentMethod?->engine_type === \App\Enums\PaymentEngineType::LOSS || $p->paymentMethod?->engine_type?->value === 'loss'));
         $grouped = $revenuePayments->groupBy(fn($p) => $p->method ?: 'Outros');
 
         $this->blueprint[] = ['cmd' => 'text', 'val' => 'FATURAMENTO POR FORMA DE PAGAMENTO', 'bold' => true];

@@ -107,7 +107,14 @@ export function useCustomerCheckoutPayload(props, cartContext, financials, activ
             };
         }
 
-        const isBankApi = checkoutState.selectedMethod?.engine_type === 'bank_api';
+                const rawEngine = checkoutState.selectedMethod?.engine_type;
+        let resolvedEngine = 'local';
+        if (typeof rawEngine === 'string') {
+            resolvedEngine = rawEngine;
+        } else if (rawEngine && typeof rawEngine === 'object') {
+            resolvedEngine = rawEngine.value || Object.values(rawEngine)[0] || 'local';
+        }
+        const isBankApi = resolvedEngine === 'bank_api';
 
         const routing = {
             ...rawRouting,
@@ -120,7 +127,7 @@ export function useCustomerCheckoutPayload(props, cartContext, financials, activ
             address: isTable ? null : buildCleanAddress(rawRouting.address),
             payment_method_id: checkoutState.selectedMethod?.id || null,
             payment_method_name: checkoutState.selectedMethod?.name || null,
-            payment_engine: checkoutState.selectedMethod?.engine_type || 'local',
+            payment_engine: resolvedEngine,
             payment_intent_status: isBankApi ? 'pix_waiting' : (isTable ? 'pay_on_pickup' : 'pay_on_delivery'),
             cashback_discount: financials.value.cashbackDiscount > 0 ? financials.value.cashbackDiscount : null,
             cash_change_target: checkoutState.cashChangeTarget || null

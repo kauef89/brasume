@@ -53,6 +53,12 @@ export function useCustomerCheckoutFlow(props, cartContext, activeTab) {
         const finalSnapshot = financials.value.finalTotal;
         const payload = buildPayload(finalSnapshot);
 
+                if (activeOrderId.value) {
+            router.post(route('customer.orders.cancel', activeOrderId.value), {}, { preserveState: true, preserveScroll: true });
+            activeOrderId.value = null;
+            activePixData.value = null;
+        }
+
         router.post(route('customer.checkout.store'), payload, {
             preserveState: true,
             preserveScroll: true,
@@ -71,9 +77,6 @@ export function useCustomerCheckoutFlow(props, cartContext, activeTab) {
 
                             // 🚀 Como o pedido já foi gravado no banco, limpa o carrinho imediatamente.
                             // Isso evita que itens persistam se o cliente fechar a aba ou pagar direto no app bancário.
-                            clearCart();
-                            removeCoupon();
-
                             if (methodType === 'bank_api' || returnedPixData) {
                                 if (returnedPixData) {
                                     activeOrderId.value = returnedOrderId;
@@ -90,6 +93,8 @@ export function useCustomerCheckoutFlow(props, cartContext, activeTab) {
                                     toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Não foi possível carregar o QR Code. Tente novamente.', life: 5000 });
                                 }
                             } else {
+                                clearCart();
+                                removeCoupon();
                                 isCheckoutModalVisible.value = false;
                                 activeTab.value = isTableMode.value ? 'orders' : 'home';
                                 toast.add({ severity: 'success', summary: 'Pedido Recebido!', detail: 'O seu pedido já está sendo preparado!', life: 4000 });

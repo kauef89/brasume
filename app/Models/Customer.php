@@ -55,4 +55,9 @@ class Customer extends Model
     {
         return $this->hasMany(Coupon::class);
     }
+
+    public function pushSubscriptions(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(PushSubscription::class, 'subscribable');
+    }
 }

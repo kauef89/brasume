@@ -34,4 +34,9 @@ class AccountReceivable extends Model
     public function order() { return $this->belongsTo(Order::class); }
     public function bankAccount() { return $this->belongsTo(BankAccount::class); }
     public function customer() { return $this->belongsTo(Customer::class); }
+
+    public function acquirerTransaction(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(AcquirerTransaction::class, 'account_receivable_id');
+    }
 }
