@@ -59,7 +59,6 @@ class CheckoutPaymentController extends Controller
                 'diningTable'
             ]);
 
-            // Resolução de status e liberação de mesa delegada ao Service
             $paymentService->resolveOrderCompletion($order);
 
             if ($request->wantsJson()) {
@@ -88,6 +87,18 @@ class CheckoutPaymentController extends Controller
             abort(403, 'Este pagamento não pertence ao pedido.');
         }
 
+        // 🛡️ TRAVA CONTÁBIL: Pagamento via API bancária quitado não pode ser deletado do banco
+        $payment->loadMissing('paymentMethod');
+        $isApiEngine = $payment->paymentMethod && in_array($payment->paymentMethod->engine_type?->value ?? $payment->paymentMethod->engine_type, ['bank_api', 'sicredi_pix', 'pix_api']);
+
+        if ($isApiEngine && $payment->is_paid) {
+            $msg = 'Pagamento via API liquidado não pode ser excluído diretamente. Utilize a opção de Estorno com autorização.';
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+            return back()->withErrors(['error' => $msg]);
+        }
+
         DB::transaction(function () use ($payment, $order) {
             $payment->loadMissing('transaction');
             if ($payment->transaction) {
@@ -101,14 +112,16 @@ class CheckoutPaymentController extends Controller
             }
         });
 
+        broadcast(new OrderUpdated($order->fresh(['payments', 'items'])));
+
         if ($request->wantsJson()) {
-            return response()->json(['success' => true, 'message' => 'Pagamento estornado com sucesso.']);
+            return response()->json(['success' => true, 'message' => 'Pagamento removido com sucesso.']);
         }
 
-        return back()->with('success', 'Pagamento estornado com sucesso.');
+        return back()->with('success', 'Pagamento removido com sucesso.');
     }
 
-    public function generatePix(Order $order, \Illuminate\Http\Request $request, SicrediPixGateway $pixGateway): JsonResponse
+    public function generatePix(Order $order, Request $request, SicrediPixGateway $pixGateway): JsonResponse
     {
         $settings = CompanySetting::getCached() ?? CompanySetting::first();
 
@@ -116,41 +129,66 @@ class CheckoutPaymentController extends Controller
             return response()->json(['success' => false, 'message' => 'A integração PIX Sicredi não está ativa.'], 422);
         }
 
-        $alreadyPaid = (float) $order->payments()->sum('amount');
+        $alreadyPaid = (float) $order->payments()->where('status', 'paid')->sum('amount');
         $totalOutstanding = max(0, round((float) $order->total - $alreadyPaid, 2));
 
         if ($totalOutstanding <= 0.01) {
             return response()->json(['success' => false, 'message' => 'Este pedido já está quitado.'], 422);
         }
 
-        // 🚀 Permite que o Frontend solicite o pagamento de apenas uma fração da conta (PIX Parcial)
         $requestedAmount = $request->input('amount') ? (float) $request->input('amount') : $totalOutstanding;
         $balanceDue = min($requestedAmount, $totalOutstanding);
-        
+
         if ($balanceDue < 0.01) {
             return response()->json(['success' => false, 'message' => 'O valor solicitado é inválido.'], 422);
         }
 
         try {
             $pixData = $pixGateway->generatePayment($order, $balanceDue);
+            $expiresAt = now()->addSeconds(600);
 
             $order->update([
                 'txid'                  => $pixData['txid'],
+                'pix_payload'           => $pixData['qr_code'],
+                'pix_expires_at'        => $expiresAt,
                 'payment_intent_status' => 'pending_pix',
             ]);
 
-            broadcast(new OrderUpdated($order->fresh()));
+            broadcast(new OrderUpdated($order->fresh(['items', 'payments'])));
 
             return response()->json([
-                'success'  => true,
-                'txid'     => $pixData['txid'],
-                'qr_code'  => $pixData['qr_code'],
-                'amount'   => $balanceDue,
-                'order_id' => $order->id,
+                'success'    => true,
+                'txid'       => $pixData['txid'],
+                'qr_code'    => $pixData['qr_code'],
+                'amount'     => $balanceDue,
+                'order_id'   => $order->id,
+                'expires_at' => $expiresAt->toIso8601String(),
             ]);
         } catch (\Throwable $e) {
             Log::error("🚨 [SicrediPix] Erro no pedido #{$order->id}: " . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Falha ao comunicar com o Sicredi.'], 500);
         }
+    }
+
+    public function cancelPixIntent(Order $order): JsonResponse|RedirectResponse
+    {
+        $order->update([
+            'txid'                  => null,
+            'pix_payload'           => null,
+            'pix_expires_at'        => null,
+            'payment_intent_status' => null,
+        ]);
+
+        broadcast(new OrderUpdated($order->fresh(['items', 'payments'])));
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Cobrança PIX cancelada com sucesso.',
+                'order'   => $order,
+            ]);
+        }
+
+        return back()->with('success', 'Cobrança PIX cancelada.');
     }
 }

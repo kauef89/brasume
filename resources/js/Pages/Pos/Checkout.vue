@@ -5,13 +5,13 @@
     <Teleport v-if="isMounted" to="#dynamic-island-portal">
         <div class="flex items-center gap-2 shrink-0 mr-2">
             <PosTeleportButton
-                icon="pi-print"
+                icon="pi pi-print"
                 label="Imprimir Conta"
                 color="surface"
                 @click="printBill"
             />
             <PosTeleportButton
-                icon="pi-user-plus"
+                icon="pi pi-user-plus"
                 label="Vincular Cliente"
                 color="surface"
                 @click="isLinkCustomerModalVisible = true"
@@ -61,10 +61,12 @@
         <div v-if="isPixWaitingPhase" class="flex flex-col h-full w-full bg-surface-2 p-6 justify-center" key="pix-phase">
             <PixWaitingArea
                 :order-id="liveOrder.id"
-                :qr-code-string="liveOrder.txid"
+                :qr-code-string="liveOrder.pix_payload"
                 :txid="liveOrder.txid"
-                @cancel="cancelPixPayment"
+                :expires-at="liveOrder.pix_expires_at"
+                @cancel="cancelPixPayment(false)"
                 @refresh="refreshPixPayment"
+                @expired="cancelPixPayment(true)"
                 @payment-approved="onPixApprovedByWebhook"
             />
         </div>
@@ -80,7 +82,7 @@
                 :dynamic-total="intendedPaymentTotal"
                 :pending-to-stage="pendingToStage"
                 :payment-methods="paymentMethods"
-                :company-settings="companySettings"
+                :companySettings="companySettings"
                 :staged-payments="stagedPayments"
                 :order="liveOrder"
                 :suggested-amount="suggestedAmount"
@@ -105,10 +107,10 @@
 
             <div class="p-6 shrink-0 z-10">
                 <Button
-                    label="Confirmar Recebimento"
-                    icon="pi pi-check-circle"
+                    :label="hasBankApiStaged ? 'Gerar QR Code PIX' : 'Confirmar Recebimento'"
+                    :icon="hasBankApiStaged ? 'pi pi-qrcode' : 'pi pi-check-circle'"
                     class="w-full h-16 text-xl rounded-full! font-black border-none outline-none transition-colors"
-                    :class="canSubmitCheckout ? 'bg-success-500 hover:bg-success-500 text-white cursor-pointer' : 'bg-surface-3 text-surface-muted cursor-not-allowed'"
+                    :class="canSubmitCheckout ? 'bg-success-500 hover:bg-success-600 text-white cursor-pointer' : 'bg-surface-3 text-surface-muted cursor-not-allowed'"
                     :disabled="!canSubmitCheckout"
                     @click="processPayment"
                 />
@@ -245,7 +247,6 @@ const liveOrder = computed(() => {
 const orderRef = computed(() => liveOrder.value);
 const checkoutPrintMode = computed(() => props.companySettings?.checkout_print_mode || 'ask');
 
-// 🚀 Trava estrita: só avança para pós-pagamento se o pedido estiver integralmente quitado
 const isPostPaymentPhase = ref(false);
 
 watch(
@@ -259,7 +260,6 @@ watch(
     ([payStatus, orderStatus, totalStr, totalPaidVal, paymentsList]) => {
         const orderTotal = Number(totalStr || 0);
 
-        // Calcula o total pago através do total_paid ou pela soma dos pagamentos efetuados
         const calcPaid = totalPaidVal !== undefined && totalPaidVal !== null
             ? Number(totalPaidVal)
             : (Array.isArray(paymentsList) ? paymentsList.filter(p => p.status !== 'cancelled').reduce((acc, p) => acc + Number(p.amount || 0), 0) : 0);
@@ -328,7 +328,6 @@ const effectiveServiceFee = computed(() => Number((serviceFeeAmount.value * sele
 const effectiveDeliveryFee = computed(() => Number((deliveryFee.value * selectionRatio.value).toFixed(2)));
 const effectiveDiscount = computed(() => Number((discount.value * selectionRatio.value).toFixed(2)));
 
-// 🚀 Composable de Cupons Integrado
 const {
     appliedCheckoutCoupon,
     appliedCheckoutDiscount,
@@ -418,6 +417,10 @@ watch(() => liveOrder.value?.payments, (newPayments, oldPayments) => {
     }
 }, { deep: true });
 
+const hasBankApiStaged = computed(() => {
+    return (stagedPayments.value || []).some(p => p.engine_type === 'bank_api');
+});
+
 const canSubmitCheckout = computed(() => {
     const requiredAmount = intendedPaymentTotal.value - localCashbackAmountToSend.value;
     const stagedTotalAmount = stagedPayments.value.reduce((sum, p) => sum + p.amount, 0);
@@ -425,7 +428,7 @@ const canSubmitCheckout = computed(() => {
 });
 
 const handleManualClose = () => { emit('close'); };
-// ⌨️ ATALHO ESC: Fecha subpainéis ou retorna para o ControlPanel
+
 const handleKeydown = (e) => {
     if (e.key === 'Escape') {
         const activeEl = document.activeElement;
@@ -445,6 +448,7 @@ const handleKeydown = (e) => {
         handleManualClose();
     }
 };
+
 const handleAddPayment = (method) => { addPayment(method, toast); };
 
 const handleQuickAdd = (item) => {
@@ -470,7 +474,6 @@ const handleRollbackPayment = (payment) => {
     isReasonModalVisible.value = true;
 };
 
-// 🚀 Composable de Estorno Integrado
 const { rollbackPayment, cancelItem } = usePaymentRollback({
     liveOrder,
     props,

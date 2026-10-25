@@ -46,7 +46,7 @@
             {{ copied ? 'Código Copiado!' : 'Copiar PIX Copia e Cola' }}
         </button>
 
-        <!-- AÇÕES SECUNDÁRIAS (Cancelar) -->
+        <!-- AÇÕES SECUNDÁRIAS (Cancelar e Renovar) -->
         <div class="flex items-center justify-between w-full gap-3 mt-4 border-t border-white/10 pt-6">
             <SecureActionButton action-code="cancel" label="Cancelar" variant="text" severity="secondary" custom-class="px-6 h-10 rounded-full font-black text-sm uppercase tracking-widest" @secure-click="$emit('cancel')" />
             <button
@@ -61,7 +61,6 @@
 
 <script setup>
 import SecureActionButton from '@/Components/UI/SecureActionButton.vue';
-
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import QrcodeVue from 'qrcode.vue';
 
@@ -69,13 +68,23 @@ const props = defineProps({
     orderId: { type: [Number, String], required: true },
     qrCodeString: { type: String, default: null },
     txid: { type: String, default: null },
+    expiresAt: { type: [String, Date], default: null },
     isLoading: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['cancel', 'refresh', 'expired']);
 
-// 🚀 EXATAMENTE 10 MINUTOS (600s)
-const timeLeft = ref(600);
+const calculateRemainingSeconds = () => {
+    if (props.expiresAt) {
+        const expiry = new Date(props.expiresAt).getTime();
+        const now = Date.now();
+        const diff = Math.floor((expiry - now) / 1000);
+        return diff > 0 ? diff : 0;
+    }
+    return 600;
+};
+
+const timeLeft = ref(calculateRemainingSeconds());
 const timer = ref(null);
 const copied = ref(false);
 
@@ -89,14 +98,18 @@ const formattedTime = computed(() => {
 
 const startTimer = () => {
     clearInterval(timer.value);
-    timeLeft.value = 600;
+    timeLeft.value = calculateRemainingSeconds();
+
+    if (timeLeft.value <= 0) {
+        emit('expired');
+        return;
+    }
 
     timer.value = setInterval(() => {
         if (timeLeft.value > 0) {
             timeLeft.value--;
         } else {
             clearInterval(timer.value);
-            // 🚀 AVISA O PAI QUE O TEMPO ACABOU!
             emit('expired');
         }
     }, 1000);
@@ -111,7 +124,15 @@ const copyCode = async () => {
     } catch (err) {}
 };
 
-onMounted(() => { if (props.qrCodeString) startTimer(); });
-watch(() => props.qrCodeString, (newVal) => { if (newVal) startTimer(); });
-onUnmounted(() => { clearInterval(timer.value); });
+onMounted(() => {
+    if (props.qrCodeString) startTimer();
+});
+
+watch(() => [props.qrCodeString, props.expiresAt], () => {
+    if (props.qrCodeString) startTimer();
+});
+
+onUnmounted(() => {
+    clearInterval(timer.value);
+});
 </script>

@@ -16,6 +16,7 @@ class Order extends Model
     protected $guarded = [];
 
     protected $casts = [
+        'pix_expires_at' => 'datetime',
         'address_snapshot'       => 'array',
         'address'                => 'array',
         'payment_intent_methods' => 'array',

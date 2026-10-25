@@ -258,7 +258,7 @@ class DeliveryDispatch
         if ($isPaidStatus || $toCollect <= 0.02) {
             $b->blueprint[] = [
                 'cmd'    => 'text',
-                'val'    => $s3 . '   JA PAGO   ' . $s0,
+                'val'    => $s3 . '   == PAGO ==   ' . $s0,
                 'bold'   => true,
                 'invert' => true
             ];

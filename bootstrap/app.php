@@ -27,6 +27,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/bridge/*',
             '*/api/bridge/*',
             'livewire/*',
+            'api/webhooks/*',
+            '*/api/webhooks/*',
         ]);
 
         $middleware->alias([

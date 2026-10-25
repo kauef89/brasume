@@ -175,9 +175,14 @@ class CustomerCheckoutService
 
                 $marketing = session('marketing_traffic', []);
 
+                $currentShift = \App\Models\CashShift::where('status', 'open')->latest()->first();
+                $resolvedDriverId = ($orderType === 'delivery') ? app(\App\Services\Orders\Handlers\DeliveryOrderHandler::class)->resolveCourier($currentShift) : null;
+
                 $order = Order::create([
                     'customer_id'            => $targetCustomerId,
                     'coupon_id'              => $couponId,
+                    'cash_shift_id'        => $currentShift?->id,
+                    'driver_id'            => $resolvedDriverId,
                     'type'                   => $orderType,
                     'source'                 => Order::SOURCE_CUSTOMER_APP,
                     'address_id'             => $resolvedAddress['address_id'],

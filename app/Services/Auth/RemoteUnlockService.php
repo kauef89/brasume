@@ -2,6 +2,8 @@
 
 namespace App\Services\Auth;
 
+use App\Enums\DeviceType;
+
 use App\Models\Device;
 use App\Models\User;
 use App\Events\DeviceRemoteUnlocked;
@@ -19,7 +21,7 @@ class RemoteUnlockService
      */
     public function getDeviceFleet()
     {
-        $devices = Device::where('is_active', true)->get();
+        $devices = Device::where('is_active', true)->where('type', DeviceType::POS)->get();
 
         return $devices->map(function ($device) {
             $isWaiting = Cache::has("device_waiting_{$device->device_uuid}");

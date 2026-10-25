@@ -113,12 +113,84 @@ export function useCheckoutProcessor({
 
         isProcessingPayment.value = true;
 
-        const paymentsToSubmit = (stagedPayments.value || []).map(p => ({
+        const allStaged = stagedPayments.value || [];
+        const pixPayment = allStaged.find(p => p.engine_type === 'bank_api');
+        const standardPayments = allStaged.filter(p => p.engine_type !== 'bank_api');
+
+        const apiClient = axios || window.axios;
+
+        // 🚀 INTERCEPTAÇÃO: Se houver método bank_api, gera cobrança PIX Dinâmica via API Bancária
+        if (pixPayment) {
+            try {
+                // Se houver pagamentos mistos (ex: Dinheiro + Pix), baixa primeiro a parte manual
+                if (standardPayments.length > 0) {
+                    const partialPayload = {
+                        payments: standardPayments.map(p => ({
+                            method_id: p.real_method_id || p.method_id || p.payment_method_id || p.payment_method?.id,
+                            amount: Number(p.amount)
+                        })),
+                        items: [],
+                        service_fee: 0,
+                        cashback_used: 0,
+                        document: unref(customerDocument),
+                        coupon_code: unref(appliedCheckoutCoupon)
+                    };
+
+                    await apiClient.post(route('operations.orders.pay', orderId), partialPayload, {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                }
+
+                // Dispara geração do PIX Dinâmico com Sicredi
+                const pixResponse = await apiClient.post(route('operations.orders.generate-pix', orderId), {
+                    amount: Number(pixPayment.amount)
+                }, {
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (pixResponse.data?.success) {
+                    const targetOrder = getOrder();
+                    if (targetOrder) {
+                        targetOrder.txid = pixResponse.data.txid;
+                        targetOrder.pix_payload = pixResponse.data.qr_code;
+                        targetOrder.pix_expires_at = pixResponse.data.expires_at;
+                        targetOrder.payment_intent_status = 'pending_pix';
+                    }
+
+                    if (props.order?.value) {
+                        props.order.value.txid = pixResponse.data.txid;
+                        props.order.value.pix_payload = pixResponse.data.qr_code;
+                        props.order.value.pix_expires_at = pixResponse.data.expires_at;
+                        props.order.value.payment_intent_status = 'pending_pix';
+                    }
+
+                    stagedPayments.value = [];
+                    isProcessingPayment.value = false;
+
+                    toast.add({
+                        severity: 'info',
+                        summary: 'PIX Gerado',
+                        detail: 'Apresente o QR Code ao cliente para concluir a liquidação.',
+                        life: 4000
+                    });
+                    return;
+                } else {
+                    throw new Error(pixResponse.data?.message || 'Falha ao gerar cobrança PIX.');
+                }
+            } catch (pixError) {
+                isProcessingPayment.value = false;
+                const errMsg = pixError.response?.data?.message || pixError.message || 'Falha na comunicação com o banco.';
+                toast.add({ severity: 'error', summary: 'Erro PIX Sicredi', detail: errMsg, life: 5000 });
+                return;
+            }
+        }
+
+        // 🚀 FLUXO REGULAR (Dinheiro, Cartões, Maquininha, Fidelidade)
+        const paymentsToSubmit = standardPayments.map(p => ({
             method_id: p.real_method_id || p.method_id || p.payment_method_id || p.payment_method?.id,
             amount: Number(p.amount)
         }));
 
-        // 🚀 FILTRA APENAS OS ITENS SELECIONADOS PARA ESTA RODADA DE PAGAMENTO
         const itemsToPay = (reactiveItems?.value || [])
             .filter(i => (Number(i.selected_parts) || 0) > 0)
             .map(i => {
@@ -142,7 +214,6 @@ export function useCheckoutProcessor({
         };
 
         try {
-            const apiClient = axios || window.axios;
             const response = await apiClient.post(route('operations.orders.pay', orderId), payload, {
                 headers: { 'Accept': 'application/json' }
             });
@@ -162,7 +233,6 @@ export function useCheckoutProcessor({
             }
 
             const updatedOrder = returnedOrder || getOrder();
-
             const isZeroRev = isZeroRevenueOrder ? unref(isZeroRevenueOrder) : false;
 
             const shouldEmit = Boolean(

@@ -87,6 +87,7 @@ Route::prefix("operations")->group(function () {
     Route::delete("/orders/{order}/payments/{payment}", [CheckoutPaymentController::class, "destroyPayment"])->name("operations.orders.payments.destroy");
     Route::post("/orders/{order}/emit-nfce", [CheckoutFiscalController::class, "emitNfce"])->name("operations.orders.emit-nfce");
     Route::post('/orders/{order}/generate-pix', [CheckoutPaymentController::class, 'generatePix'])->name('operations.orders.generate-pix');
+    Route::post('/orders/{order}/cancel-pix-intent', [CheckoutPaymentController::class, 'cancelPixIntent'])->name('operations.orders.cancel-intent');
     Route::post("/orders/{order}/finalize-receipt", [CheckoutFiscalController::class, "finalizeReceipt"])->name("operations.finalize-receipt");
     Route::post("/orders/{order}/print-conference", [CheckoutFiscalController::class, "printConference"])->name("operations.print-conference");
     Route::delete("/orders/{order}/payments/{payment}/rollback", [CashierController::class, 'rollbackPayment'])->name('operations.orders.payments.rollback');

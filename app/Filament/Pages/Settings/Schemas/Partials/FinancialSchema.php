@@ -29,12 +29,12 @@ class FinancialSchema
                         ->default(false)
                         ->columnSpanFull(),
 
-                    // 🚀 VISIBILITY DIRETO NO GRID GARANTE REATIVIDADE PERFEITA!
                     Grid::make(2)
                         ->visible(fn(Get $get) => (bool) $get("sicredi_is_active"))
                         ->schema([
                             TextInput::make("sicredi_chave_pix")
                                 ->label("Chave PIX")
+                                ->helperText("CNPJ, Chave Aleatória, E-mail ou Celular.")
                                 ->columnSpan(1),
 
                             TextInput::make("sicredi_client_id")
@@ -59,7 +59,28 @@ class FinancialSchema
                                 ->directory("certificates/sicredi")
                                 ->columnSpan(1),
 
-                            // 🚀 REGRAS DE NEGÓCIO DA OPERAÇÃO
+                            Section::make("Convivência com Maquininha / TEF (SiTef)")
+                                ->description("Defina se esta chave PIX é de uso exclusivo do ERP ou se também gera cobranças diretamente na maquininha física de cartão.")
+                                ->icon('heroicon-o-arrows-right-left')
+                                ->schema([
+                                    Toggle::make("sicredi_share_pix_key")
+                                        ->label("Compartilhar Chave com Maquininha (SmartPOS / SiTef)")
+                                        ->helperText("Ative se a mesma chave for utilizada para gerar PIX no visor das maquininhas. O sistema fará o repasse (relay) em tempo real dos pagamentos da maquininha para a Software Express.")
+                                        ->live()
+                                        ->default(false)
+                                        ->columnSpanFull(),
+
+                                    TextInput::make("sicredi_relay_url")
+                                        ->label("URL do Webhook da Adquirente / SiTef (Software Express)")
+                                        ->placeholder("https://pix-webhook.softwareexpress.com.br/notification-service/webhook/v1/01181521/pix")
+                                        ->helperText("URL de notificação cadastrada originalmente na adquirente para onde os pagamentos das maquininhas devem ser encaminhados.")
+                                        ->visible(fn(Get $get) => (bool) $get("sicredi_share_pix_key"))
+                                        ->required(fn(Get $get) => (bool) $get("sicredi_share_pix_key"))
+                                        ->url()
+                                        ->columnSpanFull(),
+                                ])
+                                ->columnSpanFull(),
+
                             Section::make("Canais de Cobrança PIX Dinâmico")
                                 ->description("Defina em quais telas a equipe poderá gerar QR Codes do Sicredi diretamente para os clientes.")
                                 ->schema([
