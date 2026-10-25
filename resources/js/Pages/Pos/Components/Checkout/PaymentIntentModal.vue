@@ -14,8 +14,8 @@
                 <h2 class="text-xl font-black text-surface-text leading-tight">
                     {{ isCounter ? 'Pagamento no Balcão' : 'Instruções de Entrega' }}
                 </h2>
-                <span class="text-[10px] font-black uppercase tracking-widest text-primary-500 mt-0.5">
-                    {{ isCounter ? 'Como o cliente deseja pagar?' : 'Instruções para o Motoboy' }}
+                <span class="text-[10px] font-black uppercase tracking-widest text-surface-muted mt-0.5">
+                    Como o cliente deseja pagar?
                 </span>
             </div>
         </div>
@@ -69,15 +69,20 @@
                     subtitle="Registrar a promessa (dinheiro, troco, cartão ou PIX) para receber quando o cliente buscar."
                 />
 
+                <!-- 🔒 PAGAR AGORA: DESABILITADO SE O CAIXA ESTIVER FECHADO -->
                 <SelectableCard
-                    @select="selectMode('pay_now')"
+                    @select="hasOpenShift ? selectMode('pay_now') : null"
                     :is-selected="finalIntent === 'pay_now'"
                     :status="processingMode === 'pay_now' ? processingStatus : 'idle'"
-                    :show-checkmark="true"
-                    color="green"
-                    icon="pi-wallet"
-                    title="Pagar Agora no Caixa"
-                    :subtitle="isCounter ? 'Abre o recebimento imediatamente para cobrar o cliente à frente.' : 'Recebe o valor agora no balcão antes da saída do motoboy.'"
+                    :show-checkmark="hasOpenShift"
+                    :color="hasOpenShift ? 'green' : 'gray'"
+                    :icon="hasOpenShift ? 'pi-wallet' : 'pi-lock'"
+                    :disabled="!hasOpenShift"
+                    :class="{ 'grayscale cursor-not-allowed': !hasOpenShift }"
+                    :title="hasOpenShift ? 'Pagar Agora no Caixa' : 'Pagar Agora (Caixa Fechado)'"
+                    :subtitle="!hasOpenShift
+                        ? 'Abra o turno no caixa para liberar o recebimento imediato no balcão.'
+                        : (isCounter ? 'Abre o recebimento imediatamente para cobrar o cliente à frente.' : 'Recebe o valor agora no balcão antes da saída do motoboy.')"
                 />
             </div>
 
@@ -163,6 +168,8 @@ const props = defineProps({
 
 const emit = defineEmits(['update:visible', 'confirm', 'cancel']);
 const page = usePage();
+
+const hasOpenShift = computed(() => Boolean(page.props.hasOpenShift));
 
 const isVisible = computed({
     get: () => props.visible,
@@ -264,7 +271,6 @@ watch(() => props.visible, (val) => {
             finalIntent.value = props.existingIntent;
             if (['pay_on_delivery', 'pay_on_counter', 'pay_on_pickup'].includes(props.existingIntent)) {
                 currentStep.value = 'payment_panel';
-                // 🚀 Aqui carregamos o método esticado que veio do hook useOrderAppend!
                 let parsed = props.existingMethods;
                 while (typeof parsed === 'string') {
                     try { parsed = JSON.parse(parsed); } catch (e) { break; }
@@ -293,6 +299,7 @@ const handleCancel = () => {
 
 const selectMode = (mode) => {
     if (processingStatus.value === 'loading') return;
+    if (mode === 'pay_now' && !hasOpenShift.value) return;
 
     finalIntent.value = mode;
 
@@ -348,7 +355,6 @@ const handleConfirmFinal = () => {
     processingMode.value = resolvedStatus;
 
     setTimeout(() => {
-        // 🚀 O pulo do gato: Entrega exatamente as promessas (promises.value) ajustadas!
         emit('confirm', {
             intent: resolvedStatus,
             payment_intent_status: resolvedStatus,

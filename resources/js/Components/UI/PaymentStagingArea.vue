@@ -3,9 +3,12 @@
 
         <!-- PAGAMENTOS JÁ ADICIONADOS -->
         <div v-if="stagedPayments && stagedPayments.length > 0" class="flex flex-col gap-1">
-            <div v-for="(p, idx) in stagedPayments" :key="idx" class="flex items-center justify-between animate-in fade-in slide-in-from-top-2  bg-surface-3 pl-2 rounded-xl">
-                <div class="flex flex-col">
-                    <span class="font-medium text-stone-800 dark:text-stone-200">{{ p.method_name }}</span>
+            <div v-for="(p, idx) in stagedPayments" :key="idx" class="flex items-center justify-between animate-in fade-in slide-in-from-top-2 bg-surface-3 pl-2 rounded-xl border border-transparent" :class="{ 'border-amber-500/50 bg-amber-500/5': p.engine_type === 'bank_api' && p.is_pending }">
+                <div class="flex flex-col py-2">
+                    <span v-if="p.engine_type === 'bank_api' && p.is_pending" class="text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-500 flex items-center gap-1.5 mb-0.5">
+                        <i class="pi pi-clock text-[9px]"></i> Aguardando PIX
+                    </span>
+                    <span class="font-medium text-stone-800 dark:text-stone-200 leading-tight">{{ p.method_name }}</span>
                     <span v-if="p.change_target" class="text-xs font-medium text-orange-500 mt-0.5">
                         Troco para {{ $formatCurrency(p.change_target) }}
                     </span>
@@ -14,7 +17,12 @@
                     <span class="font-black text-lg" :class="p.engine_type === 'internal_loyalty' ? 'text-primary-500' : 'text-stone-900 dark:text-white'">
                         {{ $formatCurrency(p.amount) }}
                     </span>
-                    <Button icon="pi pi-trash" variant="text" severity="danger" rounded class="w-8 h-8 p-0 hover:bg-danger-500" @click="$emit('remove-payment', idx)" />
+
+                    <!-- Ações da Linha -->
+                    <div class="flex items-center">
+                        <Button v-if="p.engine_type === 'bank_api' && p.is_pending" icon="pi pi-qrcode" variant="text" severity="info" rounded class="w-8 h-8 p-0 text-primary-500 hover:bg-primary-500/20" title="Ver QR Code" @click="$emit('view-pix', p)" />
+                        <Button icon="pi pi-trash" variant="text" severity="danger" rounded class="w-8 h-8 p-0 text-danger-500 hover:bg-danger-500/20" @click="$emit('remove-payment', idx)" />
+                    </div>
                 </div>
             </div>
         </div>
@@ -175,7 +183,7 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['add-payment', 'remove-payment', 'divide', 'clear-divisor']);
+const emit = defineEmits(['add-payment', 'remove-payment', 'divide', 'clear-divisor', 'view-pix']);
 
 const localAmount = ref(props.suggestedAmount ?? props.remainingAmount);
 const pendingCashMethod = ref(null);

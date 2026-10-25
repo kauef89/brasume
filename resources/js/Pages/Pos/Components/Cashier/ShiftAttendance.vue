@@ -3,13 +3,18 @@
         <div class="w-full h-full flex flex-col p-6 overflow-hidden">
 
             <!-- CABEÇALHO DO PAINEL -->
-            <div class="flex items-center justify-between pb-6 border-b border-surface-border shrink-0">
+            <div class="flex items-center justify-between shrink-0">
                 <div class="flex items-center gap-4">
                     <div class="w-12 h-12 bg-primary-500/10 text-primary-500 rounded-full flex items-center justify-center shadow-inner shrink-0">
                         <i :class="['pi text-xl font-black', headerIcon]"></i>
                     </div>
                     <div>
-                        <h2 class="text-2xl font-black text-surface-text tracking-tight">{{ headerTitle }}</h2>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-2xl font-black text-surface-text tracking-tight">{{ headerTitle }}</h2>
+                            <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-black uppercase tracking-wider">
+                                {{ presentUsers.length }} Presente{{ presentUsers.length !== 1 ? 's' : '' }}
+                            </span>
+                        </div>
                         <p class="text-sm font-medium text-surface-muted mt-0.5">{{ headerSubtitle }}</p>
                     </div>
                 </div>
@@ -32,17 +37,17 @@
                 <!-- ALERTA DE CONFLITOS DE CARGO -->
                 <div v-if="roleWarnings.length > 0" class="bg-danger-500/10 border border-danger-500/20 p-4 rounded-xl flex flex-col gap-2 animate-in fade-in shrink-0 mb-4">
                     <div v-for="(warning, index) in roleWarnings" :key="index" class="flex items-center gap-3 text-danger-700 dark:text-danger-400 text-sm font-bold">
-                        <i class="pi fa-exclamation-triangle"></i>
+                        <i class="pi pi-exclamation-triangle"></i>
                         <span>{{ warning }}</span>
                     </div>
                 </div>
 
                 <!-- ESTRUTURA DA TABELA -->
-                <div class="flex-1 flex flex-col min-h-0 bg-surface-2/40 border border-surface-border rounded-2xl overflow-hidden shadow-xs">
+                <div class="flex-1 flex flex-col min-h-0 rounded-2xl overflow-hidden border border-surface-border bg-surface-1 shadow-sm">
                     <div class="flex-1 overflow-auto flex flex-col hide-scrollbar">
                         <div class="w-full flex flex-col flex-1">
                             <!-- CABEÇALHO DA TABELA EM GRID -->
-                            <div class="grid grid-cols-[minmax(120px,1fr)_160px_220px_160px] items-center gap-3 px-4 py-3 bg-surface-2 border-b border-surface-border text-[10px] font-black uppercase tracking-widest text-surface-muted sticky top-0 z-10 shrink-0 shadow-sm">
+                            <div class="grid grid-cols-[minmax(120px,1fr)_160px_220px_160px] items-center gap-3 px-4 py-3 bg-surface-3 border-b-2 border-surface-border text-[10px] font-black uppercase tracking-widest text-surface-muted sticky top-0 z-10 shrink-0 shadow-sm">
                                 <div class="min-w-0 truncate">Colaborador</div>
                                 <div class="min-w-0 truncate">Função</div>
                                 <div class="min-w-0 text-center truncate">Presença</div>
@@ -51,7 +56,9 @@
 
                             <!-- LINHAS ROLÁVEIS -->
                             <div class="flex-1 flex flex-col divide-y divide-surface-border/50 hide-scrollbar">
-                                <template v-for="user in sortedUsers" :key="user.id">
+
+                                <!-- 🟢 GRUPO 1: COLABORADORES PRESENTES (EM DESTAQUE) -->
+                                <template v-for="user in presentUsers" :key="user.id">
                                     <ShiftAttendanceRow
                                         v-if="attendanceData[user.id]"
                                         :user="user"
@@ -60,6 +67,43 @@
                                         @pay-freelancer="(u, rate) => $emit('pay-freelancer', u, rate)"
                                     />
                                 </template>
+
+                                <!-- ESTADO VAZIO: NENHUM PRESENTE -->
+                                <div v-if="presentUsers.length === 0" class="p-8 text-center text-surface-muted text-xs font-bold uppercase tracking-wider flex flex-col items-center gap-2">
+                                    <i class="pi pi-info-circle text-lg text-amber-500"></i>
+                                    <span>Nenhum colaborador com presença confirmada no turno.</span>
+                                </div>
+
+                                <!-- 🔘 DIVISOR EXPANSÍVEL: DEMAIS COLABORADORES (AUSENTES / FOLGAS) -->
+                                <div v-if="otherUsers.length > 0" class="p-2 bg-surface-2/60 border-t border-surface-border sticky bottom-0 z-10">
+                                    <button
+                                        type="button"
+                                        @click="showOthers = !showOthers"
+                                        class="w-full py-2.5 px-4 rounded-xl bg-surface-3 hover:bg-surface-border/70 text-surface-muted hover:text-surface-text transition-all duration-200 flex items-center justify-between text-xs font-black uppercase tracking-wider outline-none cursor-pointer border border-surface-border/70 shadow-xs"
+                                    >
+                                        <div class="flex items-center gap-2.5">
+                                            <i class="pi pi-users text-sm text-primary-500"></i>
+                                            <span>Demais Colaboradores ({{ otherUsers.length }})</span>
+                                        </div>
+                                        <div class="flex items-center gap-2 text-[10px] font-bold text-surface-muted">
+                                            <span>{{ showOthers ? 'Ocultar' : 'Exibir' }}</span>
+                                            <i :class="['pi pi-chevron-down text-xs transition-transform duration-300', { 'rotate-180': showOthers }]"></i>
+                                        </div>
+                                    </button>
+                                </div>
+
+                                <!-- ⚪ GRUPO 2: DEMAIS COLABORADORES (QUANDO EXPANDIDO) -->
+                                <div v-if="showOthers && otherUsers.length > 0" class="flex flex-col divide-y divide-surface-border/40 bg-surface-2/20">
+                                    <template v-for="user in otherUsers" :key="user.id">
+                                        <ShiftAttendanceRow
+                                            v-if="attendanceData[user.id]"
+                                            :user="user"
+                                            :can-payout="effectiveMode !== 'open'"
+                                            v-model="attendanceData[user.id]"
+                                            @pay-freelancer="(u, rate) => $emit('pay-freelancer', u, rate)"
+                                        />
+                                    </template>
+                                </div>
 
                                 <div v-if="sortedUsers.length === 0" class="p-12 text-center text-surface-muted text-sm font-medium">
                                     Nenhum colaborador com cadastro ativo encontrado.
@@ -84,7 +128,7 @@ const props = defineProps({
     currentAttendees: { type: Array, default: () => [] },
     flowMode: {
         type: String,
-        default: 'mid_shift', // 'open', 'close', 'mid_shift'
+        default: 'mid_shift',
         validator: (v) => ['open', 'close', 'mid_shift'].includes(v)
     },
     isMidShift: { type: Boolean, default: true }
@@ -95,6 +139,7 @@ const emit = defineEmits(['cancel', 'confirm', 'pay-freelancer']);
 const { syncMidShiftAttendance } = useShiftAttendance();
 
 const attendanceData = ref({});
+const showOthers = ref(false);
 
 const effectiveMode = computed(() => {
     if (props.flowMode && props.flowMode !== 'mid_shift') return props.flowMode;
@@ -102,15 +147,15 @@ const effectiveMode = computed(() => {
 });
 
 const headerTitle = computed(() => {
-    if (effectiveMode.value === 'open') return 'Abertura de Turno • Equipe e Ponto';
-    if (effectiveMode.value === 'close') return 'Fechamento de Turno • Equipe e Acertos';
+    if (effectiveMode.value === 'open') return 'Abertura de Turno';
+    if (effectiveMode.value === 'close') return 'Fechamento de Turno';
     return 'Escala e Ponto';
 });
 
 const headerSubtitle = computed(() => {
     if (effectiveMode.value === 'open') return 'Confirme a presença e funções dos colaboradores antes de abrir o caixa.';
     if (effectiveMode.value === 'close') return 'Confirme a presença e efetue os acertos dos freelancers para encerrar o turno.';
-    return 'Gerencie a presença da sua equipe em ordem alfabética.';
+    return 'Gerencie a presença da sua equipe ativa no turno.';
 });
 
 const headerIcon = computed(() => {
@@ -120,8 +165,8 @@ const headerIcon = computed(() => {
 });
 
 const confirmButtonLabel = computed(() => {
-    if (effectiveMode.value === 'open') return 'Avançar para Abertura de Caixa';
-    if (effectiveMode.value === 'close') return 'Confirmar e Finalizar';
+    if (effectiveMode.value === 'open') return 'Continuar';
+    if (effectiveMode.value === 'close') return 'Finalizar';
     return 'Salvar Ponto';
 });
 
@@ -135,6 +180,23 @@ const sortedUsers = computed(() => {
     const safeUsers = Array.isArray(props.users) ? props.users : [];
     return [...safeUsers].sort((a, b) => a.name.localeCompare(b.name));
 });
+
+// 🟢 Colaboradores com presença confirmada
+const presentUsers = computed(() => {
+    return sortedUsers.value.filter(u => attendanceData.value[u.id]?.status === 'present');
+});
+
+// ⚪ Colaboradores ausentes ou com folga
+const otherUsers = computed(() => {
+    return sortedUsers.value.filter(u => attendanceData.value[u.id]?.status !== 'present');
+});
+
+// Se ninguém estiver marcado como presente, expande os demais automaticamente para permitir a marcação
+watch(presentUsers, (newVal) => {
+    if (newVal.length === 0 && otherUsers.value.length > 0) {
+        showOthers.value = true;
+    }
+}, { immediate: true });
 
 const roleWarnings = computed(() => {
     const warnings = [];
@@ -190,7 +252,6 @@ const initAttendanceData = () => {
     attendanceData.value = { ...attendanceData.value, ...newState };
 };
 
-// 🚀 Reage tanto à lista geral quanto às atualizações dos presentes (ex: após pagar diária)
 watch(() => [props.users, props.currentAttendees], () => {
     initAttendanceData();
 }, { deep: true, immediate: true });

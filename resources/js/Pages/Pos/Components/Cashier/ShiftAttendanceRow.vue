@@ -1,7 +1,7 @@
 <template>
     <div
         class="grid grid-cols-[minmax(120px,1fr)_160px_220px_160px] items-center gap-3 px-4 py-2.5 transition-colors group"
-        :class="modelValue.status === 'present' ? 'bg-surface-1/40 hover:bg-surface-2/60' : 'bg-transparent opacity-60 grayscale hover:grayscale-0 hover:bg-surface-2/30'"
+        :class="modelValue.status === 'present' ? 'bg-surface-3 hover:bg-primary-500/5' : 'bg-transparent opacity-60 grayscale hover:grayscale-0 hover:bg-surface-2/30'"
     >
         <!-- 1. COLABORADOR COM ÍCONE NO AVATAR -->
         <div class="min-w-0 flex items-center gap-3">

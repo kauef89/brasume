@@ -1,7 +1,6 @@
 <template>
-    <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-6 hide-scrollbar">
+    <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-6 hide-scrollbar relative">
 
-        <!-- 🚨 BANNER DE CAIXA FECHADO COM ATALHO DE ABERTURA -->
         <div v-if="!$page.props.hasOpenShift" class="p-4 rounded-2xl bg-danger-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-danger-600 dark:text-danger-400 animate-in fade-in shrink-0">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-danger-500/10 flex items-center justify-center shrink-0">
@@ -36,7 +35,6 @@
                 <span class="text-surface-text">{{ formatCurrency(deliveryFee) }}</span>
             </div>
 
-            <!-- 🎯 TAXA DE SERVIÇO / GORJETA -->
             <div v-if="isTableServiceAvailable" class="flex justify-between items-center pb-3">
                 <div class="flex items-center gap-2 text-sm font-medium text-surface-muted">
                     <span>Gorjeta ({{ companySettings.service_tax_percentage }}%)</span>
@@ -64,7 +62,6 @@
             </div>
         </div>
 
-        <!-- 🚀 STAGING AREA INTEGRADA COM DIVISOR E VALOR SUGERIDO -->
         <PaymentStagingArea
             :class="{ 'opacity-40 pointer-events-none': !$page.props.hasOpenShift }"
             :available-methods="mappedMethods"
@@ -75,38 +72,17 @@
             :allow-change-target="false"
             @divide="$emit('divide',$event)"
             @clear-divisor="$emit('clear-divisor')"
-            @add-payment="handleAddPayment"
-            @remove-payment="handleRemovePayment"
+            @add-payment="$emit('add-payment', $event)"
+            @remove-payment="$emit('remove-payment', $event)"
+            @view-pix="$emit('view-pix', $event)"
         />
-
-        <div v-if="pendingToStage <= 0 && companySettings?.is_fiscal_emitter" class="animate-in fade-in slide-in-from-bottom-4 flex flex-col gap-3 p-5 bg-surface-3 rounded-3xl">
-            <div class="flex items-center justify-between">
-                <label class="text-sm font-black text-surface-muted">CPF/CNPJ na Nota (Opcional)</label>
-                <span class="text-xs font-black bg-success-500/10 text-success-600 dark:text-success-400 px-1.5 py-1 rounded-md">
-                    <i class="pi pi-check-circle text-[8px]"></i> Pagamento Pronto
-                </span>
-            </div>
-
-            <div class="relative">
-                <i class="pi pi-id-card absolute left-4 top-1/2 -translate-y-1/2 text-surface-muted text-sm pointer-events-none"></i>
-                <input
-                    type="text"
-                    :value="customerDocument"
-                    @input="handleDocumentInput"
-                    placeholder="Deixe em branco p/ Consumidor Final"
-                    maxlength="18"
-                    class="w-full h-14 pl-12 pr-4 rounded-xl bg-surface-2 text-surface-text text-lg font-black focus:border-primary-500 outline-none transition-all"
-                />
-            </div>
-        </div>
-
     </div>
 </template>
 
 <script setup>
 import { computed } from "vue";
 import PaymentStagingArea from "@/Components/UI/PaymentStagingArea.vue";
-import { formatCurrency, formatCpfCnpj } from "@/Utils/formatters";
+import { formatCurrency } from "@/Utils/formatters";
 import { usePaymentFormatting } from "@/Pages/Shared/Composables/usePaymentFormatting";
 
 const props = defineProps({
@@ -116,21 +92,14 @@ const props = defineProps({
     discount: { type: Number, default: 0 },
     dynamicTotal: Number,
     pendingToStage: Number,
-    suggestedAmount: {
-        type: Number,
-        default: null
-    },
-    activeDivisor: {
-        type: Number,
-        default: null
-    },
+    suggestedAmount: { type: Number, default: null },
+    activeDivisor: { type: Number, default: null },
     stagedPayments: Array,
     paymentMethods: Array,
     companySettings: Object,
     isServiceTaxEnabled: Boolean,
     order: Object,
-    cashbackValue: Number,
-    customerDocument: String
+    cashbackValue: Number
 });
 
 const emit = defineEmits([
@@ -140,26 +109,18 @@ const emit = defineEmits([
     "add-payment",
     "remove-payment",
     "update:cashbackValue",
-    "update:customerDocument",
-    "go-to-cashier"
+    "go-to-cashier",
+    "view-pix"
 ]);
 
 const { getPaymentIcon } = usePaymentFormatting();
 
-const isTableServiceAvailable = computed(() => {
-    return props.order?.type === 'table' && Boolean(props.companySettings?.has_service_tax);
-});
+const isTableServiceAvailable = computed(() => props.order?.type === 'table' && Boolean(props.companySettings?.has_service_tax));
 
 const goToCashier = () => {
     window.dispatchEvent(new CustomEvent('pos-tab-changed', { detail: 'shift' }));
     window.dispatchEvent(new CustomEvent('pos-close-checkout'));
     emit('go-to-cashier');
-};
-
-const handleDocumentInput = (e) => {
-    const formatted = formatCpfCnpj(e.target.value);
-    e.target.value = formatted;
-    emit('update:customerDocument', formatted);
 };
 
 const isLoyaltyActive = computed(() => props.companySettings?.loyalty_is_active && props.companySettings?.loyalty_reward_type === 'cashback');
@@ -184,8 +145,6 @@ const mappedMethods = computed(() => {
         const hasCustomer = !!props.order?.customer;
         const balance = customerBalanceReais.value;
         const alreadyStaged = props.stagedPayments.some(p => p.engine_type === 'internal_loyalty');
-
-        // Regra de resgate mínimo
         const minRedeem = Number(props.companySettings?.loyalty_min_redeem_value || 0);
         const isSubtotalEligible = props.orderSubtotal >= minRedeem;
 
@@ -195,17 +154,10 @@ const mappedMethods = computed(() => {
         else if (balance > 0 && !isSubtotalEligible) subtitle = `Mín. pedido: ${formatCurrency(minRedeem)}`;
         else if (balance > 0) subtitle = `Saldo: ${formatCurrency(balance)}`;
 
-        // Trava o botão se as condições não forem atendidas
         const isDisabled = !hasCustomer || balance <= 0 || alreadyStaged || !isSubtotalEligible || props.pendingToStage <= 0;
-
-        // O teto respeita a regra de fixed/percentage
         const maxVal = Number(props.companySettings?.loyalty_max_redeem_value || 0);
         const maxType = props.companySettings?.loyalty_max_redeem_type || 'fixed';
-        const maxCap = maxVal > 0
-            ? (maxType === 'percentage' ? (props.orderSubtotal * maxVal) / 100 : maxVal)
-            : Infinity;
-
-        // O valor máximo aplicado é o menor entre: Saldo, Teto ou Valor Pendente do Pedido
+        const maxCap = maxVal > 0 ? (maxType === 'percentage' ? (props.orderSubtotal * maxVal) / 100 : maxVal) : Infinity;
         const maxAllowed = Math.min(balance, maxCap, props.pendingToStage);
 
         methods.unshift({
@@ -224,19 +176,4 @@ const mappedMethods = computed(() => {
 
     return methods;
 });
-
-const handleAddPayment = (payload) => {
-    if (payload.engine_type === 'internal_loyalty') {
-        emit('update:cashbackValue', payload.amount);
-    }
-    emit('add-payment', payload);
-};
-
-const handleRemovePayment = (idx) => {
-    const payment = props.stagedPayments[idx];
-    if (payment && payment.engine_type === 'internal_loyalty') {
-        emit('update:cashbackValue', 0);
-    }
-    emit('remove-payment', idx);
-};
 </script>

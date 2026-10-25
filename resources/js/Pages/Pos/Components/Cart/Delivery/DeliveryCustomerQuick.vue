@@ -56,7 +56,6 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import axios from 'axios';
 import { useToast } from 'primevue/usetoast';
 import { vMaska } from "maska/vue";
 
@@ -104,47 +103,28 @@ const handleEnterKey = () => {
     }
 };
 
-const handleSubmit = async () => {
+const handleSubmit = () => {
     if (!isValid.value || isSubmitting.value) return;
 
     isSubmitting.value = true;
     const cleanPhoneVal = rawPhone.value ? rawPhone.value : null;
 
-    try {
-        const response = await axios.post(route('customer.auth.guest-register'), {
-            name: name.value.trim(),
-            phone: cleanPhoneVal,
-            channel: props.orderType
-        });
+    const createdCustomer = {
+        id: `temp_${Date.now()}`,
+        name: name.value.trim(),
+        phone: cleanPhoneVal,
+        is_temporary: true
+    };
 
-        const createdCustomer = response.data?.customer || {
-            id: response.data?.id || `temp_${Date.now()}`,
-            name: name.value.trim(),
-            phone: cleanPhoneVal,
-            is_temporary: true
-        };
+    toast.add({
+        severity: 'success',
+        summary: 'Cliente Definido',
+        detail: `${createdCustomer.name} vinculado ao pedido.`,
+        life: 3000
+    });
 
-        toast.add({
-            severity: 'success',
-            summary: 'Cliente Definido',
-            detail: `${createdCustomer.name} vinculado ao pedido.`,
-            life: 3000
-        });
-
-        emit('success', createdCustomer);
-    } catch (e) {
-        // Fallback local caso o endpoint falhe ou crie cliente em memória
-        const localCustomer = {
-            id: null,
-            name: name.value.trim(),
-            phone: cleanPhoneVal,
-            is_temporary: true
-        };
-
-        emit('success', localCustomer);
-    } finally {
-        isSubmitting.value = false;
-    }
+    emit('success', createdCustomer);
+    isSubmitting.value = false;
 };
 
 onMounted(() => {

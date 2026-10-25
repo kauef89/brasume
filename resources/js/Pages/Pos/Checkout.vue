@@ -58,12 +58,13 @@
       <Transition name="fade-slide" mode="out-in">
 
         <!-- FASE 1: AGUARDANDO PIX -->
-        <div v-if="isPixWaitingPhase" class="flex flex-col h-full w-full bg-surface-2 p-6 justify-center" key="pix-phase">
+        <div v-if="showPixPanel" class="flex flex-col h-full w-full bg-surface-2 p-6 justify-center" key="pix-phase">
             <PixWaitingArea
                 :order-id="liveOrder.id"
                 :qr-code-string="liveOrder.pix_payload"
                 :txid="liveOrder.txid"
                 :expires-at="liveOrder.pix_expires_at"
+                @hide="showPixPanel = false"
                 @cancel="cancelPixPayment(false)"
                 @refresh="refreshPixPayment"
                 @expired="cancelPixPayment(true)"
@@ -100,6 +101,7 @@
                 @set-remaining="setAmountToRemaining"
                 @add-payment="handleAddPayment"
                 @remove-payment="removePayment"
+                @view-pix="showPixPanel = true"
 
                 @apply-coupon="applyCoupon"
                 @remove-coupon="removeCoupon"
@@ -520,7 +522,7 @@ const handleSaveNewCustomer = (customerData) => {
 
 const handlePixApproved = () => { isPostPaymentPhase.value = true; };
 
-const { isPixWaitingPhase, cancelPixPayment, refreshPixPayment, onPixApprovedByWebhook } = useCheckoutPix(orderRef, handlePixApproved, toast);
+const { showPixPanel, cancelPixPayment, refreshPixPayment, onPixApprovedByWebhook } = useCheckoutPix(orderRef, handlePixApproved, toast);
 
 const handlePostPaymentActionIntercepted = (action) => {
     const type = typeof action === 'string' ? action : action?.type;
@@ -535,7 +537,7 @@ const {
     isEmittingNfce,
     isFiscalSuccess,
     fiscalEmitError,
-    processPayment,
+    processPayment, generateDirectPix,
     handlePostPaymentAction,
     confirmCancellation
 } = useCheckoutProcessor({

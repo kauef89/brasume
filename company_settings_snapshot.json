@@ -55,7 +55,7 @@
     "certificate_password": "Patrick21",
     "certificate_expiration": "2027-10-23",
     "created_at": "2026-04-04T19:13:19.000000Z",
-    "updated_at": "2026-10-24T19:00:03.000000Z",
+    "updated_at": "2026-10-25T13:59:31.000000Z",
     "sefaz_last_sync_at": "2026-10-24T19:00:03.000000Z",
     "zip_code": "89247-000",
     "street": "Av. Amándio Cabral",
@@ -69,7 +69,7 @@
     "csc_id_homologation": "000001",
     "csc_code_homologation": "0D1BD8AB-06BB-4BB8-93E9-13861249BEC5",
     "nfce_series": "2",
-    "last_nfce_number": 9580,
+    "last_nfce_number": 9591,
     "environment": "1",
     "has_service_tax": false,
     "cash_opening_mode": "detailed",
@@ -154,7 +154,7 @@
             ]
         }
     ],
-    "is_24_hours": true,
+    "is_24_hours": false,
     "is_closed_indefinitely": false,
     "service_tax_percentage": "10.00",
     "service_tax_table": true,
@@ -174,7 +174,7 @@
     "kitchen_print_mode": "item",
     "print_bridge_token": "az4RbPVMQTwOdZQ5PXBWlsqx6Dte6wUw",
     "print_bridge_version": "1.0.0",
-    "print_bridge_connected_at": "2026-10-24T02:07:50.000000Z",
+    "print_bridge_connected_at": "2026-10-25T02:27:44.000000Z",
     "kitchen_separate_multiples": true,
     "kds_access_mode": "individual",
     "kds_panel_mode": "bar",
@@ -243,7 +243,9 @@
     "sicredi_webhook_token": "98fc0686c10a82cb221f49a9a04ec171",
     "mp_is_active": 0,
     "allow_employee_tab": 1,
-    "sicredi_enable_driver_pix": false,
-    "sicredi_enable_pos_pix": false,
-    "sicredi_enable_waiter_pix": false
+    "sicredi_enable_driver_pix": true,
+    "sicredi_enable_pos_pix": true,
+    "sicredi_enable_waiter_pix": true,
+    "sicredi_share_pix_key": 1,
+    "sicredi_relay_url": "https:\/\/pix-webhook.softwareexpress.com.br\/notification-service\/webhook\/v1\/01181521\/pix"
 }

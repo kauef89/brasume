@@ -48,6 +48,11 @@ class CheckoutPaymentController extends Controller
         }
 
         try {
+            $openShift = \App\Models\CashShift::where("status", "open")->latest()->first();
+            if ($openShift && empty($order->cash_shift_id)) {
+                $order->cash_shift_id = $openShift->id;
+                $order->save();
+            }
             $paymentService->processPayment($order, $data);
             $order->refresh();
 

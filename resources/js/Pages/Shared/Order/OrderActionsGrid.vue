@@ -5,12 +5,12 @@
             <!-- ==================== GERAIS ==================== -->
             <OrderContextAction
                 v-if="!isTeamMode"
-                :disabled="order?.status === 'closed' || (isPaid && order?.type !== 'counter')"
-                :label="isPaid && order?.type === 'counter' ? 'Finalizar Pedido' : 'Receber Conta'"
-                :subtitle="isPaid && order?.type === 'counter' ? 'Entregar ao cliente' : 'Ir para o caixa'"
-                :icon="isPaid && order?.type === 'counter' ? 'pi pi-check-circle' : 'pi pi-wallet'"
-                :icon-color="isPaid && order?.type === 'counter' ? 'text-success-500' : 'text-primary-500'"
-                :is-primary="true"
+                :disabled="isReceiveDisabled"
+                :label="primaryActionLabel"
+                :subtitle="primaryActionSubtitle"
+                :icon="primaryActionIcon"
+                :icon-color="primaryActionColor"
+                :is-primary="isPrimaryAction"
                 @click="handlePrimaryAction"
             />
 
@@ -145,6 +145,7 @@ const toast = useToast();
 const { notifyDeliveryOut, notifyPickupReady } = useWhatsAppMessages();
 
 const companySettings = computed(() => page.props.companySettings || {});
+const hasOpenShift = computed(() => Boolean(page.props.hasOpenShift));
 
 const customerPhone = computed(() => props.order?.customer?.phone || props.order?.customer_phone || null);
 const hasPhone = computed(() => {
@@ -154,7 +155,54 @@ const hasPhone = computed(() => {
 
 const isPaid = computed(() => props.order?.payment_status === 'paid');
 
+// 🔒 ESTADOS DINÂMICOS DO RECEBER CONTA
+const isReceiveDisabled = computed(() => {
+    if (props.order?.status === 'closed') return true;
+    if (isPaid.value && props.order?.type !== 'counter') return true;
+    if (!isPaid.value && !hasOpenShift.value) return true;
+    return false;
+});
+
+const primaryActionLabel = computed(() => {
+    if (isPaid.value && props.order?.type === 'counter') return 'Finalizar Pedido';
+    if (!hasOpenShift.value && !isPaid.value) return 'Caixa Fechado';
+    return 'Receber Conta';
+});
+
+const primaryActionSubtitle = computed(() => {
+    if (isPaid.value && props.order?.type === 'counter') return 'Entregar ao cliente';
+    if (!hasOpenShift.value && !isPaid.value) return 'Abra o caixa para receber';
+    return 'Ir para o caixa';
+});
+
+const primaryActionIcon = computed(() => {
+    if (isPaid.value && props.order?.type === 'counter') return 'pi pi-check-circle';
+    if (!hasOpenShift.value && !isPaid.value) return 'pi pi-lock';
+    return 'pi pi-wallet';
+});
+
+const primaryActionColor = computed(() => {
+    if (isPaid.value && props.order?.type === 'counter') return 'text-success-500';
+    if (!hasOpenShift.value && !isPaid.value) return 'text-danger-500';
+    return 'text-primary-500';
+});
+
+const isPrimaryAction = computed(() => {
+    if (!hasOpenShift.value && !isPaid.value) return false;
+    return true;
+});
+
 const handlePrimaryAction = () => {
+    if (!hasOpenShift.value && !isPaid.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Caixa Fechado',
+            detail: 'Abra o turno no caixa antes de receber pagamentos.',
+            life: 4000
+        });
+        return;
+    }
+
     if (isPaid.value && props.order?.type === 'counter') {
         emit('action', 'finish_order', props.order);
     } else {
@@ -189,7 +237,7 @@ const toggleRatingInhibition = () => {
     isTogglingRating.value = true;
     const nextState = !isRatingSkipped.value;
 
-    router.post(route('operations.orders.toggle-rating', props.order.id), { preserveState: true,  skip_rating: nextState }, {
+    router.post(route('operations.orders.toggle-rating', props.order.id), { preserveState: true, skip_rating: nextState }, {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {

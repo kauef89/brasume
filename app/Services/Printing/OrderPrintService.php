@@ -63,6 +63,13 @@ class OrderPrintService
             || !empty($order->employee_id);
     }
 
+    public function printPixGuide(\App\Models\Order $order, string $qrCodeData, ?string $expiresAt = null): void
+    {
+        $this->ensureDispatcher();
+        $document = \App\Services\Printing\Documents\PixGuide::build($order, $qrCodeData, $expiresAt);
+        $this->dispatcher->dispatchDocument($document, $order->id, "Guia PIX", "cashier");
+    }
+
     public function printConferenceBill(Order $order): void
     {
         $printer = $this->resolveCashierPrinter();

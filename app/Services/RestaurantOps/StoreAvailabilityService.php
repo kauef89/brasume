@@ -173,9 +173,7 @@ class StoreAvailabilityService
         // CENÁRIO B: Caixa está FECHADO
         if ($isScheduledOpen) {
             // Regra granular do cliente com fallback retrocompatível
-            $enforceCustomer = $settings->enforce_cashier_open_customer
-                ?? $settings->enforce_cashier_open
-                ?? true;
+            $enforceCustomer = (bool) ($settings->enforce_cashier_open_customer ?? true);
 
             if ($enforceCustomer) {
                 $status['is_open'] = false;

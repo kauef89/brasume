@@ -155,7 +155,17 @@ export function useCheckoutProcessor({
                         targetOrder.pix_payload = pixResponse.data.qr_code;
                         targetOrder.pix_expires_at = pixResponse.data.expires_at;
                         targetOrder.payment_intent_status = 'pending_pix';
-                    }
+                }
+                
+                // Insere no array de pagamentos do front para ficar com a badge "Aguardando PIX"
+                stagedPayments.value.push({
+                    id: 'pix_' + Date.now(),
+                    real_method_id: 'pix',
+                    method_name: 'PIX (Sicredi)',
+                    engine_type: 'bank_api',
+                    amount: Number(amount),
+                    is_pending: true
+                });
 
                     if (props.order?.value) {
                         props.order.value.txid = pixResponse.data.txid;

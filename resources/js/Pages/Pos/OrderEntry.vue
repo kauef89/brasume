@@ -230,18 +230,17 @@ const resetAppendState = () => {
 const handleDeliveryPaymentConfirm = async (payload) => {
     try {
         isPendingCheckoutSubmission.value = true;
-
         const targetId = currentOrderContext.value?.id || draftRouting.value?.existing_order_id;
-
-        // 🚀 Aguarda a criação e captura o ID retornado
         const result = await handleInlinePaymentConfirm(payload);
-        const resolvedId = result?.order?.id || result?.id || result?.data?.id || targetId;
+
+        const resolvedId = result?.id || result?.order?.id || result?.data?.id || targetId || page.props.flash?.order_id || page.props.flash?.success_order_id;
 
         resetAppendState();
 
-        if (payload?.intent === 'pay_now') {
+        if (payload?.intent === 'pay_now' || payload?.payment_intent_status === 'pay_now') {
             if (resolvedId) {
                 emit('open-checkout', resolvedId);
+                window.dispatchEvent(new CustomEvent('pos-open-checkout', { detail: { orderId: resolvedId } }));
             }
         } else {
             window.dispatchEvent(new CustomEvent('pos-tab-changed', { detail: 'orders' }));
