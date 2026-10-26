@@ -3,19 +3,16 @@ import { ref, unref } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 
 export function useCheckoutProcessor({
-    order,
-    props, toast, emitClose, isFiscalEmitter, checkoutPrintMode, customerDocument,
+    order, props, toast, emitClose, isFiscalEmitter, checkoutPrintMode, customerDocument,
     stagedPayments, reactiveItems, serviceFeeAmount, localCashbackAmountToSend,
     authActionType, itemToProcess, authNeedsPin, initiateSecureAction, isReasonModalVisible, isPostPaymentPhase,
-    appliedCheckoutCoupon,
-    isZeroRevenueOrder
+    appliedCheckoutCoupon, isZeroRevenueOrder
 }) {
     const isEmittingNfce = ref(false);
     const isFiscalSuccess = ref(false);
     const fiscalEmitError = ref(null);
     const isProcessingPayment = ref(false);
     const isPaymentSuccess = ref(false);
-
     const page = usePage();
 
     const getOrder = () => (order && order.value) ? order.value : (props.order?.value || props.order);
@@ -25,27 +22,21 @@ export function useCheckoutProcessor({
         const url = new URL(window.location.href);
         url.searchParams.delete('order');
         url.searchParams.delete('checkout');
-        url.searchParams.delete('open_order');
         window.history.replaceState({ tab: 'orders' }, '', '/pos/orders');
-
         window.dispatchEvent(new CustomEvent('pos-close-order-details'));
         emitClose();
     };
 
     const executeAutoPrintRule = () => {
         if (checkoutPrintMode.value && checkoutPrintMode.value !== 'ask' && checkoutPrintMode.value !== 'none') {
-            if (['home', 'no_print', 'finish', 'close'].includes(checkoutPrintMode.value)) {
-                return;
-            }
+            if (['home', 'no_print', 'finish', 'close'].includes(checkoutPrintMode.value)) return;
             handlePostPaymentAction({ type: checkoutPrintMode.value });
         }
     };
 
     const triggerSilentEmission = async () => {
         const orderId = getOrderId();
-        if (!orderId) return;
-
-        if (isZeroRevenueOrder && unref(isZeroRevenueOrder)) {
+        if (!orderId || (isZeroRevenueOrder && unref(isZeroRevenueOrder))) {
             isEmittingNfce.value = false;
             return;
         }
@@ -57,53 +48,85 @@ export function useCheckoutProcessor({
             const apiClient = axios || window.axios;
             const response = await apiClient.post(route('operations.orders.emit-nfce', orderId), {
                 document: unref(customerDocument)
-            }, {
-                headers: { 'Accept': 'application/json' }
-            });
+            }, { headers: { 'Accept': 'application/json' } });
 
             if (response.data?.success) {
                 isFiscalSuccess.value = true;
-
                 const target = getOrder();
-                if (target) {
-                    target.has_fiscal_document = true;
-                    target.fiscal_status = 'authorized';
-                }
-
-                if (props.order) {
-                    if (props.order.value) {
-                        props.order.value.has_fiscal_document = true;
-                        props.order.value.fiscal_status = 'authorized';
-                    } else {
-                        props.order.has_fiscal_document = true;
-                        props.order.fiscal_status = 'authorized';
-                    }
-                }
-
-                const list = page.props.initialOrders || page.props.orders || [];
-                const fromList = list.find(o => o.id === orderId);
-                if (fromList) {
-                    fromList.has_fiscal_document = true;
-                    fromList.fiscal_status = 'authorized';
-                }
-
-                setTimeout(() => {
-                    isEmittingNfce.value = false;
-                    executeAutoPrintRule();
-                }, 1500);
-
+                if (target) { target.has_fiscal_document = true; target.fiscal_status = 'authorized'; }
+                setTimeout(() => { isEmittingNfce.value = false; executeAutoPrintRule(); }, 1500);
             } else {
-                isEmittingNfce.value = false;
-                isFiscalSuccess.value = false;
-                fiscalEmitError.value = response.data?.message || 'Falha ao emitir nota fiscal.';
-                toast.add({ severity: 'error', summary: 'Aviso Fiscal', detail: fiscalEmitError.value, life: 6000 });
+                throw new Error(response.data?.message || 'Falha ao emitir nota fiscal.');
             }
         } catch (error) {
             isEmittingNfce.value = false;
             isFiscalSuccess.value = false;
-            const errMsg = error.response?.data?.message || Object.values(error.response?.data?.errors || {})[0] || 'O servidor recusou a requisição fiscal.';
-            fiscalEmitError.value = errMsg;
-            toast.add({ severity: 'error', summary: 'Erro Fiscal', detail: errMsg, life: 6000 });
+            fiscalEmitError.value = error.response?.data?.message || error.message || 'O servidor recusou a requisição fiscal.';
+            toast.add({ severity: 'error', summary: 'Aviso Fiscal', detail: fiscalEmitError.value, life: 6000 });
+        }
+    };
+
+    // 🚀 O CORAÇÃO DO FLUXO: Geração Direta (One-Click PIX)
+    const generateDirectPix = async (amount) => {
+        const orderId = getOrderId();
+        if (isProcessingPayment.value || !orderId) return false;
+        
+        isProcessingPayment.value = true;
+        const apiClient = axios || window.axios;
+
+        try {
+            // Se o operador já colocou outro pagamento na gaveta (Ex: R$ 50 em dinheiro), salva primeiro
+            const standardPayments = stagedPayments.value.filter(p => !p.is_pending);
+            if (standardPayments.length > 0) {
+                const itemsToPay = (reactiveItems?.value || []).filter(i => (Number(i.selected_parts) || 0) > 0).map(i => {
+                    const qty = Number(i.selected_parts) / (Number(i.parts_per_unit) || 1);
+                    return { id: i.id, pay_qty: qty, amount: Math.round(qty * Number(i.effective_unit_price || i.unit_price || 0) * 100) / 100 };
+                });
+
+                await apiClient.post(route('operations.orders.pay', orderId), {
+                    payments: standardPayments.map(p => ({ method_id: p.real_method_id || p.method_id, amount: Number(p.amount) })),
+                    items: itemsToPay,
+                    service_fee: Math.max(0, Number(unref(serviceFeeAmount) || 0)),
+                    cashback_used: Math.max(0, Number(unref(localCashbackAmountToSend) || 0)),
+                    document: unref(customerDocument),
+                    coupon_code: unref(appliedCheckoutCoupon)
+                });
+            }
+
+            // Dispara API Bancária
+            const pixResponse = await apiClient.post(route('operations.orders.generate-pix', orderId), { amount: Number(amount) });
+            
+            if (pixResponse.data?.success) {
+                const targetOrder = getOrder();
+                const applyData = (o) => {
+                    o.txid = pixResponse.data.txid;
+                    o.pix_payload = pixResponse.data.qr_code;
+                    o.pix_expires_at = pixResponse.data.expires_at;
+                    o.payment_intent_status = 'pending_pix';
+                };
+                if (targetOrder) applyData(targetOrder);
+                
+                const fromList = (page.props.initialOrders || []).find(o => o.id === orderId);
+                if (fromList) applyData(fromList);
+
+                // Esvazia os dinheiros/cartões e deixa só o PIX pendente na gaveta com a badge amarela
+                stagedPayments.value = [{
+                    id: 'pix_' + Date.now(),
+                    real_method_id: 'pix',
+                    method_name: 'PIX (Sicredi)',
+                    engine_type: 'bank_api',
+                    amount: Number(amount),
+                    is_pending: true
+                }];
+
+                isProcessingPayment.value = false;
+                return true;
+            }
+            throw new Error(pixResponse.data?.message || 'Falha ao gerar cobrança PIX.');
+        } catch (error) {
+            isProcessingPayment.value = false;
+            toast.add({ severity: 'error', summary: 'Erro PIX Sicredi', detail: error.response?.data?.message || error.message || 'Falha na comunicação.', life: 5000 });
+            return false;
         }
     };
 
@@ -112,190 +135,42 @@ export function useCheckoutProcessor({
         if (isProcessingPayment.value || !orderId) return;
 
         isProcessingPayment.value = true;
-
-        const allStaged = stagedPayments.value || [];
-        const pixPayment = allStaged.find(p => p.engine_type === 'bank_api');
-        const standardPayments = allStaged.filter(p => p.engine_type !== 'bank_api');
-
         const apiClient = axios || window.axios;
+        const standardPayments = stagedPayments.value.filter(p => !p.is_pending);
 
-        // 🚀 INTERCEPTAÇÃO: Se houver método bank_api, gera cobrança PIX Dinâmica via API Bancária
-        if (pixPayment) {
-            try {
-                // Se houver pagamentos mistos (ex: Dinheiro + Pix), baixa primeiro a parte manual
-                if (standardPayments.length > 0) {
-                    const partialPayload = {
-                        payments: standardPayments.map(p => ({
-                            method_id: p.real_method_id || p.method_id || p.payment_method_id || p.payment_method?.id,
-                            amount: Number(p.amount)
-                        })),
-                        items: [],
-                        service_fee: 0,
-                        cashback_used: 0,
-                        document: unref(customerDocument),
-                        coupon_code: unref(appliedCheckoutCoupon)
-                    };
-
-                    await apiClient.post(route('operations.orders.pay', orderId), partialPayload, {
-                        headers: { 'Accept': 'application/json' }
-                    });
-                }
-
-                // Dispara geração do PIX Dinâmico com Sicredi
-                const pixResponse = await apiClient.post(route('operations.orders.generate-pix', orderId), {
-                    amount: Number(pixPayment.amount)
-                }, {
-                    headers: { 'Accept': 'application/json' }
-                });
-
-                if (pixResponse.data?.success) {
-                    const targetOrder = getOrder();
-                    if (targetOrder) {
-                        targetOrder.txid = pixResponse.data.txid;
-                        targetOrder.pix_payload = pixResponse.data.qr_code;
-                        targetOrder.pix_expires_at = pixResponse.data.expires_at;
-                        targetOrder.payment_intent_status = 'pending_pix';
-                }
-                
-                // Insere no array de pagamentos do front para ficar com a badge "Aguardando PIX"
-                stagedPayments.value.push({
-                    id: 'pix_' + Date.now(),
-                    real_method_id: 'pix',
-                    method_name: 'PIX (Sicredi)',
-                    engine_type: 'bank_api',
-                    amount: Number(amount),
-                    is_pending: true
-                });
-
-                    if (props.order?.value) {
-                        props.order.value.txid = pixResponse.data.txid;
-                        props.order.value.pix_payload = pixResponse.data.qr_code;
-                        props.order.value.pix_expires_at = pixResponse.data.expires_at;
-                        props.order.value.payment_intent_status = 'pending_pix';
-                    }
-
-                    stagedPayments.value = [];
-                    isProcessingPayment.value = false;
-
-                    toast.add({
-                        severity: 'info',
-                        summary: 'PIX Gerado',
-                        detail: 'Apresente o QR Code ao cliente para concluir a liquidação.',
-                        life: 4000
-                    });
-                    return;
-                } else {
-                    throw new Error(pixResponse.data?.message || 'Falha ao gerar cobrança PIX.');
-                }
-            } catch (pixError) {
-                isProcessingPayment.value = false;
-                const errMsg = pixError.response?.data?.message || pixError.message || 'Falha na comunicação com o banco.';
-                toast.add({ severity: 'error', summary: 'Erro PIX Sicredi', detail: errMsg, life: 5000 });
-                return;
-            }
-        }
-
-        // 🚀 FLUXO REGULAR (Dinheiro, Cartões, Maquininha, Fidelidade)
-        const paymentsToSubmit = standardPayments.map(p => ({
-            method_id: p.real_method_id || p.method_id || p.payment_method_id || p.payment_method?.id,
-            amount: Number(p.amount)
-        }));
-
-        const itemsToPay = (reactiveItems?.value || [])
-            .filter(i => (Number(i.selected_parts) || 0) > 0)
-            .map(i => {
-                const ppu = Number(i.parts_per_unit) || 1;
-                const qty = Number(i.selected_parts) / ppu;
-                const unitPrice = Number(i.effective_unit_price || i.unit_price || 0);
-                return {
-                    id: i.id,
-                    pay_qty: qty,
-                    amount: Math.round(qty * unitPrice * 100) / 100
-                };
-            });
-
-        const payload = {
-            payments: paymentsToSubmit,
-            items: itemsToPay,
-            service_fee: Math.max(0, Number(unref(serviceFeeAmount) || 0)),
-            cashback_used: Math.max(0, Number(unref(localCashbackAmountToSend) || 0)),
-            document: unref(customerDocument),
-            coupon_code: unref(appliedCheckoutCoupon)
-        };
+        const itemsToPay = (reactiveItems?.value || []).filter(i => (Number(i.selected_parts) || 0) > 0).map(i => {
+            const qty = Number(i.selected_parts) / (Number(i.parts_per_unit) || 1);
+            return { id: i.id, pay_qty: qty, amount: Math.round(qty * Number(i.effective_unit_price || i.unit_price || 0) * 100) / 100 };
+        });
 
         try {
-            const response = await apiClient.post(route('operations.orders.pay', orderId), payload, {
-                headers: { 'Accept': 'application/json' }
-            });
-
-            const returnedOrder = response.data?.order || response.data?.data || null;
+            await apiClient.post(route('operations.orders.pay', orderId), {
+                payments: standardPayments.map(p => ({ method_id: p.real_method_id || p.method_id, amount: Number(p.amount) })),
+                items: itemsToPay,
+                service_fee: Math.max(0, Number(unref(serviceFeeAmount) || 0)),
+                cashback_used: Math.max(0, Number(unref(localCashbackAmountToSend) || 0)),
+                document: unref(customerDocument),
+                coupon_code: unref(appliedCheckoutCoupon)
+            }, { headers: { 'Accept': 'application/json' } });
 
             stagedPayments.value = [];
             localCashbackAmountToSend.value = 0;
-
-            if (reactiveItems && reactiveItems.value) {
-                itemsToPay.forEach(paidItem => {
-                    const found = reactiveItems.value.find(i => i.id === paidItem.id);
-                    if (found) {
-                        found.base_paid = (found.base_paid || 0) + paidItem.pay_qty;
-                    }
-                });
-            }
-
-            const updatedOrder = returnedOrder || getOrder();
-            const isZeroRev = isZeroRevenueOrder ? unref(isZeroRevenueOrder) : false;
-
-            const shouldEmit = Boolean(
-                isFiscalEmitter?.value &&
-                !isZeroRev &&
-                updatedOrder?.fiscal_status !== 'authorized' &&
-                !updatedOrder?.has_fiscal_document
-            );
-
             isPaymentSuccess.value = true;
             isProcessingPayment.value = false;
-
-            if (shouldEmit) {
-                isEmittingNfce.value = true;
-            }
-
-            if (isPostPaymentPhase) {
-                isPostPaymentPhase.value = true;
-            }
-
-            if (shouldEmit) {
-                triggerSilentEmission();
-            } else {
-                executeAutoPrintRule();
-            }
-
+            if (isPostPaymentPhase) isPostPaymentPhase.value = true;
+            executeAutoPrintRule();
         } catch (error) {
             isProcessingPayment.value = false;
-            isEmittingNfce.value = false;
-            const errMsg = error.response?.data?.message || Object.values(error.response?.data?.errors || {})[0] || 'Falha ao processar o pagamento.';
-            toast.add({ severity: 'error', summary: 'Erro de Pagamento', detail: errMsg, life: 5000 });
+            toast.add({ severity: 'error', summary: 'Erro de Pagamento', detail: error.response?.data?.message || 'Falha ao processar o pagamento.', life: 5000 });
         }
     };
 
     const handlePostPaymentAction = async (action) => {
-        const orderId = getOrderId();
         const type = typeof action === 'string' ? action : action?.type;
-
-        if (type === 'no_print' || type === 'close' || type === 'home') {
-            goBack();
-            return;
-        }
-
-        if (type === 'emit_nfce') {
-            if (isZeroRevenueOrder && unref(isZeroRevenueOrder)) {
-                toast.add({ severity: 'warn', summary: 'Aviso', detail: 'Emissão fiscal não permitida para pedidos sem faturamento.', life: 4000 });
-                return;
-            }
-            triggerSilentEmission();
-            return;
-        }
-
-        if (type === 'reactivate' || type === 'correct_payment') {
+        if (['no_print', 'close', 'home'].includes(type)) { goBack(); return; }
+        if (type === 'emit_nfce') { triggerSilentEmission(); return; }
+        
+        if (['reactivate', 'correct_payment'].includes(type)) {
             if (authActionType) authActionType.value = type;
             if (authNeedsPin) authNeedsPin.value = Boolean(props.companySettings?.require_pin_for_voids ?? true);
             if (isReasonModalVisible) isReasonModalVisible.value = true;
@@ -303,67 +178,38 @@ export function useCheckoutProcessor({
         }
 
         try {
-            const apiClient = axios || window.axios;
-            await apiClient.post(route('operations.finalize-receipt', orderId), { print_action: type }, {
-                headers: { 'Accept': 'application/json' }
-            });
+            await (axios || window.axios).post(route('operations.finalize-receipt', getOrderId()), { print_action: type });
         } catch (error) {
-            const errMsg = error.response?.data?.message || Object.values(error.response?.data?.errors || {})[0] || "Falha na comunicação de impressão.";
-            toast.add({ severity: 'error', summary: 'Erro', detail: errMsg, life: 4000 });
+            toast.add({ severity: 'error', summary: 'Erro', detail: error.response?.data?.message || "Falha na impressão.", life: 4000 });
         }
     };
 
     const confirmCancellation = async (authData) => {
         const orderId = getOrderId();
         const targetType = unref(authActionType);
-
         try {
-            if (targetType === 'reactivate' || targetType === 'correct_payment') {
+            if (['reactivate', 'correct_payment'].includes(targetType)) {
                 await router.post(route('operations.orders.reactivate', orderId), {
-                    pin: authData.password || authData.pin,
-                    reason: authData.reason,
-                    mode: targetType
+                    pin: authData.password || authData.pin, reason: authData.reason, mode: targetType
                 }, {
-                    preserveScroll: true,
-                    preserveState: true,
+                    preserveScroll: true, preserveState: true,
                     onSuccess: () => {
                         isReasonModalVisible.value = false;
                         if (isPostPaymentPhase) isPostPaymentPhase.value = false;
                         toast.add({ severity: 'success', summary: 'Conta Reaberta', detail: 'O status do pedido voltou para pendente.', life: 3000 });
-
-                        router.reload({ only: ['initialOrders', 'cashierData'], preserveState: true, preserveScroll: true });
-                    },
-                    onError: (err) => {
-                        const errMsg = err.pin || err.message || "Erro ao reabrir conta.";
-                        toast.add({ severity: "error", summary: "Acesso Negado", detail: errMsg, life: 5000 });
                     }
                 });
                 return;
             }
-
-            const apiClient = axios || window.axios;
-            await apiClient.post(route('operations.orders.refund-and-clone', orderId), {
-                pin: authData.password || authData.pin,
-                reason: authData.reason,
-                is_loss: authData.isLoss
-            }, { headers: { 'Accept': 'application/json' } });
-
+            await (axios || window.axios).post(route('operations.orders.refund-and-clone', orderId), {
+                pin: authData.password || authData.pin, reason: authData.reason, is_loss: authData.isLoss
+            });
             isReasonModalVisible.value = false;
             router.reload({ only: ['initialOrders', 'cashierData'], preserveState: true, preserveScroll: true });
         } catch (e) {
-            const errMsg = e.response?.data?.message || Object.values(e.response?.data?.errors || {})[0] || "Erro interno.";
-            toast.add({ severity: "error", summary: "Acesso Negado", detail: errMsg, life: 5000 });
+            toast.add({ severity: "error", summary: "Acesso Negado", detail: e.response?.data?.message || "Erro interno.", life: 5000 });
         }
     };
 
-    return {
-        isEmittingNfce,
-        isFiscalSuccess,
-        fiscalEmitError,
-        isProcessingPayment,
-        isPaymentSuccess,
-        processPayment,
-        handlePostPaymentAction,
-        confirmCancellation
-    };
+    return { isEmittingNfce, isFiscalSuccess, fiscalEmitError, isProcessingPayment, isPaymentSuccess, processPayment, generateDirectPix, handlePostPaymentAction, confirmCancellation };
 }

@@ -109,10 +109,18 @@
 
             <div class="p-6 shrink-0 z-10">
                 <Button
-                    :label="hasBankApiStaged ? 'Gerar QR Code PIX' : 'Confirmar Recebimento'"
-                    :icon="hasBankApiStaged ? 'pi pi-qrcode' : 'pi pi-check-circle'"
+                    v-if="stagedPayments.length > 0 && stagedPayments.every(p => p.is_pending) && pendingToStage <= 0"
+                    label="Concluir e Fechar Conta"
+                    icon="pi pi-sign-out"
+                    class="w-full h-16 text-xl rounded-full! font-black border-none outline-none transition-colors bg-surface-3 hover:bg-surface-4 text-surface-text cursor-pointer shadow-sm"
+                    @click="emit('close')"
+                />
+                <Button
+                    v-else
+                    :label="canSubmitCheckout ? 'Confirmar Recebimento' : 'Aguardando Pagamento'"
+                    :icon="canSubmitCheckout ? 'pi pi-check-circle' : 'pi pi-lock'"
                     class="w-full h-16 text-xl rounded-full! font-black border-none outline-none transition-colors"
-                    :class="canSubmitCheckout ? 'bg-success-500 hover:bg-success-600 text-white cursor-pointer' : 'bg-surface-3 text-surface-muted cursor-not-allowed'"
+                    :class="canSubmitCheckout ? 'bg-success-500 hover:bg-success-600 text-white cursor-pointer shadow-md' : 'bg-surface-3 text-surface-muted cursor-not-allowed'"
                     :disabled="!canSubmitCheckout"
                     @click="processPayment"
                 />
@@ -451,7 +459,16 @@ const handleKeydown = (e) => {
     }
 };
 
-const handleAddPayment = (method) => { addPayment(method, toast); };
+const handleAddPayment = async (method) => {
+    if (method.engine_type === 'bank_api' || String(method.name).toLowerCase().includes('pix')) {
+        const success = await generateDirectPix(method.amount);
+        if (success) {
+            showPixPanel.value = true;
+        }
+        return;
+    }
+    addPayment(method, toast);
+};
 
 const handleQuickAdd = (item) => {
     const targetId = item?._parent_ref?.id || item?.id;

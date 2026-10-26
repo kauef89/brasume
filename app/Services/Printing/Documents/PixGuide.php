@@ -8,35 +8,57 @@ use App\Services\Printing\BlueprintBuilder;
 
 class PixGuide
 {
-    public static function build(Order $order, string $qrCodeData, ?string $expiresAt = null): string
+    protected Order $order;
+    protected string $qrCodeData;
+    protected ?string $expiresAt;
+
+    public function __construct(Order $order, string $qrCodeData, ?string $expiresAt = null)
+    {
+        $this->order = $order;
+        $this->qrCodeData = $qrCodeData;
+        $this->expiresAt = $expiresAt;
+    }
+
+    public function getJobType(): string
+    {
+        return 'pix_guide';
+    }
+
+    public function build(): array
     {
         $settings = CompanySetting::getCached() ?? CompanySetting::first();
-        $builder = new BlueprintBuilder();
+        $b = new BlueprintBuilder();
 
-        $builder->align('center')
-                ->text($settings->company_name ?? 'Empresa')
-                ->text('CHAVE PIX PARA PAGAMENTO')
-                ->feed(1);
+        $companyName = strtoupper($settings->trade_name ?? $settings->company_name ?? 'EMPRESA');
 
-        $builder->text('Pedido #' . $order->id)
-                ->text('Valor: R$ ' . number_format($order->total ?? 0, 2, ',', '.'))
-                ->feed(1);
+        $b->alignCenter()
+          ->text($companyName, true, '2x')
+          ->space()
+          ->text('CHAVE PIX PARA PAGAMENTO', true)
+          ->space();
 
-        $builder->qrcode($qrCodeData, 8)
-                ->feed(1);
+        $b->alignLeft()
+          ->text('PEDIDO #' . $this->order->id, true)
+          ->text('VALOR R$: ' . number_format($this->order->total ?? 0, 2, ',', '.'), true, '2x')
+          ->space();
 
-        if ($expiresAt) {
-            $builder->text('Válido até: ' . \Carbon\Carbon::parse($expiresAt)->format('d/m/Y H:i:s'))
-                    ->feed(1);
+        $b->alignCenter()
+          ->qrCode($this->qrCodeData, 8)
+          ->space();
+
+        if ($this->expiresAt) {
+            $b->text('Valido ate: ' . \Carbon\Carbon::parse($this->expiresAt)->format('d/m/Y H:i:s'))
+              ->space();
         }
 
-        $builder->align('left')
-                ->text('Aponte a camera do seu celular ou o')
-                ->text('app do seu banco para o QR Code acima.')
-                ->text('O pagamento sera baixado automaticamente.')
-                ->feed(2)
-                ->cut();
+        $b->alignCenter()
+          ->text('Aponte a camera do seu celular ou o')
+          ->text('app do seu banco para o QR Code acima.')
+          ->text('O pagamento sera baixado automaticamente.')
+          ->space()
+          ->space()
+          ->cut();
 
-        return $builder->build();
+        return $b->get();
     }
 }

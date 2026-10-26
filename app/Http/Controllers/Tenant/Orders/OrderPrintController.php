@@ -10,6 +10,32 @@ use App\Services\Printing\OrderPrintService;
 
 class OrderPrintController extends Controller
 {
+    public function printPix(Order $order, Request $request, OrderPrintService $printService)
+    {
+        $request->validate([
+            'qr_code' => 'required|string',
+            'txid' => 'nullable|string',
+            'expires_at' => 'nullable|string'
+        ]);
+
+        try {
+            $printService->printPixGuide($order, $request->qr_code, $request->expires_at);
+            return back()->with('success', 'Guia PIX enviada para a impressora.');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Erro ao imprimir: ' . $e->getMessage());
+        }
+    }
+
+    public function printConference(Order $order, Request $request, OrderPrintService $printService)
+    {
+        try {
+            $printService->printConferenceBill($order);
+            return back()->with('success', 'Conta enviada para impressão!');
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
     public function printDelivery(Order $order, Request $request, OrderPrintService $printService)
     {
         $settings = CompanySetting::getCached()?->toArray() ?? [];
