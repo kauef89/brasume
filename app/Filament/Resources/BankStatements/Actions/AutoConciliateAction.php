@@ -2,12 +2,13 @@
 
 namespace App\Filament\Resources\BankStatements\Actions;
 
+use App\Services\Accounting\BankReconciliationService;
+use App\Services\Accounting\BankMatchScoringService;
+use App\Filament\Resources\BankStatements\Schemas\ConciliationTabsSchema;
 use Filament\Actions\Action;
 use App\Models\BankStatement;
 use App\Models\AccountPayable;
 use App\Models\PaymentBatch;
-use App\Services\Accounting\BankMatchScoringService;
-use App\Filament\Resources\BankStatements\Schemas\ConciliationTabsSchema;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Radio;
@@ -69,12 +70,29 @@ class AutoConciliateAction extends Action
                 ],
             )
             ->form(function ($livewire) {
-                $pendingStatements = BankStatement::query()
+                $skippedIds = session()->get("auto_conciliate_skipped", []);
+
+                // 🚀 BUSCA INSTANTÂNEA: 1 ÚNICA QUERY INDEXADA
+                $statement = BankStatement::query()
                     ->where("status", "pending")
                     ->where("amount", "<", 0)
-                    ->get();
+                    ->when(!empty($skippedIds), fn($q) => $q->whereNotIn("id", $skippedIds))
+                    ->orderByDesc("match_score")
+                    ->orderBy("bank_date")
+                    ->first();
 
-                if ($pendingStatements->isEmpty()) {
+                // Se pulou todos e acabaram, limpa o skip para reiniciar
+                if (!$statement && !empty($skippedIds)) {
+                    session()->forget("auto_conciliate_skipped");
+                    $statement = BankStatement::query()
+                        ->where("status", "pending")
+                        ->where("amount", "<", 0)
+                        ->orderByDesc("match_score")
+                        ->orderBy("bank_date")
+                        ->first();
+                }
+
+                if (!$statement) {
                     session()->forget("auto_conciliate_skipped");
                     $livewire->currentStmtId = null;
                     return [
@@ -84,37 +102,16 @@ class AutoConciliateAction extends Action
                     ];
                 }
 
-                $service = new BankMatchScoringService();
-                $scoredQueue = [];
-                foreach ($pendingStatements as $stmt) {
-                    $matches = $service->findMatchesFor($stmt);
-                    $scoredQueue[] = [
-                        "stmt" => $stmt,
-                        "matches" => $matches,
-                        "max_score" => $matches->count() > 0 ? $matches->max("score") : -1,
-                    ];
-                }
-
-                $skippedIds = session()->get("auto_conciliate_skipped", []);
-                usort($scoredQueue, function ($a, $b) use ($skippedIds) {
-                    $aIsSkipped = in_array($a["stmt"]->id, $skippedIds);
-                    $bIsSkipped = in_array($b["stmt"]->id, $skippedIds);
-                    if ($aIsSkipped !== $bIsSkipped) return $aIsSkipped ? 1 : -1;
-                    if ($b["max_score"] !== $a["max_score"]) return $b["max_score"] <=> $a["max_score"];
-                    return $a["stmt"]->bank_date <=> $b["stmt"]->bank_date;
-                });
-
-                $bestItem = $scoredQueue[0];
-                $statement = $bestItem["stmt"];
-                $matches = $bestItem["matches"];
                 $livewire->currentStmtId = $statement->id;
+
+                // 🚀 CALCULA CANDIDATOS APENAS PARA O ITEM QUE ESTÁ NA TELA
+                $service = new BankMatchScoringService();
+                $matches = $service->findMatchesFor($statement);
 
                 $bestCandidateId = count($matches) > 0 ? "payable_" . $matches->first()["candidate"]->id : null;
 
                 return [
                     Grid::make(12)->schema([
-
-                        // 🚀 A MÁGICA: O ESPARGUETE DE HTML SUMIU DAQUI!
                         Placeholder::make("bank_transaction")
                             ->hiddenLabel()
                             ->columnSpan(4)
@@ -139,17 +136,14 @@ class AutoConciliateAction extends Action
                                     })
                                     ->descriptions(function () use ($matches) {
                                         $descriptions = [];
-
-                                        // 🚀 TUDO LIMPO! Sem Heroicons nem HTML no PHP
                                         foreach ($matches as $match) {
                                             $descriptions["payable_" . $match["candidate"]->id] = new HtmlString(
                                                 view('components.payable-candidate-row', [
                                                     'candidate' => $match["candidate"],
-                                                    'score' => $match["score"]
+                                                    'score'     => $match["score"]
                                                 ])->render()
                                             );
                                         }
-
                                         return $descriptions;
                                     })
                                     ->default($bestCandidateId),
@@ -163,23 +157,32 @@ class AutoConciliateAction extends Action
                                     ->hiddenLabel()
                                     ->placeholder("🔍 Pesquisar conta ou lote existente...")
                                     ->searchable()
-                                    ->preload()
+                                    ->getSearchResultsUsing(function (string $search) {
+                                        $payables = AccountPayable::query()
+                                            ->with(['supplier', 'employee'])
+                                            ->where("status", "pending")
+                                            ->whereNull("payment_batch_id")
+                                            ->where(function ($q) use ($search) {
+                                                $q->where('description', 'like', "%{$search}%")
+                                                  ->orWhereHas('supplier', fn($sq) => $sq->where('name', 'like', "%{$search}%"));
+                                            })
+                                            ->limit(15)
+                                            ->get()
+                                            ->mapWithKeys(fn($p) => ["payable_" . $p->id => "📄 " . ($p->supplier->name ?? ($p->employee->name ?? "S/F")) . " - R$ " . number_format($p->amount, 2, ",", ".")]);
+
+                                        return $payables->toArray();
+                                    })
+                                    ->getOptionLabelUsing(function ($value) {
+                                        if (str_starts_with($value, 'payable_')) {
+                                            $p = AccountPayable::find(str_replace('payable_', '', $value));
+                                            return $p ? "📄 " . ($p->supplier->name ?? "S/F") . " - R$ " . number_format($p->amount, 2, ",", ".") : null;
+                                        }
+                                        return null;
+                                    })
                                     ->live()
                                     ->afterStateUpdated(
                                         fn($state, Set $set) => filled($state) ? $set("selected_match", null) : null,
                                     )
-                                    ->options(function () {
-                                        $payables = AccountPayable::query()
-                                            ->where("status", "pending")
-                                            ->whereNull("payment_batch_id")
-                                            ->get()
-                                            ->mapWithKeys(fn($p) => ["payable_" . $p->id => "📄 " . ($p->supplier->name ?? ($p->employee->name ?? "S/F")) . " - R$ " . number_format($p->amount, 2, ",", ".")]);
-                                        $batches = PaymentBatch::query()
-                                            ->where("status", "pending")
-                                            ->get()
-                                            ->mapWithKeys(fn($b) => ["batch_" . $b->id => "📦 LOTE: " . $b->description . " - R$ " . number_format($b->total_amount, 2, ",", ".")]);
-                                        return collect($payables)->union($batches)->toArray();
-                                    })
                                     ->suffixAction(
                                         Action::make("advanced_conciliation")
                                             ->icon("heroicon-m-plus")

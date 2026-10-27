@@ -98,6 +98,7 @@ class InvoiceItemProcessor
                 'quantity'   => $processQty,
                 'unit_cost'  => $invoiceCost,
                 'total_cost' => round($processQty * $invoiceCost, 4),
+                'auto_approve' => (bool) $autoApprove,
             ]);
             return;
         }

@@ -35,6 +35,7 @@ class StoreCustomerAddressRequest extends FormRequest
             'number' => ['required_if:noNumber,false', 'nullable', 'string', 'max:20'],
             'noNumber' => ['required', 'boolean'],
             'complement' => ['nullable', 'string', 'max:255'],
+            'location' => ['nullable', 'string', 'max:500'],
         ];
     }
 

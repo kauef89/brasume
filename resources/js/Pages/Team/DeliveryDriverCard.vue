@@ -50,18 +50,33 @@
             </button>
         </div>
 
-        <!-- 3) Endereço: Rua + Número + Complemento + Referência -->
-        <div class="text-xs text-surface-muted font-medium leading-relaxed bg-surface-2/60 p-2.5 rounded-xl border border-surface-border/40 flex items-start gap-2">
-            <i class="pi fa-location-dot text-primary-500 text-xs mt-0.5 shrink-0"></i>
-            <div class="flex flex-col">
-                <span class="text-surface-text font-semibold">
-                    {{ formattedAddress.main }}
-                </span>
-                <span v-if="formattedAddress.extra" class="text-[11px] opacity-80 mt-0.5">
-                    {{ formattedAddress.extra }}
-                </span>
+        <!-- 3) Morada Clicável com Navegação GPS Direta -->
+        <a
+            :href="navigationUrl"
+            target="_blank"
+            class="text-xs text-surface-muted font-medium leading-relaxed bg-surface-2/60 hover:bg-surface-2 p-2.5 rounded-xl border border-surface-border/40 hover:border-primary-500/50 flex items-start justify-between gap-2 transition-all no-underline group cursor-pointer"
+            :title="hasExactLocation ? 'Abrir Localização GPS Exata' : 'Pesquisar Morada no Google Maps'"
+        >
+            <div class="flex items-start gap-2 min-w-0">
+                <i class="pi fa-location-dot text-xs mt-0.5 shrink-0" :class="hasExactLocation ? 'text-emerald-500' : 'text-primary-500'"></i>
+                <div class="flex flex-col min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-surface-text font-semibold group-hover:text-primary-500 transition-colors">
+                            {{ formattedAddress.main }}
+                        </span>
+                        <span v-if="hasExactLocation" class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            GPS EXATO
+                        </span>
+                    </div>
+                    <span v-if="formattedAddress.extra" class="text-[11px] opacity-80 mt-0.5">
+                        {{ formattedAddress.extra }}
+                    </span>
+                </div>
             </div>
-        </div>
+            <div class="shrink-0 flex items-center justify-center w-7 h-7 rounded-lg bg-surface-3/50 group-hover:bg-primary-500 group-hover:text-white transition-all text-surface-muted">
+                <i class="pi pi-external-link text-[10px]"></i>
+            </div>
+        </a>
 
         <!-- 5) Status Financeiro (PAGO vs Cobrar + Forma + Troco + Cobrança PIX) -->
         <div class="flex items-center justify-between text-xs px-1 font-bold">
@@ -156,6 +171,19 @@ defineEmits(['charge-pix']);
 
 const page = usePage();
 const isExpanded = ref(false);
+const hasExactLocation = computed(() => {
+    const addr = props.order.address_snapshot || props.order.address;
+    return Boolean(addr && typeof addr === 'object' && addr.location);
+});
+
+const navigationUrl = computed(() => {
+    const addr = props.order.address_snapshot || props.order.address;
+    if (addr && typeof addr === 'object' && addr.location) {
+        return addr.location;
+    }
+    const query = `${formattedAddress.value.main}${neighborhood.value ? ', ' + neighborhood.value : ''}`;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+});
 
 const customerName = computed(() => {
     return props.order.customer_name || props.order.customer?.name || 'Cliente';

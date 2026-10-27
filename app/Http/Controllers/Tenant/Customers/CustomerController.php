@@ -77,6 +77,7 @@ class CustomerController extends Controller
             'zipcode'         => 'nullable|string|max:15',
             'complement'      => 'nullable|string|max:255',
             'reference'       => 'nullable|string|max:255',
+            'location'        => 'nullable|string|max:500',
         ]);
 
         $validated['nickname'] = $validated['nickname'] ?? 'Casa';
@@ -231,5 +232,19 @@ class CustomerController extends Controller
         $user->update(['wants_opening_notification' => $request->wants_notification]);
 
         return response()->json(['success' => true]);
+    }
+
+    public function updateAddressLocation(Request $request, Address $address)
+    {
+        $validated = $request->validate([
+            'location' => 'required|string|max:500',
+        ]);
+
+        $address->update(['location' => $validated['location']]);
+
+        return back()->with([
+            'success' => 'Localização do endereço atualizada com sucesso!',
+            'address' => $address->loadMissing(['street', 'neighborhood']),
+        ]);
     }
 }

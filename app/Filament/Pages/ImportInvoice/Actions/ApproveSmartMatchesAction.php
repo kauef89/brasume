@@ -42,32 +42,36 @@ class ApproveSmartMatchesAction extends Action
 
                 foreach ($items as $index => $item) {
                     if ($item['is_matched'] == 1 && $item['confirmation_step'] == 0) {
-                        $product = Product::find($item['product_id']);
-                        $productName = $product ? $product->name : 'Insumo Desconhecido';
+                        $isPersonal = (($item['destination_type'] ?? '') === 'personal') || !empty($item['is_personal']);
 
-                        // Busca a unidade de medida do sistema
-                        $productUnit = $product ? strtoupper($product->unit_of_measure ?? '') : '';
+                        if ($isPersonal) {
+                            $productLabelHtml = "<span class='inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'>👤 Despesa Pessoal</span>";
+                            $totalEntryBr = "<span class='text-xs text-gray-400 font-medium'>Particular</span>";
+                        } else {
+                            $product = Product::find($item['product_id']);
+                            $cleanName = $product ? htmlspecialchars($product->name) : 'Insumo Desconhecido';
+                            $productLabelHtml = "<span class='font-medium' title='{$cleanName}'>{$cleanName}</span>";
+                            $productUnit = $product ? strtoupper($product->unit_of_measure ?? '') : '';
+                            $totalEntryFloat = (float)($item['xml_qty']) * (float)($item['conversion_factor']);
+                            $formattedEntry = Number::format($totalEntryFloat, maxPrecision: 4);
+                            $totalEntryBr = "{$formattedEntry} <span class='text-gray-400 dark:text-gray-500 text-xs ml-1 font-medium'>{$productUnit}</span>";
+                        }
 
-                        // Multiplica para achar a Entrada Real
-                        $totalEntryFloat = (float)($item['xml_qty']) * (float)($item['conversion_factor']);
-
-                        // Formata para PT-BR usando o Laravel Number
                         $qtyBr = Number::format((float) $item['xml_qty'], maxPrecision: 4);
-                        $totalEntryBr = Number::format($totalEntryFloat, maxPrecision: 4);
 
                         $label = "
                             <div style='display: flex; width: 100%; gap: 1rem; align-items: center;' class='text-sm py-1.5 border-b border-gray-100 dark:border-gray-800 border-dashed'>
                                 <div style='flex: 5; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' class='font-semibold' title='{$item['xml_name']}'>
                                     {$item['xml_name']}
                                 </div>
-                                <div style='flex: 4; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' class='font-medium' title='{$productName}'>
-                                    {$productName}
+                                <div style='flex: 4; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>
+                                    {$productLabelHtml}
                                 </div>
                                 <div style='flex: 2; min-width: 0;'>
                                     {$qtyBr} {$item['xml_uom']}
                                 </div>
                                 <div style='flex: 1; text-align: right; min-width: 0;'>
-                                    {$totalEntryBr} <span class='text-gray-400 dark:text-gray-500 text-xs ml-1 font-medium'>{$productUnit}</span>
+                                    {$totalEntryBr}
                                 </div>
                             </div>
                         ";

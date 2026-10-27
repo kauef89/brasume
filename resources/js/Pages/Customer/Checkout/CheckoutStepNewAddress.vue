@@ -132,6 +132,33 @@
                     />
                 </FormField>
 
+                                <!-- CAPTURA DE LOCALIZAÇÃO GPS -->
+                <div class="flex flex-col gap-2 p-3.5 rounded-2xl bg-white/5 border border-white/10">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i class="pi pi-map-marker" :class="form.location ? 'text-emerald-400' : 'text-white/60'"></i>
+                            <span class="text-xs font-bold text-white">Localização Exata (GPS)</span>
+                        </div>
+                        <span v-if="form.location" class="text-[9px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                            Ponto Anexado
+                        </span>
+                    </div>
+
+                    <button
+                        type="button"
+                        @click="handleCaptureGps"
+                        :disabled="isLocating"
+                        class="w-full h-11 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer border border-dashed"
+                        :class="form.location
+                            ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20'
+                            : 'bg-white/10 border-white/20 text-white hover:bg-white/15'"
+                    >
+                        <i v-if="isLocating" class="pi pi-spinner animate-spin"></i>
+                        <i v-else class="pi pi-compass"></i>
+                        <span>{{ form.location ? 'Atualizar Ponto GPS' : 'Anexar Minha Localização Atual' }}</span>
+                    </button>
+                </div>
+
                 <!-- APELIDO DO ENDEREÇO -->
                 <div v-if="!isGuest" class="flex flex-col gap-2 mt-1">
                     <label class="text-[10px] font-black uppercase tracking-widest text-white/50">Salvar Endereço Como</label>
@@ -227,7 +254,8 @@ const defaultForm = () => ({
     no_number: false,
     neighborhood: "",
     neighborhood_id: null,
-    complement: ""
+    complement: "",
+    location: ""
 });
 
 const form = ref(defaultForm());

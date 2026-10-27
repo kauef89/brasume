@@ -29,11 +29,15 @@ class Supplier extends Model
 
     protected $guarded = [];
 
-    protected $casts = [
-        'is_trusted'  => 'boolean',
-        'is_personal' => 'boolean',
-    ];
-
+    protected function casts(): array
+    {
+        return [
+            'is_trusted'  => 'boolean',
+            'is_personal' => 'boolean',
+            'is_active'   => 'boolean',
+            'order_days'  => 'array',
+        ];
+    }
 
     public function transactions()
     {
@@ -84,6 +88,23 @@ class Supplier extends Model
                             'document' => "O CNPJ/CPF '{$supplier->document}' já está em uso por outro fornecedor na base de dados."
                         ]);
                     }
+                }
+            });
+
+            // Se for cadastrada uma nova filial de uma matriz confiável, herda automaticamente
+            static::creating(function ($supplier) {
+                if (!empty($supplier->parent_id) && !isset($supplier->is_trusted)) {
+                    $parent = self::find($supplier->parent_id);
+                    if ($parent && (bool) $parent->is_trusted) {
+                        $supplier->is_trusted = true;
+                    }
+                }
+            });
+
+            // Ao salvar alterações em uma matriz, propaga is_trusted para todas as suas filiais
+            static::saved(function ($supplier) {
+                if ($supplier->wasChanged('is_trusted')) {
+                    $supplier->branches()->update(['is_trusted' => (bool) $supplier->is_trusted]);
                 }
             });
         }

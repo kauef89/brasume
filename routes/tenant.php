@@ -54,3 +54,5 @@ Route::middleware([
         require base_path('routes/tenant/operations.php');
     });
 });
+
+Route::post('/customer/addresses/{address}/location', [\App\Http\Controllers\Tenant\Customers\CustomerController::class, 'updateAddressLocation'])->name('customer.addresses.update-location');

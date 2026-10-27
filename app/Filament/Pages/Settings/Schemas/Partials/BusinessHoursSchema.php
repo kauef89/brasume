@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pages\Settings\Schemas\Partials;
 
+use App\Enums\Weekday;
+
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
 use Filament\Forms\Components\Toggle;
@@ -83,15 +85,7 @@ class BusinessHoursSchema
                         ->schema([
                             Select::make('day_of_week')
                                 ->label('Dia da Semana')
-                                ->options([
-                                    0 => 'Domingo',
-                                    1 => 'Segunda-feira',
-                                    2 => 'Terça-feira',
-                                    3 => 'Quarta-feira',
-                                    4 => 'Quinta-feira',
-                                    5 => 'Sexta-feira',
-                                    6 => 'Sábado',
-                                ])
+                                ->options(Weekday::numericOptions())
                                 ->required()
                                 ->columnSpan(2),
 

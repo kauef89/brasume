@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\BankAccountType;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany; // 🚀 Import da relação
@@ -29,6 +31,8 @@ class BankAccount extends Model
     protected $guarded = [];
 
     protected $casts = [
+        'is_personal' => 'boolean',
+        'type' => BankAccountType::class,
         'initial_balance' => 'float',
         'is_active' => 'boolean',
 

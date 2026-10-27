@@ -29,6 +29,59 @@ class InvoiceImportService
      */
     public function findInternalMatch(?int $supplierId, string $xmlName): ?array
     {
+        if ($supplierId) {
+            $exactStock = ProductCostHistory::where('supplier_id', $supplierId)->where('xml_name', $xmlName)->latest('id')->first();
+            $exactPersonal = PersonalPurchase::where('supplier_id', $supplierId)->where('xml_name', $xmlName)->latest('id')->first();
+
+            if ($exactPersonal && (!$exactStock || $exactPersonal->id >= $exactStock->id)) {
+                return [
+                    'destination_type'  => 'personal',
+                    'is_personal'       => true,
+                    'product_id'        => null,
+                    'conversion_factor' => 1.0,
+                    'auto_approve'      => (bool) ($exactPersonal->auto_approve ?? false),
+                ];
+            }
+
+            if ($exactStock) {
+                return [
+                    'destination_type'  => 'stock',
+                    'is_personal'       => false,
+                    'product_id'        => $exactStock->product_id,
+                    'conversion_factor' => $exactStock->conversion_factor,
+                    'auto_approve'      => (bool) ($exactStock->auto_approve ?? false),
+                ];
+            }
+        }
+
+        $broadStock = ProductCostHistory::where('xml_name', $xmlName)->latest('id')->first();
+        $broadPersonal = PersonalPurchase::where('xml_name', $xmlName)->latest('id')->first();
+
+        if ($broadPersonal && (!$broadStock || $broadPersonal->id >= $broadStock->id)) {
+            return [
+                'destination_type'  => 'personal',
+                'is_personal'       => true,
+                'product_id'        => null,
+                'conversion_factor' => 1.0,
+                'auto_approve'      => false,
+            ];
+        }
+
+        if ($broadStock) {
+            return [
+                'destination_type'  => 'stock',
+                'is_personal'       => false,
+                'product_id'        => $broadStock->product_id,
+                'conversion_factor' => $broadStock->conversion_factor,
+                'auto_approve'      => false,
+            ];
+        }
+
+        return null;
+    }
+
+    private function _deprecatedFindInternalMatch(?int $supplierId, string $xmlName): ?array
+    {
         // 1. Tenta a Correspondência Exata (Mesmo fornecedor + Mesmo Nome XML)
         if ($supplierId) {
             $exactMatch = ProductCostHistory::where('supplier_id', $supplierId)
@@ -151,6 +204,8 @@ class InvoiceImportService
                     $isAssetCfop = in_array($xmlCfop, ['1551', '2551', '3551']);
                     $defaultDestination = $isAssetCfop ? 'asset' : 'stock';
 
+                    $isPersonalMatch = (($matchData['destination_type'] ?? null) === 'personal');
+                    $finalDest = $isPersonalMatch ? 'personal' : $defaultDestination;
                     $items[] = [
                         'xml_name' => $xmlName,
                         'supplier_product_code' => $xmlCode,
@@ -159,10 +214,11 @@ class InvoiceImportService
                         'xml_cost' => $xmlCost,
                         'xml_uom'  => $xmlUom,
                         'xml_cfop' => $xmlCfop,
-                        'destination_type' => $defaultDestination,
+                        'destination_type' => $finalDest,
+                        'is_personal' => $isPersonalMatch,
                         'conversion_factor' => $matchFactor,
                         'product_id' => $matchProductId,
-                        'is_matched' => $matchProductId ? 1 : 0,
+                        'is_matched' => ($matchProductId || $isPersonalMatch) ? 1 : 0,
                         'item_uuid'  => (string) Str::uuid(),
                         'confirmation_step' => 0,
                         'factor_source' => 'auto',
@@ -280,6 +336,21 @@ class InvoiceImportService
                     $processor->processDirectItem($item, $data['invoice_key'], $data['supplier_id'], true);
                     continue;
                 }
+            }
+
+            $personalRule = PersonalPurchase::where('supplier_id', $data['supplier_id'])
+                ->where('xml_name', $item['xml_name'])
+                ->where('auto_approve', true)
+                ->latest('id')
+                ->first();
+
+            if ($personalRule) {
+                $item['destination_type'] = 'personal';
+                $item['is_personal'] = true;
+                $item['product_id'] = null;
+
+                $processor->processDirectItem($item, $data['invoice_key'], $data['supplier_id'], true);
+                continue;
             }
 
             $allProcessed = false;

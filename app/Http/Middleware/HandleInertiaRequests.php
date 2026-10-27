@@ -143,6 +143,7 @@ class HandleInertiaRequests extends Middleware
                 'pix_data'        => fn () => $request->session()->get('pix_data'),
                 'order_id'        => fn () => $request->session()->get('order_id'),
                 'createdCustomer' => fn () => $request->session()->get('createdCustomer'),
+                'createdAddress'  => fn () => $request->session()->get('createdAddress'),
             ],
 
             'tenant'          => $isTenant ? tenant() : null,

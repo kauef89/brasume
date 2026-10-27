@@ -30,11 +30,19 @@ class BankAccountsTable
                 ),
 
             // Tipo de Conta com Badge colorida
-            Tables\Columns\TextColumn::make('type')
+            Tables\Columns\TextColumn::make('type')->label('Tipo')->badge()
                             ->label('Tipo')
                             ->badge()
                             ->formatStateUsing(fn (string $state): string => match ($state) {
                                 'vault' => 'Cofre',
+
+                Tables\Columns\IconColumn::make('is_personal')
+                    ->label('Uso Pessoal')
+                    ->boolean()
+                    ->trueIcon('heroicon-m-user')
+                    ->falseIcon('heroicon-m-building-storefront')
+                    ->trueColor('warning')
+                    ->falseColor('gray'),
                                 'checking' => 'Corrente',
                                 'savings' => 'Poupança',
                                 'credit_card' => 'Cartão de Crédito', // 🚀

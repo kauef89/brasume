@@ -81,6 +81,25 @@
                 />
             </div>
 
+                        <!-- 5. LOCALIZAÇÃO DO WHATSAPP / GOOGLE MAPS -->
+            <div class="flex flex-col gap-1.5 relative z-0">
+                <div class="flex items-center justify-between">
+                    <label class="text-[10px] font-black uppercase text-surface-muted flex items-center gap-1.5">
+                        <i class="pi pi-whatsapp text-emerald-500 text-xs"></i>
+                        Localização do Cliente (WhatsApp / Maps)
+                    </label>
+                    <span v-if="form.location" class="text-[9px] font-black uppercase text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                        Link Ativo
+                    </span>
+                </div>
+                <input
+                    v-model="form.location"
+                    type="text"
+                    placeholder="Cole o link recebido no WhatsApp (ex: https://maps.google.com/?q=...)"
+                    class="w-full h-14 px-3.5 bg-surface-1 border border-transparent rounded-xl text-xs font-semibold text-surface-text outline-none focus:border-primary-500 transition-all"
+                />
+            </div>
+
             <!-- AÇÕES -->
             <div class="flex items-center gap-3 w-full mt-2 relative z-0">
                 <button
@@ -116,7 +135,8 @@ const props = defineProps({
     visible: Boolean,
     customerId: [Number, String],
     customerName: String,
-    streets: { type: Array, default: () => [] }
+    streets: { type: Array, default: () => [] },
+    addressToEdit: Object
 });
 
 const emit = defineEmits(['update:visible', 'success']);
@@ -132,7 +152,8 @@ const form = reactive({
     number: '',
     no_number: false,
     complement: '',
-    reference: ''
+    reference: '',
+    location: ''
 });
 
 // =====================================
@@ -310,7 +331,8 @@ const handleSubmit = () => {
         neighborhood: neighborhoodName,
         neighborhood_id: form.neighborhood_id,
         complement: form.complement || null,
-        reference: form.reference || null
+        reference: form.reference || null,
+        location: form.location || null
     };
 
     router.post(route('operations.customers.addresses.store', props.customerId), payload, {
@@ -343,16 +365,28 @@ const handleSubmit = () => {
 
 watch(() => props.visible, (val) => {
     if (val) {
-        streetSearchText.value = '';
-        selectedStreet.value = null;
-        streetResults.value = [];
-
-        form.street_id = null;
-        form.neighborhood_id = null;
-        form.number = '';
-        form.no_number = false;
-        form.complement = '';
-        form.reference = '';
+        if (props.addressToEdit) {
+            form.street_id = props.addressToEdit.street_id || props.addressToEdit.street?.id || null;
+            form.neighborhood_id = props.addressToEdit.neighborhood_id || props.addressToEdit.neighborhood?.id || null;
+            form.number = props.addressToEdit.number === 'S/N' ? '' : (props.addressToEdit.number || '');
+            form.no_number = props.addressToEdit.no_number || props.addressToEdit.number === 'S/N';
+            form.complement = props.addressToEdit.complement || '';
+            form.reference = props.addressToEdit.reference || '';
+            form.location = props.addressToEdit.location || '';
+            streetSearchText.value = props.addressToEdit.street?.name || props.addressToEdit.street || '';
+            selectedStreet.value = props.addressToEdit.street || { id: form.street_id, name: streetSearchText.value };
+        } else {
+            streetSearchText.value = '';
+            selectedStreet.value = null;
+            streetResults.value = [];
+            form.street_id = null;
+            form.neighborhood_id = null;
+            form.number = '';
+            form.no_number = false;
+            form.complement = '';
+            form.reference = '';
+            form.location = '';
+        }
     }
 });
 </script>

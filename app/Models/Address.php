@@ -5,33 +5,54 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * @property-read \App\Models\Customer|null $customer
- * @property-read \App\Models\Neighborhood|null $neighborhood
- * @property-read \App\Models\Street|null $street
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Address newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Address newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Address query()
- * @mixin \Illuminate\Database\Eloquent\Builder
- */
 class Address extends Model
 {
     use HasFactory;
 
     protected $guarded = [];
 
-    // 🚀 1. EAGER LOADING: Sempre que buscar um endereço, já traz a rua e o bairro do banco
     protected $with = ['street', 'neighborhood'];
 
-    // 🚀 2. APPENDS: Força o Laravel a injetar essas propriedades virtuais no JSON que vai para o Vue
-    protected $appends = ['full_address', 'delivery_fee'];
+    protected $appends = ['full_address', 'delivery_fee', 'coordinates'];
 
     protected $casts = [
         'no_number' => 'boolean',
         'is_active' => 'boolean',
     ];
 
-    // 🚀 3. O ACESSOR BLINDADO DO ENDEREÇO
+    /**
+     * Mutator: Normaliza qualquer link do Google Maps, WhatsApp ou coordenadas brutas
+     * para o formato canónico: https://www.google.com/maps?q=latitude,longitude
+     */
+    public function setLocationAttribute($value): void
+    {
+        if (empty($value)) {
+            $this->attributes['location'] = null;
+            return;
+        }
+
+        $val = trim((string) $value);
+        $unquoted = urldecode($val);
+
+        if (preg_match('/(-?\d{1,2}\.\d+)\s*[,/]\s*(-?\d{1,3}\.\d+)/', $unquoted, $matches)) {
+            $this->attributes['location'] = "https://www.google.com/maps?q={$matches[1]},{$matches[2]}";
+        } else {
+            $this->attributes['location'] = $val;
+        }
+    }
+
+    /**
+     * Acessor: Extrai apenas "latitude,longitude" para traçar rotas e waypoints diretos
+     */
+    public function getCoordinatesAttribute(): ?string
+    {
+        if (!$this->location) return null;
+        if (preg_match('/(-?\d{1,2}\.\d+)\s*[,/]\s*(-?\d{1,3}\.\d+)/', urldecode($this->location), $matches)) {
+            return "{$matches[1]},{$matches[2]}";
+        }
+        return null;
+    }
+
     public function getFullAddressAttribute(): string
     {
         $streetName = $this->street ? $this->street->name : 'Rua não informada';
@@ -43,7 +64,6 @@ class Address extends Model
         return "{$streetName}, {$number} - {$neighborhoodName}{$comp}";
     }
 
-    // 🚀 4. O ACESSOR DA TAXA DE ENTREGA (Puxa direto do relacionamento com o Bairro)
     public function getDeliveryFeeAttribute(): float
     {
         return $this->neighborhood ? (float) $this->neighborhood->delivery_fee : 0.00;

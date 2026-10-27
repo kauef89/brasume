@@ -4,6 +4,7 @@ namespace App\Services\Accounting;
 
 use App\Models\BankStatement;
 use App\Models\AccountPayable;
+use App\Models\AccountReceivable;
 use App\Models\Supplier;
 
 class BankMatchScoringService
@@ -12,6 +13,33 @@ class BankMatchScoringService
 
     public function findMatchesFor(BankStatement $statement)
     {
+        $matches = collect();
+
+        // 🚀 CENÁRIO 1: CRÉDITO NO BANCO (Busca em Contas a Receber)
+        if ($statement->type === 'in') {
+            $receivables = AccountReceivable::with(['customer', 'order'])
+                ->where('status', 'pending')
+                ->whereBetween('due_date', [
+                    $statement->bank_date->copy()->subDays(15),
+                    $statement->bank_date->copy()->addDays(15),
+                ])
+                ->get();
+
+            foreach ($receivables as $candidate) {
+                $score = $this->calculateReceivableScore($statement, $candidate);
+                if ($score >= 30) {
+                    $matches->push([
+                        'candidate' => $candidate,
+                        'score'     => $score,
+                        'type'      => 'Contas a Receber',
+                    ]);
+                }
+            }
+
+            return $matches->sortByDesc('score')->values();
+        }
+
+        // 🚀 CENÁRIO 2: DÉBITO NO BANCO (Busca em Contas a Pagar)
         $candidates = AccountPayable::with(["supplier", "employee"])
             ->where("status", "pending")
             ->whereBetween("due_date", [
@@ -20,16 +48,14 @@ class BankMatchScoringService
             ])
             ->get();
 
-        $matches = collect();
-
         foreach ($candidates as $candidate) {
             $score = $this->calculateScore($statement, $candidate);
 
             if ($score >= 30) {
                 $matches->push([
                     "candidate" => $candidate,
-                    "score" => $score,
-                    "type" => "Contas a Pagar",
+                    "score"     => $score,
+                    "type"      => "Contas a Pagar",
                 ]);
             }
         }
@@ -40,16 +66,68 @@ class BankMatchScoringService
     public function calculateScore(BankStatement $statement, AccountPayable $candidate): int
     {
         $amountData = $this->calculateAmountScore($statement, $candidate);
-
         if ($amountData['score'] === 0) return 0;
 
         $identityScore = $this->calculateIdentityScore($statement, $candidate);
-
         if ($amountData['is_late_match'] && $identityScore === 0) return 0;
 
         $dateScore = $this->calculateDateScore($statement, $candidate, $amountData['is_late_match']);
 
         return min($amountData['score'] + $identityScore + $dateScore, 100);
+    }
+
+    /**
+     * Pontuação para Contas a Receber (Depósitos, TEFs e Maquininhas)
+     */
+    public function calculateReceivableScore(BankStatement $statement, AccountReceivable $candidate): int
+    {
+        $statementAmount = abs((float) ($statement->amount ?? 0));
+        // Compara preferencialmente com o valor líquido da maquininha
+        $targetAmount = (float) ($candidate->net_amount > 0 ? $candidate->net_amount : $candidate->gross_amount);
+        $diff = abs($statementAmount - $targetAmount);
+
+        $amountScore = 0;
+        if ($diff < 0.01) {
+            $amountScore = 40;
+        } elseif ($diff <= 1.0) {
+            $amountScore = 35;
+        } elseif ($statementAmount >= $targetAmount * 0.98 && $statementAmount <= $targetAmount * 1.02) {
+            $amountScore = 20;
+        }
+
+        if ($amountScore === 0) return 0;
+
+        // Identidade: Texto do extrato vs Descrição do recebível ou Cliente
+        $cleanStr = fn($s) => preg_replace("/[^a-z0-9]/", "", strtolower(trim($s)));
+        $bankText = $cleanStr(($statement->description ?? '') . ' ' . ($statement->counterparty_name ?? ''));
+        $candDesc = $cleanStr($candidate->description ?? '');
+        $custName = $cleanStr($candidate->customer?->name ?? '');
+
+        $identityScore = 0;
+        if (!empty($candDesc) && (str_contains($bankText, $candDesc) || str_contains($candDesc, $bankText))) {
+            $identityScore = 40;
+        } elseif (!empty($custName) && str_contains($bankText, $custName)) {
+            $identityScore = 40;
+        } else {
+            // Detecção de termos genéricos de adquirentes
+            foreach (['stone', 'cielo', 'sicredi', 'pagseguro', 'rede', 'ifood', 'getnet'] as $gateway) {
+                if (str_contains($bankText, $gateway) && str_contains(strtolower($candidate->description ?? ''), $gateway)) {
+                    $identityScore = 30;
+                    break;
+                }
+            }
+        }
+
+        // Data de liquidação prevista vs Data real no banco
+        $dateScore = 0;
+        if ($statement->bank_date && $candidate->due_date) {
+            $days = abs($statement->bank_date->diffInDays($candidate->due_date));
+            if ($days === 0) $dateScore = 20;
+            elseif ($days <= 1) $dateScore = 15;
+            elseif ($days <= 3) $dateScore = 10;
+        }
+
+        return min($amountScore + $identityScore + $dateScore, 100);
     }
 
     private function calculateAmountScore(BankStatement $statement, AccountPayable $candidate): array
@@ -71,23 +149,14 @@ class BankMatchScoringService
         }
 
         $score = 0;
-
-        // 🚀 CORREÇÃO DA ORDEM LÓGICA
-        // 1. O Match Perfeito com Multa: Adivinha o Juros com precisão?
         if ($daysLate > 0 && abs($statementAmount - $expectedLateValue) <= 2.0) {
             $score = 35;
             $lateMatch = true;
-        }
-        // 2. O Match Perfeito Seco (Pago em dia na vírgula)
-        elseif ($diff < 0.01) {
+        } elseif ($diff < 0.01) {
             $score = 40;
-        }
-        // 3. Arredondamentos e Descontos pequenos
-        elseif ($diff <= 1.0) {
+        } elseif ($diff <= 1.0) {
             $score = 35;
-        }
-        // 4. Aceita diferença de 2% (Ex: Desconto por antecipação)
-        elseif ($statementAmount >= $candidateAmount * 0.98 && $statementAmount <= $candidateAmount * 1.02) {
+        } elseif ($statementAmount >= $candidateAmount * 0.98 && $statementAmount <= $candidateAmount * 1.02) {
             $score = 20;
         }
 

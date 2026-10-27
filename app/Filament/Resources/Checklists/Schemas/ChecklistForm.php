@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Checklists\Schemas;
 
+use App\Enums\Weekday;
+
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
@@ -227,10 +229,7 @@ class ChecklistForm
                                 Select::make('recurrence_days')
                                     ->label('Dias da semana')
                                     ->multiple()
-                                    ->options([
-                                        0 => 'Domingo', 1 => 'Segunda-feira', 2 => 'Terça-feira',
-                                        3 => 'Quarta-feira', 4 => 'Quinta-feira', 5 => 'Sexta-feira', 6 => 'Sábado',
-                                    ])
+                                    ->options(Weekday::numericOptions())
                                     ->visible(fn (Get $get) => $get('recurrence_type') === 'weekly')
                                     ->required(fn (Get $get) => $get('recurrence_type') === 'weekly')
                                     ->columnSpan(8),

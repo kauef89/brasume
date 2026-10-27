@@ -9,14 +9,21 @@ class PersonalPurchase extends Model
 {
     protected $guarded = [];
 
+    protected function casts(): array
+    {
+        return [
+            'auto_approve' => 'boolean',
+            'quantity'     => 'decimal:4',
+            'unit_cost'    => 'decimal:5',
+            'total_cost'   => 'decimal:2',
+        ];
+    }
+
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
     }
 
-    /**
-     * Nota Fiscal de entrada vinculada a esta compra pessoal/despesa
-     */
     public function receivedInvoice(): BelongsTo
     {
         return $this->belongsTo(ReceivedInvoice::class, 'received_invoice_id');

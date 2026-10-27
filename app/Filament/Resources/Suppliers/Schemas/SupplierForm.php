@@ -9,6 +9,7 @@ use Filament\Forms\Components as FormComponents;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Forms\Set;
 use App\Models\Supplier;
+use App\Enums\Weekday;
 use App\Services\Accounting\AccountingService;
 
 class SupplierForm
@@ -191,10 +192,7 @@ class SupplierForm
                                     FormComponents\Select::make('order_days')
                                         ->label('Dias de Fazer Pedido')
                                         ->multiple()
-                                        ->options([
-                                            'mon' => 'Segunda-feira', 'tue' => 'Terça-feira', 'wed' => 'Quarta-feira',
-                                            'thu' => 'Quinta-feira', 'fri' => 'Sexta-feira', 'sat' => 'Sábado', 'sun' => 'Domingo',
-                                        ])
+                                        ->options(Weekday::class)
                                         ->helperText('O robô usará estes dias para calcular as necessidades.'),
 
                                     FormComponents\TextInput::make('lead_time_days')
