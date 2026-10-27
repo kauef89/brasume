@@ -143,18 +143,43 @@ class SyncTenantSefazJob implements ShouldQueue
 
                             if ($rootName === 'resNFe') {
                                 $chave = (string) $xml->chNFe;
-                                ReceivedInvoice::firstOrCreate(
-                                    ['nfe_key' => $chave],
-                                    [
-                                        'emitter_cnpj' => (string) $xml->CNPJ,
-                                        'emitter_name' => (string) $xml->xNome,
-                                        'issue_date'   => Carbon::parse((string) $xml->dhEmi)->format('Y-m-d H:i:s'),
-                                        'total_value'  => (float) $xml->vNF,
-                                        'status'       => 'pending',
-                                        'has_full_xml' => false,
-                                        'xml_content'  => $xmlContent
-                                    ]
-                                );
+                                $cnpjEmitente = preg_replace('/[^0-9]/', '', (string) $xml->CNPJ);
+
+                                $supplier = \App\Models\Supplier::where('document', $cnpjEmitente)->first();
+                                $isTrusted = $supplier && (bool) $supplier->is_trusted;
+                                $targetStatus = 'pending';
+
+                                if ($isTrusted) {
+                                    try {
+                                        Log::info("🤝 [Fornecedor Confiável] Disparando Ciência da Emissão para NF-e {$chave} ({$supplier->name})");
+                                        $respManifesto = $tools->sefazManifesta($chave, '210210');
+                                        $arrManif = $std->toArray($respManifesto);
+                                        $retEvento = $arrManif['retEvento']['infEvento'] ?? $arrManif['retEvento'][0]['infEvento'] ?? null;
+                                        $cStatEvento = (int) ($retEvento['cStat'] ?? ($arrManif['cStat'] ?? 0));
+
+                                        if (in_array($cStatEvento, [135, 136, 573])) {
+                                            $targetStatus = 'manifested';
+                                            Log::info("✔ [Sefaz] Ciência da Emissão autorizada para: {$chave}");
+                                        } else {
+                                            Log::warning("⚠️ [Sefaz] Manifestação não homologada (cStat: {$cStatEvento}): " . ($retEvento['xMotivo'] ?? 'N/A'));
+                                        }
+                                    } catch (\Throwable $e) {
+                                        Log::error("❌ [Sefaz] Erro ao manifestar automaticamente: " . $e->getMessage());
+                                    }
+                                }
+
+                                $invoice = ReceivedInvoice::firstOrNew(['nfe_key' => $chave]);
+                                $invoice->emitter_cnpj = (string) $xml->CNPJ;
+                                $invoice->emitter_name = (string) $xml->xNome;
+                                $invoice->issue_date   = Carbon::parse((string) $xml->dhEmi)->format('Y-m-d H:i:s');
+                                $invoice->total_value  = (float) $xml->vNF;
+                                if ($docNsu) $invoice->nsu = $docNsu;
+                                $invoice->has_full_xml = false;
+                                $invoice->xml_content  = $xmlContent;
+                                if (!in_array($invoice->status, ['ready', 'processed', 'manifested'])) {
+                                    $invoice->status = $targetStatus;
+                                }
+                                $invoice->save();
                                 $salvasHoje++;
                             } elseif ($rootName === 'nfeProc') {
                                 $chave = str_replace('NFe', '', (string) $xml->NFe->infNFe['Id']);

@@ -135,7 +135,14 @@ class FiscalDocumentsTable
                 BulkAction::make('export_selected_xmls')
                     ->label('Baixar XMLs (ZIP)')
                     ->icon('heroicon-o-archive-box-arrow-down')
-                    ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
+                    ->form([
+                        Forms\Components\Toggle::make('distribute_freight_in_products')
+                            ->label('Distribuir frete nos produtos (Compatibilidade Contábil)')
+                            ->helperText('Incorpora o frete proporcionalmente aos itens e zera a tag de frete nos XMLs.')
+                            ->default(false),
+                    ])
+                    ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data, FiscalExportService $exportService) {
+                        $distributeFreight = (bool) ($data['distribute_freight_in_products'] ?? false);
                         $zip = new \ZipArchive();
                         $zipFileName = 'NFCe_Selecionadas_' . now()->format('YmdHis') . '.zip';
                         $zipFilePath = storage_path('app/temp/' . $zipFileName);
@@ -147,7 +154,11 @@ class FiscalDocumentsTable
                         if ($zip->open($zipFilePath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === TRUE) {
                             foreach ($records as $record) {
                                 if ($record->xml_content) {
-                                    $zip->addFromString("{$record->access_key}-nfce.xml", $record->xml_content);
+                                    $xml = $record->xml_content;
+                                    if ($distributeFreight) {
+                                        $xml = $exportService->distributeFreightInXml($xml);
+                                    }
+                                    $zip->addFromString("{$record->access_key}-nfce.xml", $xml);
                                 }
                             }
                             $zip->close();

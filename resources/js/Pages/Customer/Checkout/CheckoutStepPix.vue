@@ -63,7 +63,7 @@ const props = defineProps({
 const emit = defineEmits(['payment-approved', 'update-header']);
 const page = usePage();
 
-const timeLeft = ref(600);
+const timeLeft = ref(3600);
 const timer = ref(null);
 const pollInterval = ref(null);
 const copied = ref(false);
@@ -94,7 +94,7 @@ const formattedTime = computed(() => {
 
 function startTimer() {
     clearInterval(timer.value);
-    timeLeft.value = 600;
+    timeLeft.value = 3600;
     timer.value = setInterval(() => {
         if (timeLeft.value > 0) {
             timeLeft.value--;

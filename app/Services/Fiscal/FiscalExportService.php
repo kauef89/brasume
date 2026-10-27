@@ -12,7 +12,7 @@ use Exception;
 
 class FiscalExportService
 {
-    public function generateXmlZip(string $startDate, string $endDate): string
+    public function generateXmlZip(string $startDate, string $endDate, bool $distributeFreight = false): string
     {
         $documents = FiscalDocument::whereBetween('issue_date', [$startDate, $endDate])
             ->where('status', 'authorized')
@@ -35,7 +35,11 @@ class FiscalExportService
         if ($zip->open($zipFilePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === TRUE) {
             foreach ($documents as $doc) {
                 $filename = "{$doc->access_key}-nfce.xml";
-                $zip->addFromString($filename, $doc->xml_content);
+                $xml = $doc->xml_content;
+                if ($distributeFreight) {
+                    $xml = $this->distributeFreightInXml($xml);
+                }
+                $zip->addFromString($filename, $xml);
             }
             $zip->close();
         } else {
@@ -134,5 +138,112 @@ class FiscalExportService
         $pdf->save($filePath);
 
         return $filePath;
+    }
+
+    /**
+     * Retrocompatibilidade Contábil: Incorpora o frete proporcionalmente aos produtos
+     * e zera a tag <vFrete> no XML exportado, mantendo o total <vNF> idêntico.
+     */
+    public function distributeFreightInXml(string $xmlContent): string
+    {
+        try {
+            $dom = new \DOMDocument('1.0', 'UTF-8');
+            $dom->preserveWhiteSpace = false;
+            $dom->formatOutput = true;
+
+            if (!@$dom->loadXML($xmlContent)) {
+                return $xmlContent;
+            }
+
+            $xpath = new \DOMXPath($dom);
+            $ns = $dom->documentElement->namespaceURI;
+            $prefix = $ns ? 'nfe:' : '';
+            if ($ns) {
+                $xpath->registerNamespace('nfe', $ns);
+            }
+
+            $icmsTot = $xpath->query("//{$prefix}total/{$prefix}ICMSTot")->item(0);
+            if (!$icmsTot) {
+                return $xmlContent;
+            }
+
+            $vFreteNodes = $xpath->query("{$prefix}vFrete", $icmsTot);
+            if ($vFreteNodes->length === 0) {
+                return $xmlContent;
+            }
+
+            $totalFrete = (float) $vFreteNodes->item(0)->nodeValue;
+            if ($totalFrete <= 0.001) {
+                return $xmlContent;
+            }
+
+            $vProdNode = $xpath->query("{$prefix}vProd", $icmsTot)->item(0);
+            $totalVProd = $vProdNode ? (float) $vProdNode->nodeValue : 0.0;
+
+            $detNodes = $xpath->query("//{$prefix}infNFe/{$prefix}det");
+            if ($detNodes->length === 0) {
+                return $xmlContent;
+            }
+
+            $somaFreteDistribuido = 0.0;
+            $detCount = $detNodes->length;
+
+            for ($i = 0; $i < $detCount; $i++) {
+                $det = $detNodes->item($i);
+                $prod = $xpath->query("{$prefix}prod", $det)->item(0);
+                if (!$prod) continue;
+
+                $itemVProdNode = $xpath->query("{$prefix}vProd", $prod)->item(0);
+                $itemVProd = $itemVProdNode ? (float) $itemVProdNode->nodeValue : 0.0;
+
+                $isLast = ($i === $detCount - 1);
+                $peso = $totalVProd > 0 ? ($itemVProd / $totalVProd) : (1.0 / $detCount);
+                $itemFrete = round($totalFrete * $peso, 2);
+
+                if ($isLast) {
+                    $itemFrete = round($totalFrete - $somaFreteDistribuido, 2);
+                } else {
+                    $somaFreteDistribuido += $itemFrete;
+                }
+
+                $novoVProd = round($itemVProd + $itemFrete, 2);
+
+                if ($itemVProdNode) {
+                    $itemVProdNode->nodeValue = number_format($novoVProd, 2, '.', '');
+                }
+
+                $qComNode = $xpath->query("{$prefix}qCom", $prod)->item(0);
+                $qCom = $qComNode ? (float) $qComNode->nodeValue : 1.0;
+                if ($qCom <= 0) $qCom = 1.0;
+
+                $vUnComNode = $xpath->query("{$prefix}vUnCom", $prod)->item(0);
+                if ($vUnComNode) {
+                    $vUnComNode->nodeValue = number_format($novoVProd / $qCom, 4, '.', '');
+                }
+
+                $qTribNode = $xpath->query("{$prefix}qTrib", $prod)->item(0);
+                $qTrib = $qTribNode ? (float) $qTribNode->nodeValue : $qCom;
+                if ($qTrib <= 0) $qTrib = $qCom;
+
+                $vUnTribNode = $xpath->query("{$prefix}vUnTrib", $prod)->item(0);
+                if ($vUnTribNode) {
+                    $vUnTribNode->nodeValue = number_format($novoVProd / $qTrib, 4, '.', '');
+                }
+
+                $itemFreteNodes = $xpath->query("{$prefix}vFrete", $prod);
+                foreach ($itemFreteNodes as $fNode) {
+                    $prod->removeChild($fNode);
+                }
+            }
+
+            if ($vProdNode) {
+                $vProdNode->nodeValue = number_format($totalVProd + $totalFrete, 2, '.', '');
+            }
+            $vFreteNodes->item(0)->nodeValue = '0.00';
+
+            return $dom->saveXML();
+        } catch (\Throwable $e) {
+            return $xmlContent;
+        }
     }
 }

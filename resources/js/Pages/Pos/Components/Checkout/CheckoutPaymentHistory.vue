@@ -116,7 +116,7 @@ const getItemModsLines = (item) => formatModifiersList(item);
 
 const totalPaidAmount = computed(() => {
     if (props.orderPayments && props.orderPayments.length > 0) {
-        return props.orderPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+        return props.orderPayments.filter(p => p.is_paid || p.status === 'paid').reduce((sum, p) => sum + Number(p.amount || 0), 0);
     }
     return props.paidItems.reduce((sum, i) => sum + (i.paid_parts * (i.effective_unit_price / i.parts_per_unit)), 0);
 });

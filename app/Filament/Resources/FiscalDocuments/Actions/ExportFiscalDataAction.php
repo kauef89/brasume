@@ -9,6 +9,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Notifications\Notification;
 use ZipArchive;
 
@@ -63,7 +64,8 @@ class ExportFiscalDataAction extends Action
                 Grid::make(3)->schema([
                     Toggle::make('export_xml')
                         ->label('XMLs (ZIP)')
-                        ->default(true),
+                        ->default(true)
+                        ->live(),
 
                     Toggle::make('export_general')
                         ->label('Relatório Sintético')
@@ -73,13 +75,22 @@ class ExportFiscalDataAction extends Action
                         ->label('Monofásicos (PDF)')
                         ->default(false),
                 ]),
+
+                // Linha 3: Opções Contábeis
+                Grid::make(1)->schema([
+                    Toggle::make('distribute_freight_in_products')
+                        ->label('Distribuir frete nos produtos (Compatibilidade Contábil)')
+                        ->helperText('Incorpora o frete proporcionalmente no preço dos itens e zera a tag de frete no XML exportado.')
+                        ->default(false)
+                        ->visible(fn (Get $get) => (bool) $get('export_xml')),
+                ]),
             ])
             ->action(function (array $data, FiscalExportService $exportService) {
                 try {
                     $filesToDownload = [];
 
                     if ($data['export_xml']) {
-                        $filesToDownload[] = $exportService->generateXmlZip($data['start_date'], $data['end_date']);
+                        $filesToDownload[] = $exportService->generateXmlZip($data['start_date'], $data['end_date'], (bool) ($data['distribute_freight_in_products'] ?? false));
                     }
                     if ($data['export_general']) {
                         $filesToDownload[] = $exportService->generateGeneralReportPdf($data['start_date'], $data['end_date']);

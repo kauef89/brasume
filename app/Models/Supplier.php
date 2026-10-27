@@ -29,6 +29,12 @@ class Supplier extends Model
 
     protected $guarded = [];
 
+    protected $casts = [
+        'is_trusted'  => 'boolean',
+        'is_personal' => 'boolean',
+    ];
+
+
     public function transactions()
     {
         return $this->hasMany(Transaction::class);

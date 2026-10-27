@@ -314,150 +314,45 @@ class OrderPaymentService
         }
     }
 
+    
     public function processWebhookPayment(string $txid, float $amount, ?string $endToEndId = null): void
     {
-        Log::info("OrderPaymentService acionado para o TXID: {$txid}");
+        $payment = \App\Models\Payment::where('txid', $txid)->first();
+        $order = null;
 
-        $order = DB::transaction(function () use ($txid, $amount, $endToEndId) {
-
-            $order = Order::with(['customer.user', 'items', 'payments'])
-                ->where('txid', $txid)
-                ->orWhere('payment_intent_methods', 'like', "%\"txid\":\"{$txid}\"%")
-                ->first();
-
-            if (!$order) {
-                $payment = \App\Models\Payment::where('txid', $txid)->with('order')->first();
-                if ($payment && $payment->order) {
-                    $order = $payment->order;
-                } else {
-                    throw new Exception("Pedido com TXID {$txid} não foi encontrado no banco de dados.");
-                }
-            }
-
-            if ($order->payment_status === 'paid') {
-                return $order;
-            }
-
-            $shift = CashShift::where('status', 'open')->latest()->first();
-
-            if (!$shift) {
-                throw new Exception('Operação negada: Nenhum turno de caixa aberto. Por favor, abra o caixa antes de receber pagamentos.');
-            }
-
-            $orderPayment = $order->payments()->where('txid', $txid)->first();
-            $paymentMethod = PaymentMethod::where('name', 'like', '%PIX%')->orWhere('engine_type', 'bank_api')->first();
-
-            if ($orderPayment) {
-                $orderPayment->update([
-                    'status' => 'paid',
-                    'is_paid' => true,
-                    'transaction_id' => $endToEndId,
-                    'cash_shift_id' => $shift->id
-                ]);
-            } else {
-                $orderPayment = $order->payments()->create([
-                    'payment_method_id' => $paymentMethod ? $paymentMethod->id : null,
-                    'cash_shift_id'     => $shift->id,
-                    'amount'            => $amount,
-                    'method'            => $paymentMethod ? $paymentMethod->name : 'PIX',
-                    'status'            => 'paid',
-                    'is_paid'           => true,
-                    'txid'              => $txid,
-                    'transaction_id'    => $endToEndId
-                ]);
-            }
-
-            Transaction::create([
-                'bank_account_id'  => $shift->bank_account_id,
-                'cash_shift_id'    => $shift->id,
-                'order_id'         => $order->id,
-                'payment_id'       => $orderPayment->id,
-                'payment_method_id'=> $orderPayment->payment_method_id,
-                'type'             => 'in',
-                'category'         => 'order_sale',
-                'amount'           => $amount,
-                'description'      => "Pix Confirmado Webhook - Pedido #{$order->id}",
-                'operator_name'    => 'Sistema (Sicredi API)',
-                'transaction_date' => now(),
+        if ($payment) {
+            $payment->update([
+                'status' => 'paid',
+                'is_paid' => true,
+                'end_to_end_id' => $endToEndId,
+                'amount' => $amount
             ]);
-
-            foreach ($order->items as $item) {
-                if ($item->status === 'cancelled') continue;
-                $item->update(['paid_qty' => $item->quantity]);
-
-                $orderPayment->items()->syncWithoutDetaching([
-                    $item->id => [
-                        'quantity' => $item->quantity,
-                        'amount'   => (float) $item->total_price
-                    ]
-                ]);
-            }
-
-            $order->payment_status = 'paid';
-            $order->payment_intent_status = 'paid';
-
-            if ($order->type === 'table') {
-                $order->status = 'closed';
-                $order->closed_at = now();
-            } elseif (in_array($order->status, ['pending', 'pending_payment'])) {
-                $order->status = 'preparing';
-            }
-
-            $order->save();
-
-            return $order;
-        });
-
-        try {
-            if ($order) {
-                broadcast(new OrderCreated($order));
-                broadcast(new OrderUpdated($order));
-
-                app(KitchenDispatchService::class)->dispatchNewItems($order);
-                $this->notifyTeamOfPaidPixOrder($order);
-
-                if ($order->customer && $order->customer->user) {
-                    $pushMessage = "Seu pagamento de R$ " . number_format($amount, 2, ',', '.') . " foi confirmado! Seu pedido já está em preparação.";
-                    $order->customer->user->notify(new OrderStatusUpdated($order, $pushMessage));
-                }
-            }
-        } catch (Exception $e) {
-            Log::error("Falha ao notificar pedido pago via Webhook ({$txid}): " . $e->getMessage());
-        }
-    }
-
-    private function notifyTeamOfPaidPixOrder(Order $order): void
-    {
-        $attendanceService = app(ShiftAttendanceService::class);
-        $order->loadMissing('items.product');
-
-        $cashierStaff = $attendanceService->getActiveShiftStaffByRoles(['caixa', 'pos', 'manager', 'admin', 'gerente']);
-
-        if ($cashierStaff->isNotEmpty()) {
-            $msgCaixa = "PIX Recebido! Pedido #{$order->id} pago e na fila! (Tipo: {$order->type})";
-            Notification::send($cashierStaff, new NewB2COrderNotification($order, $msgCaixa));
+            $order = $payment->order;
+        } else {
+            $order = \App\Models\Order::where('txid', $txid)->first();
         }
 
-        $activeStations = $order->items->pluck('product.production_station')->filter()->unique();
-
-        foreach ($activeStations as $station) {
-            $stationLower = mb_strtolower($station);
-
-            if (str_contains($stationLower, 'bar') || $stationLower === 'bebidas') {
-                $barStaff = $attendanceService->getActiveShiftStaffByRoles(['bar', 'bartender', 'copa']);
-                if ($barStaff->isNotEmpty()) {
-                    $msgBar = "PIX Pago: Novos itens de Bar liberados no Pedido #{$order->id}!";
-                    Notification::send($barStaff, new NewB2COrderNotification($order, $msgBar));
-                }
-            }
-
-            if (str_contains($stationLower, 'cozinha') || $stationLower === 'quente') {
-                $kitchenStaff = $attendanceService->getActiveShiftStaffByRoles(['cozinha', 'cook', 'chef', 'kds']);
-                if ($kitchenStaff->isNotEmpty()) {
-                    $msgCozinha = "PIX Pago: Novos pratos liberados para preparo - Pedido #{$order->id}!";
-                    Notification::send($kitchenStaff, new NewB2COrderNotification($order, $msgCozinha));
-                }
-            }
+        if (!$order) {
+            throw new \Exception("Pedido ou Pagamento não encontrado para TXID: {$txid}");
         }
+
+        $order->update([
+            'payment_status' => 'paid',
+            'payment_intent_status' => 'paid'
+        ]);
+
+        if (in_array($order->status, ['pending_payment', 'pending'])) {
+            $order->update(['status' => 'confirmed']);
+        }
+
+        // Se for balcão/mesa, emite nota e imprime automaticamente
+        if (in_array($order->type, ['counter', 'table']) || empty($order->address_id)) {
+            try {
+                $printSvc = app(\App\Services\Printing\OrderPrintService::class);
+                $printSvc->dispatchCheckoutReceipts($order, 'both');
+            } catch (\Throwable $e) {}
+        }
+
+        broadcast(new \App\Events\OrderUpdated($order->fresh(['items', 'payments'])));
     }
 }

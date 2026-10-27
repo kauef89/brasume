@@ -252,6 +252,11 @@ class InvoiceImportService
             return;
         }
 
+        $supplier = Supplier::find($data['supplier_id']);
+        if (!$supplier || !$supplier->is_trusted) {
+            return;
+        }
+
         $processor = app(InvoiceItemProcessor::class);
         $allProcessed = true;
 
@@ -283,6 +288,7 @@ class InvoiceImportService
         if ($allProcessed) {
             unset($data['xml_items']);
             $this->finalizeInvoice($data);
+            \Illuminate\Support\Facades\Log::info("🚀 [Auto-Importação] NF-e {$invoice->nfe_key} do Fornecedor Confiável '{$supplier->name}' finalizada e estocada automaticamente sem intervenção humana!");
         }
     }
 }

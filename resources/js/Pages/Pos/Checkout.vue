@@ -109,11 +109,11 @@
 
             <div class="p-6 shrink-0 z-10">
                 <Button
-                    v-if="stagedPayments.length > 0 && stagedPayments.every(p => p.is_pending) && pendingToStage <= 0"
-                    label="Concluir e Fechar Conta"
-                    icon="pi pi-sign-out"
-                    class="w-full h-16 text-xl rounded-full! font-black border-none outline-none transition-colors bg-surface-3 hover:bg-surface-4 text-surface-text cursor-pointer shadow-sm"
-                    @click="emit('close')"
+                    v-if="stagedPayments.some(p => p.is_pending)"
+                    label="Aguardando Confirmação do PIX..."
+                    icon="pi pi-spin pi-spinner"
+                    class="w-full h-16 text-xl rounded-full! font-black border-none outline-none transition-colors bg-amber-500 text-white cursor-not-allowed shadow-sm"
+                    disabled
                 />
                 <Button
                     v-else

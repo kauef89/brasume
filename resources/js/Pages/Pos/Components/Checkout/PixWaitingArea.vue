@@ -75,9 +75,9 @@ const calculateRemainingSeconds = () => {
         const safeStr = String(props.expiresAt).replace(/Z|[+-]\d{2}:\d{2}$/, '');
         const expiry = new Date(safeStr).getTime();
         const diff = Math.floor((expiry - Date.now()) / 1000);
-        if (diff > 0 && diff <= 3600) return diff; // Se for válido (até 1 hora), retorna
+        if (diff > 0 && diff <= 7200) return diff; // Se for válido (até 1 hora), retorna
     }
-    return 600; // Fallback robusto de 10 min
+    return 3600; // Fallback robusto de 10 min
 };
 
 const timeLeft = ref(calculateRemainingSeconds());

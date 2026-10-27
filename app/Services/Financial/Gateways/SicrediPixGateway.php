@@ -106,7 +106,7 @@ class SicrediPixGateway implements PaymentGatewayInterface
         $chaveLimpa = $this->sanitizePixKey($this->settings->sicredi_chave_pix);
 
         $payload = [
-            "calendario" => ["expiracao" => 600],
+            "calendario" => ["expiracao" => 3600],
             "valor" => [
                 "original" => number_format($amount, 2, '.', ''),
                 "modalidadeAlteracao" => 0

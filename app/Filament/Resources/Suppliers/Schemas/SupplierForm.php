@@ -27,7 +27,7 @@ class SupplierForm
                             ->default(true)
                             ->dehydrated(false),
 
-                        SchemaComponents\Grid::make(3)->schema([
+                        SchemaComponents\Grid::make(4)->schema([
                             FormComponents\TextInput::make("document")
                                 ->label("CNPJ / CPF")
                                 ->required()
@@ -51,13 +51,18 @@ class SupplierForm
 
                             FormComponents\Toggle::make("is_personal")
                                 ->label("Uso Pessoal?")
-                                ->helperText("Despesas auto-conciliadas como uso dos sócios.",
-                                )
+                                ->helperText("Despesas auto-conciliadas como uso dos sócios.")
+                                ->default(false)
+                                ->inline(false),
+
+                            FormComponents\Toggle::make("is_trusted")
+                                ->label("Fornecedor Confiável?")
+                                ->helperText("Manifesta e finaliza NF-e automaticamente se os itens estiverem automatizados.")
                                 ->default(false)
                                 ->inline(false),
                         ]),
 
-                        SchemaComponents\Grid::make(3)->schema([
+                        SchemaComponents\Grid::make(4)->schema([
                             FormComponents\TextInput::make("name")
                                 ->label("Nome Fantasia / Apelido")
                                 ->required()
@@ -124,7 +129,7 @@ class SupplierForm
                     SchemaComponents\Tabs\Tab::make(
                         "Contato e Endereço",
                     )->schema([
-                        SchemaComponents\Grid::make(3)->schema([
+                        SchemaComponents\Grid::make(4)->schema([
                             FormComponents\TextInput::make("email")
                                 ->label("E-mail")
                                 ->email()
@@ -164,7 +169,7 @@ class SupplierForm
                                         "number",
                                     )->label("Número"),
                                 ]),
-                                SchemaComponents\Grid::make(3)->schema([
+                                SchemaComponents\Grid::make(4)->schema([
                                     FormComponents\TextInput::make(
                                         "neighborhood",
                                     )->label("Bairro"),

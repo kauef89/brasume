@@ -246,7 +246,7 @@ class DeliveryDispatch
 
         // 🎯 9. Apuração Financeira e Banners de Cobrança
         $validPayments = $order->payments
-            ? $order->payments->filter(fn($p) => !in_array($p->status ?? 'paid', ['cancelled', 'failed', 'refunded']))
+            ? $order->payments->filter(fn($p) => ($p->is_paid || in_array($p->status, ['paid', 'completed'])) && !in_array($p->status ?? 'paid', ['cancelled', 'failed', 'refunded']))
             : collect();
 
         $paidAmount = $validPayments->sum('amount');

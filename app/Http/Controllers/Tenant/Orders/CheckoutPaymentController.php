@@ -150,7 +150,19 @@ class CheckoutPaymentController extends Controller
 
         try {
             $pixData = $pixGateway->generatePayment($order, $balanceDue);
-            $expiresAt = now()->addSeconds(600);
+            $expiresAt = now()->addSeconds(3600);
+
+            $paymentMethod = \App\Models\PaymentMethod::whereIn('engine_type', ['bank_api', 'sicredi_pix'])->first() ?? \App\Models\PaymentMethod::where('name', 'like', '%Pix%')->first();
+
+            $order->payments()->create([
+                'payment_method_id' => $paymentMethod?->id,
+                'method'            => $paymentMethod?->name ?? 'Pix',
+                'amount'            => $balanceDue,
+                'status'            => 'pending',
+                'is_paid'           => false,
+                'txid'              => $pixData['txid'],
+                'pix_payload'       => $pixData['qr_code']
+            ]);
 
             $order->update([
                 'txid'                  => $pixData['txid'],

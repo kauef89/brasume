@@ -77,7 +77,6 @@ export function useCheckoutPix(order, handlePixApprovedCallback, toast) {
         try {
             toast.add({ severity: 'info', summary: 'Atualizando PIX', detail: 'Gerando nova cobrança...', life: 3000 });
             const apiClient = axios || window.axios;
-            await apiClient.post(route('operations.orders.cancel-intent', orderId));
             const response = await apiClient.post(route('operations.orders.generate-pix', orderId));
             if (response.data?.success) {
                 // Atualiza reatividade
