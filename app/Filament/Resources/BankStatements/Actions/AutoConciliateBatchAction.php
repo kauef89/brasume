@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\BankStatements\Actions;
 
 use App\Services\Accounting\BankMatchScoringService;
-
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Placeholder;
@@ -12,7 +11,6 @@ use Filament\Schemas\Components\Group;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Number;
 use App\Models\BankStatement;
-use App\Services\Accounting\BankReconciliationService;
 use App\Filament\Resources\BankStatements\Schemas\ConciliationTabsSchema;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Blade;
@@ -32,20 +30,20 @@ class AutoConciliateBatchAction extends Action
             ->color('warning')
             ->icon('heroicon-m-bolt')
             ->button()
-            // Só aparece se houver pendências (evita processamento desnecessário)
             ->visible(fn () => BankStatement::where('status', 'pending')->where('amount', '<', 0)->exists())
             ->modalHeading('Conciliação Rápida em Lote')
             ->modalDescription('A nossa inteligência varreu as suas pendências e encontrou estes vínculos prováveis. Desmarque os que não fizerem sentido, ou aprove todos de uma só vez.')
             ->modalSubmitActionLabel('Aprovar e Conciliar')
             ->modalWidth('6xl')
             ->schema(function () {
-                $options = [];
                 $service = new BankMatchScoringService();
 
-                // Busca todas as saídas pendentes
+                // Busca as saídas pendentes
                 $pendingStatements = BankStatement::where('status', 'pending')
                     ->where('amount', '<', 0)
                     ->get();
+
+                $queue = [];
 
                 foreach ($pendingStatements as $stmt) {
                     $matches = $service->findMatchesFor($stmt);
@@ -53,53 +51,75 @@ class AutoConciliateBatchAction extends Action
                     if ($matches->isNotEmpty()) {
                         $bestMatch = $matches->first();
 
-                        // Só mostra sugestões com uma confiança decente (>= 50%)
+                        // Exibe correspondências com confiança mínima de 50%
                         if ($bestMatch['score'] >= 50) {
-                            $payable = $bestMatch['candidate'];
-                            $score = $bestMatch['score'];
-
-                            // 1. Dados do Extrato (Banco)
-                            $stmtDate = $stmt->bank_date->format('d/m/Y');
-                            $stmtName = $stmt->counterparty_name ?? $stmt->description;
-                            $stmtAmt = Number::format(abs((float)$stmt->amount), maxPrecision: 2, locale: 'pt_BR');
-
-                            // 2. Dados do Sistema (AccountPayable)
-                            $payableDate = \Carbon\Carbon::parse($payable->due_date)->format('d/m/Y');
-                            $payableName = $payable->supplier->name ?? ($payable->employee->name ?? 'Fornecedor S/N');
-                            $payableAmt = Number::format(abs((float)$payable->amount), maxPrecision: 2, locale: 'pt_BR');
-
-                            $badgeColor = $score >= 80 ? 'text-success-700 bg-success-100' : 'text-warning-700 bg-warning-100';
-
-                            // 🚀 O SEU LAYOUT DE FLEXBOX APLICADO AQUI!
-                            $label = "
-                                <div style='display: flex; width: 100%; gap: 1rem; align-items: center;' class='text-sm py-1.5 border-b border-gray-100 dark:border-gray-800 border-dashed'>
-                                    <div style='flex: 2; min-width: 0;' class='text-gray-500 font-medium'>
-                                        {$stmtDate}
-                                    </div>
-                                    <div style='flex: 4; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' class='font-semibold' title='{$stmtName}'>
-                                        {$stmtName}
-                                    </div>
-                                    <div style='flex: 2; min-width: 0;' class='text-danger-600 font-medium'>
-                                        R$ {$stmtAmt}
-                                    </div>
-                                    <div style='flex: 4; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' class='font-medium' title='{$payableName}'>
-                                        {$payableName} <span class='ml-1 px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-medium {$badgeColor}'>{$score}% Match</span>
-                                    </div>
-                                    <div style='flex: 2; min-width: 0;' class='text-gray-500 font-medium'>
-                                        {$payableDate}
-                                    </div>
-                                    <div style='flex: 2; text-align: right; min-width: 0;' class='font-medium text-gray-900 dark:text-gray-100'>
-                                        R$ {$payableAmt}
-                                    </div>
-                                </div>
-                            ";
-
-                            $options[$stmt->id . '::' . $payable->id] = new HtmlString($label);
+                            $queue[] = [
+                                'stmt'    => $stmt,
+                                'payable' => $bestMatch['candidate'],
+                                'score'   => (int) $bestMatch['score'],
+                            ];
                         }
                     }
                 }
 
-                // Se a IA não achar absolutamente nada:
+                // 🚀 ORDENAÇÃO PELO SCORE DECRESCENTE (Melhores matches primeiro)
+                usort($queue, fn($a, $b) => $b['score'] <=> $a['score']);
+
+                $options = [];
+
+                foreach ($queue as $item) {
+                    $stmt = $item['stmt'];
+                    $payable = $item['payable'];
+                    $score = $item['score'];
+
+                    $stmtDate = $stmt->bank_date ? $stmt->bank_date->format('d/m/Y') : '-';
+                    $stmtName = $stmt->counterparty_name ?? $stmt->description ?? '-';
+                    $stmtAmt = Number::format(abs((float) $stmt->amount), maxPrecision: 2, locale: 'pt_BR');
+
+                    $payableDate = $payable->due_date ? \Carbon\Carbon::parse($payable->due_date)->format('d/m/Y') : '-';
+                    $payableName = $payable->supplier->name ?? ($payable->supplier->document_name ?? ($payable->employee->name ?? 'Fornecedor S/N'));
+                    $payableAmt = Number::format(abs((float) $payable->amount), maxPrecision: 2, locale: 'pt_BR');
+
+                    // Badge de Confiança
+                    $badgeClass = match (true) {
+                        $score >= 95 => 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/50',
+                        $score >= 80 => 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300 border border-green-300 dark:border-green-700/50',
+                        $score >= 65 => 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-300 dark:border-amber-700/50',
+                        default      => 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600',
+                    };
+
+                    // Linha em CSS Grid sem perigo de overflow horizontal
+                    $label = "
+                        <div class='grid grid-cols-[85px_minmax(0,1.2fr)_100px_minmax(0,1.2fr)_85px_100px_80px] gap-2.5 items-center w-full text-xs py-2 border-b border-gray-100 dark:border-gray-800/80'>
+                            <div class='text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap'>
+                                {$stmtDate}
+                            </div>
+                            <div class='font-semibold text-gray-900 dark:text-white truncate' title='{$stmtName}'>
+                                {$stmtName}
+                            </div>
+                            <div class='text-right font-semibold text-gray-800 dark:text-gray-200 tabular-nums'>
+                                R$ {$stmtAmt}
+                            </div>
+                            <div class='font-medium text-gray-800 dark:text-gray-200 truncate' title='{$payableName}'>
+                                {$payableName}
+                            </div>
+                            <div class='text-center text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap'>
+                                {$payableDate}
+                            </div>
+                            <div class='text-right font-medium text-gray-800 dark:text-gray-200 tabular-nums'>
+                                R$ {$payableAmt}
+                            </div>
+                            <div class='text-center'>
+                                <span class='inline-block px-2 py-0.5 rounded text-[10px] font-bold tracking-tight {$badgeClass}'>
+                                    {$score}%
+                                </span>
+                            </div>
+                        </div>
+                    ";
+
+                    $options[$stmt->id . '::' . $payable->id] = new HtmlString($label);
+                }
+
                 if (empty($options)) {
                     $sadIcon = Blade::render('<x-heroicon-o-face-frown class="w-12 h-12 mb-2 opacity-30"/>');
                     return [
@@ -108,7 +128,7 @@ class AutoConciliateBatchAction extends Action
                             ->content(new HtmlString("
                                 <div class='flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl text-gray-400 text-sm italic text-center'>
                                     {$sadIcon}
-                                    A nossa inteligência não encontrou correspondências seguras para as pendências atuais.<br>Tente conciliar manualmente usando as outras opções.
+                                    A nossa inteligência não encontrou correspondências com confiança suficiente nas pendências atuais.<br>Tente conciliar individualmente usando as outras opções.
                                 </div>
                             "))
                     ];
@@ -121,31 +141,54 @@ class AutoConciliateBatchAction extends Action
                                 ->hiddenLabel()
                                 ->content(new HtmlString("
                                     <style>
-                                        .smart-match-list { width: 100% !important; }
-                                        .smart-match-list > div { width: 100% !important; display: block !important; }
-                                        .smart-match-list label.fi-checkbox-list-option { width: 100% !important; display: flex !important; max-width: none !important; align-items: center; }
-                                        .smart-match-list .fi-checkbox-list-option-label { width: 100% !important; flex: 1 1 auto !important; max-width: none !important; }
-                                        .fi-fo-checkbox-list .fi-fo-checkbox-list-option .fi-fo-checkbox-list-option-text { width: 100%;}
+                                        .smart-match-wrapper {
+                                            overflow-x: hidden !important;
+                                            width: 100% !important;
+                                        }
+                                        .smart-match-list {
+                                            width: 100% !important;
+                                            overflow-x: hidden !important;
+                                        }
+                                        .smart-match-list .fi-fo-checkbox-list-option {
+                                            width: 100% !important;
+                                            max-width: 100% !important;
+                                            display: flex !important;
+                                            align-items: center !important;
+                                            margin-bottom: 0 !important;
+                                        }
+                                        .smart-match-list .fi-fo-checkbox-list-option-text {
+                                            width: 100% !important;
+                                            min-width: 0 !important;
+                                            flex: 1 1 0% !important;
+                                        }
+                                        .smart-match-list .fi-fo-checkbox-list-option-label {
+                                            width: 100% !important;
+                                            min-width: 0 !important;
+                                            display: block !important;
+                                        }
                                     </style>
 
-                                    <div style='display: flex; width: 100%; gap: 1rem; padding-bottom: 0.5rem; padding-left: 2.25rem;' class='text-xs font-medium uppercase tracking-wider text-gray-500 border-b border-gray-300 dark:border-gray-700'>
-                                        <div style='flex: 2;'>Data (Banco)</div>
-                                        <div style='flex: 4;'>Contraparte</div>
-                                        <div style='flex: 2;'>Valor (Banco)</div>
-                                        <div style='flex: 4;'>Fornecedor (Sistema)</div>
-                                        <div style='flex: 2;'>Vencimento</div>
-                                        <div style='flex: 2; text-align: right;'>Valor (Sistema)</div>
+                                    <div class='smart-match-wrapper'>
+                                        <div class='pl-8 grid grid-cols-[85px_minmax(0,1.2fr)_100px_minmax(0,1.2fr)_85px_100px_80px] gap-2.5 items-center w-full text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 pb-2 border-b-2 border-gray-200 dark:border-gray-700 select-none'>
+                                            <div>Data (Banco)</div>
+                                            <div>Contraparte</div>
+                                            <div class='text-right'>Valor (Banco)</div>
+                                            <div>Fornecedor</div>
+                                            <div class='text-center'>Vencimento</div>
+                                            <div class='text-right'>Valor (Sistema)</div>
+                                            <div class='text-center'>Score</div>
+                                        </div>
                                     </div>
                                 ")),
 
                             CheckboxList::make('approved_matches')
                                 ->hiddenLabel()
                                 ->options($options)
-                                ->default(array_keys($options)) // Deixa todas marcadas por padrão!
+                                ->default(array_keys($options))
                                 ->bulkToggleable()
                                 ->columns(1)
                                 ->extraAttributes([
-                                    'class' => 'smart-match-list max-h-[60vh] overflow-y-auto pr-2',
+                                    'class' => 'smart-match-list max-h-[58vh] overflow-y-auto overflow-x-hidden pr-2',
                                 ]),
                         ])->columnSpanFull()
                     ])
@@ -165,9 +208,8 @@ class AutoConciliateBatchAction extends Action
                     [$stmtId, $payableId] = explode('::', $matchKey);
 
                     $statement = BankStatement::find($stmtId);
-                    if (!$statement) continue;
+                    if (!$statement || $statement->status !== 'pending') continue;
 
-                    // O motor perfeito que criámos anteriormente
                     ConciliationTabsSchema::processConciliation(
                         ['existing_payable_id' => 'payable_' . $payableId],
                         $statement

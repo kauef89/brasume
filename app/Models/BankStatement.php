@@ -17,6 +17,11 @@ use Illuminate\Database\Eloquent\Model;
  */
 class BankStatement extends Model
 {
+
+    public function suggestedPayable(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\AccountPayable::class, 'suggested_payable_id');
+    }
     use HasFactory;
 
     // 🚀 Liberamos a atribuição em massa (O Filament já garante a segurança dos dados)

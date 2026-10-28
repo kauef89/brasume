@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\RecurringExpenses\Schemas;
 
+use App\Enums\AccountingCategory;
+
 
 use App\Enums\RecurringExpenseValueType;use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
@@ -59,8 +61,8 @@ class RecurringExpenseForm
                 ->default(false)
                 ->afterStateUpdated(function ($set, $state) {
                     if ($state) {
-                        $set("accounting_category", "socios");
-                        $set("accounting_subcategory", "pessoal");
+                        $set("accounting_category", AccountingCategory::PARTNERS->value);
+                        $set("accounting_subcategory", "personal");
                     } else {
                         $set("accounting_category", null);
                         $set("accounting_subcategory", null);

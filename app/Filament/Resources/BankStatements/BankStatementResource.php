@@ -60,11 +60,11 @@ class BankStatementResource extends Resource
         return BankStatementsTable::build($table);
     }
 
-    public static function getPages(): array
+        public static function getPages(): array
     {
         return [
-            // Como não há Create nem Edit manual, temos apenas a página Manage (index)
-            "index" => Pages\ManageBankStatements::route("/"),
+            'index' => Pages\ManageBankStatements::route('/'),
+            'smart-matches' => Pages\SmartMatchConciliation::route('/smart-matches'),
         ];
     }
 }

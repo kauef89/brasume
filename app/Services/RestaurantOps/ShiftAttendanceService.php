@@ -2,6 +2,8 @@
 
 namespace App\Services\RestaurantOps;
 
+use App\Enums\AccountingCategory;
+
 use App\Enums\EmploymentType;
 use App\Enums\PaymentCycle;
 use App\Models\User;
@@ -327,8 +329,8 @@ class ShiftAttendanceService
                 'due_date'               => now()->toDateString(),
                 'payment_date'           => now()->toDateString(),
                 'status'                 => 'paid',
-                'accounting_category'    => 'equipe',
-                'accounting_subcategory' => 'extras',
+                'accounting_category'    => AccountingCategory::PAYROLL->value,
+                'accounting_subcategory' => 'freelancers',
                 'paid_by'                => 'company',
                 'observations'           => "Liquidado via {$paymentMethodLabel} no Turno #{$shift->id}",
             ]);

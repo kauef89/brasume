@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\BankStatements\Actions;
 
+use App\Enums\AccountingCategory;
+
 use Filament\Actions\BulkAction;
 use Illuminate\Database\Eloquent\Collection;
 use Filament\Schemas\Components\Section;
@@ -63,7 +65,7 @@ class BulkPersonalAction extends BulkAction
                             } else {
                                 $genericSupplier = Supplier::firstOrCreate(
                                     ['name' => 'Uso Pessoal / Sócios'],
-                                    ['type' => 'physical', 'is_personal' => true, 'accounting_category' => 'socios', 'accounting_subcategory' => 'pessoal', 'is_active' => true]
+                                    ['type' => 'physical', 'is_personal' => true, 'accounting_category' => AccountingCategory::PARTNERS->value, 'accounting_subcategory' => 'personal', 'is_active' => true]
                                 );
                                 $supplierId = $genericSupplier->id;
                             }
@@ -83,8 +85,8 @@ class BulkPersonalAction extends BulkAction
                                     "amount" => abs((float) $stmt->amount),
                                     "due_date" => $stmt->bank_date,
                                     "is_personal" => true,
-                                    "accounting_category" => "socios",
-                                    "accounting_subcategory" => "pessoal",
+                                    "accounting_category" => AccountingCategory::PARTNERS->value,
+                                    "accounting_subcategory" => "personal",
                                 ]);
 
                                 // 🚀 O MOTOR FAZ A MÁGICA

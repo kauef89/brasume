@@ -23,8 +23,12 @@ class ManageBankStatements extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
-            // A sua nova Automação em Lote (Botão Dourado de Raio)
-            AutoConciliateBatchAction::make(),
+            \Filament\Actions\Action::make('smart_match_queue')
+                ->label('Conciliação Inteligente')
+                ->icon('heroicon-m-bolt')
+                ->color('warning')
+                ->badge(fn () => \App\Models\BankStatement::where('status', 'pending')->where('match_score', '>=', 40)->whereNotNull('suggested_payable_id')->count() ?: null)
+                ->url(fn () => \App\Filament\Resources\BankStatements\BankStatementResource::getUrl('smart-matches')),
 
             // A nossa Ação passo a passo anterior (renomeie no ecrã se quiser)
             AutoConciliateAction::make()->label('Conciliação Passo a Passo')->color('gray')->icon('heroicon-m-forward'),

@@ -2,96 +2,78 @@
 
 namespace App\Services\Accounting;
 
+use App\Enums\AccountingCategory;
+
 class AccountingService
 {
-    /**
-     * Retorna as Categorias Principais do DRE
-     * @return array<string,string>
-     */
     public static function getCategories(): array
     {
-        return [
-            'insumos' => '01. Mercadorias (Insumos)',
-            'embalagens' => '02. Embalagens',
-            'equipe' => '03. Pessoal e Equipe',
-            'infra' => '04. Utilidades',
-            'manutencao' => '05. Manutenção',
-            'marketing' => '06. Marketing',
-            'adm' => '07. Adm e Impostos',
-            'aquisicoes' => '08. Aquisições',
-            'socios' => '09. Uso Pessoal / Sócios',
-        ];
+        $categories = [];
+        foreach (AccountingCategory::cases() as $case) {
+            $categories[$case->value] = $case->getLabel();
+        }
+        return $categories;
     }
 
-    /**
-     * Retorna as Subcategorias baseadas na Categoria selecionada
-     * @return array|array<string,string>
-     */
     public static function getSubcategories(?string $category): array
     {
         $subcategories = [
-            'insumos' => [
-                'geral' => 'Geral',
-                'carnes' => 'Carnes',
-                'hortifruti' => 'Hortifruti',
-                'bebidas' => 'Bebidas',
-                'mercearia' => 'Mercearia',
-                'padaria' => 'Padaria',
-                'laticinios' => 'Laticínios',
+            AccountingCategory::INGREDIENTS->value => [
+                'general'   => 'Geral / Mercearia',
+                'meats'     => 'Carnes & Recheios',
+                'dairy'     => 'Queijos & Laticínios',
+                'bakery'    => 'Massa & Farinhas',
+                'produce'   => 'Hortifrúti',
+                'beverages' => 'Bebidas',
+                'seafood'   => 'Pescados & Frutos do Mar',
             ],
-            'embalagens' => [
-                'papelao' => 'Papelão',
-                'plasticos' => 'Plásticos e Sacolas',
-                'descartaveis' => 'Descartáveis',
+            AccountingCategory::PACKAGING->value => [
+                'cardboard'   => 'Caixas & Papelão',
+                'bags'        => 'Sacos & Plásticos',
+                'disposables' => 'Descartáveis & Guardanapos',
             ],
-            'equipe' => [
-                'folha' => 'Folha de Pagamento',
-                'transporte' => 'Vale Transporte',
-                'alimentacao' => 'Alimentação',
-                'extras' => 'Extras e Gorjetas',
-                'saude' => 'Saúde Ocupacional'
+            AccountingCategory::PAYROLL->value => [
+                'payroll'     => 'Folha de Pagamento',
+                'freelancers' => 'Diaristas & Freelancers',
+                'transport'   => 'Vale Transporte',
+                'food'        => 'Alimentação',
+                'health'      => 'Saúde Ocupacional',
             ],
-            'infra' => [
-                'agua' => 'Água / Esgoto',
-                'energia' => 'Energia Elétrica',
-                'internet' => 'Internet / Telefone',
-                'gas' => 'Gás',
-                'aluguel' => 'Aluguel',
+            AccountingCategory::UTILITIES->value => [
+                'water'       => 'Água & Saneamento',
+                'electricity' => 'Energia Elétrica',
+                'internet'    => 'Internet & Telefonia',
+                'gas'         => 'Gás GLP',
+                'rent'        => 'Aluguel do Ponto',
             ],
-            'manutencao' => [
-                'equipamentos' => 'Equipamentos',
-                'predial' => 'Predial',
-                'veiculos' => 'Veículos',
-                'limpeza' => 'Limpeza',
+            AccountingCategory::MAINTENANCE->value => [
+                'equipment'   => 'Fritadeiras & Equipamentos',
+                'building'    => 'Predial & Reformas Leves',
+                'cleaning'    => 'Produtos de Limpeza',
             ],
-            'marketing' => [
-                'trafego' => 'Tráfego Pago',
-                'impressos' => 'Impressos',
-                'eventos' => 'Eventos',
+            AccountingCategory::MARKETING->value => [
+                'ads'         => 'Tráfego Pago & Anúncios',
+                'print'       => 'Panfletos & Cardápios',
+                'events'      => 'Ações & Eventos',
             ],
-            'adm' => [
-                'contabilidade' => 'Contabilidade',
-                'sistemas' => 'Sistemas e Software',
-                'taxas' => 'Taxas Bancárias',
-                'impostos' => 'Impostos',
-                'escritorio' => 'Material de Escritório',
+            AccountingCategory::ADMINISTRATIVE->value => [
+                'software'    => 'Sistemas & Assinaturas',
+                'accounting'  => 'Contabilidade',
+                'bank_fees'   => 'Taxas Bancárias',
+                'taxes'       => 'Impostos',
+                'office'      => 'Material de Escritório',
             ],
-            'aquisicoes' => [
-                'maquinas' => 'Máquinas',
-                'reformas' => 'Reformas',
-                'mobiliario' => 'Mobiliário',
-                'utilidades' => 'Utilidades (Copos, Panelas)',
+            AccountingCategory::CAPEX->value => [
+                'facade'      => 'Fachada & Comunicação Visual',
+                'machinery'   => 'Máquinas Pesadas / Câmaras',
+                'furniture'   => 'Mesas, Cadeiras & Mobiliário',
             ],
-            'socios' => [
-                'pessoal' => 'Despesa Pessoal',
-                'prolabore' => 'Adiantamento / Pró-labore',
+            AccountingCategory::PARTNERS->value => [
+                'personal'    => 'Despesa Pessoal / Cartão Familiar',
+                'drawings'    => 'Retirada de Lucro / Pró-labore',
             ],
         ];
 
-        if (!$category || !isset($subcategories[$category])) {
-            return [];
-        }
-
-        return $subcategories[$category];
+        return $subcategories[$category] ?? [];
     }
 }

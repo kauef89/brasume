@@ -10,6 +10,7 @@ use App\Models\BankReconciliationRule;
 use App\Models\Transaction;
 use App\Models\Supplier;
 use App\Models\BankAccount;
+use App\Enums\AccountingCategory;
 use App\Filament\Resources\AccountPayables\Schemas\AccountPayableForm;
 use App\Filament\Resources\RecurringExpenses\Schemas\RecurringExpenseForm;
 use App\Services\Accounting\BankReconciliationService;
@@ -34,10 +35,13 @@ class ConciliationTabsSchema
         $descStr = $statement->counterparty_name ?: $statement->description;
         $docStr = $statement->document ? "<span class='ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'>DOC: {$statement->document}</span>" : '';
 
-        // Deteção de Semelhantes no Extrato Pendente
+        // Deteção de Semelhantes no Extrato Pendente (mesmo sinal de débito/crédito)
         $cleanSearchTerm = trim((string) ($statement->counterparty_name ?: $statement->description));
+        $sign = $statement->amount < 0 ? '<' : '>';
+
         $similarQuery = BankStatement::where('status', 'pending')
             ->where('id', '!=', $statement->id)
+            ->where('amount', $sign, 0)
             ->where(function ($q) use ($statement, $cleanSearchTerm) {
                 if (!empty($statement->document)) {
                     $q->where('document', $statement->document);
@@ -264,8 +268,8 @@ class ConciliationTabsSchema
                 $supplierId = $fixed->supplier_id;
             }
         } elseif ($type === 'pessoal') {
-            $category = "socios";
-            $subcategory = "pessoal";
+            $category = AccountingCategory::PARTNERS->value;
+            $subcategory = 'personal';
             if ($mode === 'link' && !empty($data['existing_personal_id'])) {
                 $conciliable = AccountPayable::find($data['existing_personal_id']);
                 $supplierId = $conciliable->supplier_id;
@@ -275,7 +279,7 @@ class ConciliationTabsSchema
                     ? $pData['supplier_id']
                     : Supplier::firstOrCreate(
                         ['name' => 'Uso Pessoal / Sócios'],
-                        ['type' => 'physical', 'is_personal' => true, 'accounting_category' => 'socios', 'accounting_subcategory' => 'pessoal', 'is_active' => true]
+                        ['type' => 'physical', 'is_personal' => true, 'accounting_category' => AccountingCategory::PARTNERS->value, 'accounting_subcategory' => 'personal', 'is_active' => true]
                     )->id;
                 $desc = !empty($pData['description'])
                     ? $pData['description'] . " - " . ($statement->counterparty_name ?: $statement->description)
@@ -315,14 +319,26 @@ class ConciliationTabsSchema
         }
 
         // 3. Resolve Ocorrências Semelhantes em Cascata (Batch Resolve)
-        if (!empty($data['resolve_similar_entries']) && !empty($searchTerm)) {
-            $similarPending = BankStatement::where('status', 'pending')
+        $shouldResolveSimilar = !empty($data['resolve_similar_entries']) || !empty($data['batch_resolve']) || !empty($data['conciliar_semelhantes']);
+
+        if ($shouldResolveSimilar) {
+            $doc = preg_replace('/[^0-9]/', '', (string) ($statement->document ?? ''));
+            $counterName = trim((string) ($statement->counterparty_name ?? ''));
+            $desc = trim((string) ($statement->description ?? ''));
+            $sign = $statement->amount < 0 ? '<' : '>';
+
+            $similarPending = BankStatement::query()
+                ->where('status', 'pending')
                 ->where('id', '!=', $statement->id)
-                ->where(function ($q) use ($statement, $searchTerm) {
-                    if (!empty($statement->document)) {
-                        $q->where('document', $statement->document);
+                ->where('amount', $sign, 0)
+                ->where(function ($q) use ($doc, $counterName, $desc, $searchTerm) {
+                    if (!empty($doc) && strlen($doc) >= 11) {
+                        $q->where('document', $doc);
                     }
-                    if (!empty($searchTerm) && strlen($searchTerm) >= 3) {
+                    if (!empty($counterName) && strlen($counterName) >= 4) {
+                        $q->orWhere('counterparty_name', 'like', "%{$counterName}%");
+                    }
+                    if (!empty($searchTerm) && strlen($searchTerm) >= 4) {
                         $q->orWhere('counterparty_name', 'like', "%{$searchTerm}%")
                           ->orWhere('description', 'like', "%{$searchTerm}%");
                     }
@@ -330,20 +346,36 @@ class ConciliationTabsSchema
                 ->get();
 
             foreach ($similarPending as $simStmt) {
+                $simDesc = $description ?: ($simStmt->counterparty_name ?: $simStmt->description);
+
+                // CENÁRIO A: Pessoal / Sócios
                 if ($type === 'pessoal') {
-                    $simDesc = "Uso Pessoal: " . ($simStmt->counterparty_name ?: $simStmt->description);
                     $simPayable = AccountPayable::create([
-                        "description"            => $simDesc,
+                        "description"            => "Uso Pessoal: " . ($simStmt->counterparty_name ?: $simStmt->description),
                         "supplier_id"            => $supplierId,
                         "amount"                 => abs((float) $simStmt->amount),
                         "due_date"               => $simStmt->bank_date,
                         "is_personal"            => true,
-                        "accounting_category"    => "socios",
-                        "accounting_subcategory" => "pessoal",
+                        "accounting_category"    => AccountingCategory::PARTNERS->value,
+                        "accounting_subcategory" => "personal",
                     ]);
-                    BankReconciliationService::finalize($simStmt, $simPayable, $supplierId, $simDesc);
-                } elseif ($type === 'avulsa' && $category && $subcategory) {
-                    $simDesc = ($simStmt->counterparty_name ?: $simStmt->description);
+                    BankReconciliationService::finalize($simStmt, $simPayable, $supplierId, $simPayable->description);
+                }
+                // CENÁRIO B: Conta Fixa / Recorrente (Ex: Unifique, Aluguel)
+                elseif ($type === 'fixa') {
+                    $fixedDesc = $simDesc . " (" . $simStmt->bank_date->format("M/Y") . ")";
+                    $simPayable = AccountPayable::create([
+                        "description"            => $fixedDesc,
+                        "amount"                 => abs((float) $simStmt->amount),
+                        "supplier_id"            => $supplierId,
+                        "accounting_category"    => $category,
+                        "accounting_subcategory" => $subcategory,
+                        "due_date"               => $simStmt->bank_date,
+                    ]);
+                    BankReconciliationService::finalize($simStmt, $simPayable, $supplierId, $fixedDesc);
+                }
+                // CENÁRIO C: Despesa Avulsa
+                elseif ($type === 'avulsa') {
                     $simPayable = AccountPayable::create([
                         "description"            => $simDesc,
                         "supplier_id"            => $supplierId,
@@ -353,6 +385,11 @@ class ConciliationTabsSchema
                         "accounting_subcategory" => $subcategory,
                     ]);
                     BankReconciliationService::finalize($simStmt, $simPayable, $supplierId, $simDesc);
+                }
+                // CENÁRIO D: Transferência / Pagamento de Fatura de Cartão
+                elseif ($type === 'transferencia' && $conciliable instanceof BankAccount) {
+                    $transfDesc = $description ?: ($simStmt->counterparty_name ?: "Transferência / Pgto de Fatura");
+                    BankReconciliationService::finalize($simStmt, $conciliable, null, $transfDesc);
                 }
             }
         }

@@ -2,6 +2,8 @@
 
 namespace App\Observers;
 
+use App\Enums\AccountingCategory;
+
 use App\Models\AccountPayable;
 use App\Models\Transaction;
 
@@ -10,7 +12,7 @@ class AccountPayableObserver
     public function created(AccountPayable $payable): void
     {
         // 🛡️ GUARDA: Diárias de turno operacional têm extrato e baixa geridos pelo ShiftAttendanceService
-        if ($payable->accounting_category === 'equipe' && in_array($payable->accounting_subcategory, ['extras', 'Diárias Extras'])) {
+        if (in_array($payable->accounting_category, [AccountingCategory::PAYROLL->value, 'equipe']) && in_array($payable->accounting_subcategory, ['freelancers', 'extras', 'Diárias Extras'])) {
             return;
         }
 
@@ -38,7 +40,7 @@ class AccountPayableObserver
     {
         if ($payable->isDirty('status')) {
             // 🛡️ GUARDA: Diárias de turno operacional têm estorno gerido pelo fluxo de caixa/turno
-            if ($payable->accounting_category === 'equipe' && in_array($payable->accounting_subcategory, ['extras', 'Diárias Extras'])) {
+            if (in_array($payable->accounting_category, [AccountingCategory::PAYROLL->value, 'equipe']) && in_array($payable->accounting_subcategory, ['freelancers', 'extras', 'Diárias Extras'])) {
                 return;
             }
 
@@ -66,7 +68,7 @@ class AccountPayableObserver
 
     public function deleting(AccountPayable $payable): void
     {
-        if ($payable->accounting_category === 'equipe' && in_array($payable->accounting_subcategory, ['extras', 'Diárias Extras'])) {
+        if (in_array($payable->accounting_category, [AccountingCategory::PAYROLL->value, 'equipe']) && in_array($payable->accounting_subcategory, ['freelancers', 'extras', 'Diárias Extras'])) {
             return;
         }
 

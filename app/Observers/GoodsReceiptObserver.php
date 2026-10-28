@@ -2,6 +2,8 @@
 
 namespace App\Observers;
 
+use App\Enums\AccountingCategory;
+
 use App\Models\GoodsReceipt;
 use App\Models\AccountPayable;
 
@@ -56,8 +58,8 @@ class GoodsReceiptObserver
                 'amount'                 => $totalAmount,
                 'due_date'               => $receipt->received_at ?? now(),
                 'status'                 => 'pending',
-                'accounting_category'    => 'insumos',
-                'accounting_subcategory' => 'geral',
+                'accounting_category'    => AccountingCategory::INGREDIENTS->value,
+                'accounting_subcategory' => 'general',
             ]);
         }
     }
