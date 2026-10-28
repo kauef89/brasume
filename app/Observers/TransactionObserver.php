@@ -67,7 +67,13 @@ class TransactionObserver
         }
 
         if ($shiftId) {
-            DB::table('cash_shifts')->where('id', $shiftId)->increment('closing_balance_expected', $realValue);
+            // Só atualiza o saldo esperado se o turno ainda estiver ABERTO
+            $shift = DB::table('cash_shifts')->where('id', $shiftId)->first(['status', 'closing_balance_expected']);
+            if ($shift && $shift->status === 'open') {
+                DB::table('cash_shifts')->where('id', $shiftId)->update([
+                    'closing_balance_expected' => DB::raw("COALESCE(closing_balance_expected, opening_balance, 0) + ({$realValue})")
+                ]);
+            }
         }
     }
 }

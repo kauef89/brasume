@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Services\Financial\CashFlowProjectionService;
 use App\Services\Financial\CmvAnalyticsService;
 use App\Services\Financial\DreService;
 use BackedEnum;
@@ -23,7 +24,8 @@ class FinancialHealthDashboard extends Page
 
     public string $selectedPeriod = 'this_month';
     public string $selectedRegime = 'competencia';
-    public string $activeView     = 'dre'; // 'dre' ou 'cmv'
+    public string $activeView     = 'dre'; // 'dre', 'cmv' ou 'projection'
+    public int $projectionDays    = 30;    // 30 ou 60 dias
 
     public function setPeriod(string $period): void
     {
@@ -40,6 +42,11 @@ class FinancialHealthDashboard extends Page
         $this->activeView = $view;
     }
 
+    public function setProjectionDays(int $days): void
+    {
+        $this->projectionDays = $days;
+    }
+
     protected function getViewData(): array
     {
         [$startDate, $endDate] = match ($this->selectedPeriod) {
@@ -49,15 +56,18 @@ class FinancialHealthDashboard extends Page
             default      => [Carbon::now()->startOfMonth(), Carbon::now()->endOfMonth()],
         };
 
-        $dreReport = (new DreService($startDate, $endDate, $this->selectedRegime))->calculate();
-        $cmvReport = (new CmvAnalyticsService($startDate, $endDate, $this->regime ?? $this->selectedRegime))->analyze();
+        $dreReport   = (new DreService($startDate, $endDate, $this->selectedRegime))->calculate();
+        $cmvReport   = (new CmvAnalyticsService($startDate, $endDate, $this->selectedRegime))->analyze();
+        $projection  = (new CashFlowProjectionService($this->projectionDays))->project();
 
         return [
             'report'         => $dreReport,
             'cmv'            => $cmvReport,
+            'projection'     => $projection,
             'selectedPeriod' => $this->selectedPeriod,
             'selectedRegime' => $this->selectedRegime,
             'activeView'     => $this->activeView,
+            'projectionDays' => $this->projectionDays,
         ];
     }
 }

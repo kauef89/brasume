@@ -117,17 +117,81 @@ class ShiftCashierService
     {
         $tenant = function_exists('tenant') ? tenant() : null;
 
-        DB::transaction(function () use ($shift, $data, $operatorId) {
+        DB::transaction(function () use ($shift, $data, $operatorId, $operatorName) {
+            $actual = round((float) ($data['amount'] ?? 0), 2);
+            $opening = round((float) ($shift->opening_balance ?? 0), 2);
+            $openedAt = $shift->opened_at;
+            $closedAt = now();
+
+            // 1. Vendas em dinheiro vivo (compatível com ShiftClosureReport)
+            $moneyMethodIds = \App\Models\PaymentMethod::where('engine_type', 'money')->pluck('id')->all();
+
+            $cashSales = (float) \App\Models\Payment::where('is_paid', true)
+                ->where(function ($q) use ($shift, $openedAt, $closedAt) {
+                    $q->where('cash_shift_id', $shift->id)
+                      ->orWhereBetween('created_at', [$openedAt, $closedAt]);
+                })
+                ->whereHas('order', fn($q) => $q->whereIn('status', ['closed', 'completed', 'dispatched', 'preparing']))
+                ->where(function ($q) use ($moneyMethodIds) {
+                    if (!empty($moneyMethodIds)) {
+                        $q->whereIn('payment_method_id', $moneyMethodIds);
+                    }
+                    $q->orWhere('method', 'LIKE', '%Dinheiro%')
+                      ->orWhere('method', 'LIKE', '%cash%');
+                })
+                ->sum('amount');
+
+            // 2. Suprimentos em dinheiro na gaveta
+            $shiftTransactions = \App\Models\Transaction::where('cash_shift_id', $shift->id)
+                ->whereNull('order_id')
+                ->get();
+
+            $supplies = (float) $shiftTransactions->filter(function ($t) {
+                return $t->category === 'supply'
+                    || ($t->type === 'in' && !str_contains(mb_strtolower($t->description ?? ''), 'abertura'));
+            })->sum('amount');
+
+            // 3. Sangrias realizadas na gaveta
+            $sangrias = (float) $shiftTransactions->filter(function ($t) {
+                return $t->category === 'bleed'
+                    || ($t->type === 'out' && !str_contains(mb_strtolower($t->description ?? ''), 'retirada de fechamento'));
+            })->sum('amount');
+
+            // 4. Saldo esperado estritamente físico
+            $expected = round($opening + $cashSales + $supplies - $sangrias, 2);
+            $diff = round($actual - $expected, 2);
+
             $updatePayload = [
-                'status'                 => 'closed',
-                'closed_at'              => now(),
-                'closing_balance_actual' => (float) ($data['amount'] ?? 0),
-                'closed_by'              => $operatorId,
-                'notes'                  => $data['notes'] ?? ($data['observation'] ?? null),
-                'accepting_orders'       => false,
+                'status'                   => 'closed',
+                'closed_at'                => $closedAt,
+                'closing_balance_expected' => $expected,
+                'closing_balance_actual'   => $actual,
+                'closed_by'                => $operatorId,
+                'notes'                    => $data['notes'] ?? ($data['observation'] ?? null),
+                'accepting_orders'         => false,
             ];
 
             $shift->update($updatePayload);
+
+            // 5. Ajuste contábil de quebra de caixa no Cofre (#1)
+            if (abs($diff) >= 0.02) {
+                $isShortage = $diff < 0;
+                $amount = abs($diff);
+                $label = $isShortage ? 'Falta' : 'Sobra';
+
+                \App\Models\Transaction::create([
+                    'bank_account_id'  => 1, // Cofre / Gaveta Física
+                    'cash_shift_id'    => null, // Evita recalcular o relatório retroativamente
+                    'type'             => $isShortage ? 'out' : 'in',
+                    'category'         => $isShortage ? 'bleed' : 'supply',
+                    'amount'           => $amount,
+                    'description'      => "Quebra de Caixa ({$label}) - Turno #{$shift->id}",
+                    'operator_name'    => $operatorName,
+                    'transaction_date' => $closedAt,
+                ]);
+
+                \Illuminate\Support\Facades\Log::warning("⚠️ [ShiftCashierService] Quebra de caixa registrada no Turno #{$shift->id}: {$label} de R$ {$amount} no Cofre (#1).");
+            }
         });
 
         try {

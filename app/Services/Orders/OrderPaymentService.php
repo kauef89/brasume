@@ -182,13 +182,13 @@ class OrderPaymentService
 
                 if ($paymentMethod && !in_array($paymentMethod->engine_type?->value ?? $paymentMethod->engine_type, ['internal_loyalty', 'internal', 'allowance', 'loss'])) {
                     Transaction::create([
-                        'bank_account_id'  => $shift->bank_account_id,
-                        'cash_shift_id'    => $shift->id,
-                        'order_id'         => $order->id,
-                        'payment_id'       => $orderPayment->id,
-                        'payment_method_id'=> $methodId,
-                        'type'             => 'in',
-                        'category'         => 'order_sale',
+                        'bank_account_id'   => $paymentMethod?->destination_account_id ?? ($isCash ? 1 : null),
+                        'cash_shift_id'     => $shift->id,
+                        'order_id'          => $order->id,
+                        'payment_id'        => $orderPayment->id,
+                        'payment_method_id' => $methodId,
+                        'type'              => 'in',
+                        'category'          => 'order_sale',
                         'amount'           => $payment['amount'],
                         'description'      => "Pedido #{$order->id} ({$methodName})",
                         'operator_name'    => auth()->user()->name ?? 'Sistema',
@@ -271,11 +271,11 @@ class OrderPaymentService
                 $order->change_returned = round(($order->change_returned ?? 0) + $cashChange, 2);
 
                 Transaction::create([
-                    'bank_account_id'  => $shift->bank_account_id,
-                    'cash_shift_id'    => $shift->id,
-                    'order_id'         => $order->id,
-                    'type'             => 'out',
-                    'category'         => 'change',
+                    'bank_account_id'   => 1, // Gaveta / Cofre Físico
+                    'cash_shift_id'     => $shift->id,
+                    'order_id'          => $order->id,
+                    'type'              => 'out',
+                    'category'          => 'change',
                     'amount'           => $cashChange,
                     'description'      => "Troco - Pedido #{$order->id}",
                     'operator_name'    => auth()->user()->name ?? 'Sistema',

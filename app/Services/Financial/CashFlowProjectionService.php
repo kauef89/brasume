@@ -5,6 +5,7 @@ namespace App\Services\Financial;
 use App\Models\AccountPayable;
 use App\Models\AccountReceivable;
 use App\Models\BankAccount;
+use App\Enums\BankAccountType;
 use App\Models\RecurringExpense;
 use App\Models\Transaction;
 use Carbon\Carbon;
@@ -160,20 +161,21 @@ class CashFlowProjectionService
     protected function calculateLiquidStartingBalance(): float
     {
         // 1. Identifica IDs de contas que são Cartão de Crédito para desconsiderar da disponibilidade imediata
-        $creditCardIds = BankAccount::query()
+        // Desconsidera contas de passivo (Cartão de Crédito) e contas virtuais/dedutoras
+        $excludedAccountIds = BankAccount::query()
             ->where('is_active', true)
-            ->where(function ($q) {
-                $q->where('type', 'credit_card')
-                  ->orWhere('name', 'like', '%Cartão%')
-                  ->orWhere('name', 'like', '%Cartao%');
-            })
+            ->whereIn('type', [
+                BankAccountType::CREDIT_CARD->value,
+                BankAccountType::REVENUE_DEDUCTION->value,
+                BankAccountType::TRANSIT->value,
+            ])
             ->pluck('id')
             ->toArray();
 
         // 2. Soma todas as entradas e subtrai as saídas das contas bancárias de liquidez imediata
         $query = Transaction::query();
-        if (!empty($creditCardIds)) {
-            $query->whereNotIn('bank_account_id', $creditCardIds);
+        if (!empty($excludedAccountIds)) {
+            $query->whereNotIn('bank_account_id', $excludedAccountIds);
         }
 
         $res = $query->selectRaw("
