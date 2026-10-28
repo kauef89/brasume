@@ -6,26 +6,32 @@ use Filament\Support\Contracts\HasLabel;
 
 enum EmploymentType: string implements HasLabel
 {
-    case CLT = 'clt';
-    case CLT_44 = 'clt_44';
-    case CLT_40 = 'clt_40';
-    case INTERN = 'intern';
-    case PJ = 'pj';
+    case CLT             = 'clt';
+    case INTERN          = 'intern';
+    case PJ              = 'pj';
     case FREELANCE_FIXED = 'freelance_fixed';
-    case FREELANCER = 'freelancer';
-    case PARTNER = 'partner';
+    case FREELANCER      = 'freelancer';
+    case PARTNER         = 'partner';
 
     public function getLabel(): ?string
     {
         return match ($this) {
-            self::CLT => 'CLT',
-            self::CLT_44 => 'CLT (44h)',
-            self::CLT_40 => 'CLT (40h)',
-            self::INTERN => 'Estagiário',
-            self::PJ => 'PJ',
-            self::FREELANCE_FIXED => 'Fixo',
-            self::FREELANCER => 'Freelancer',
-            self::PARTNER => 'Sócio',
+            self::CLT             => 'CLT',
+            self::INTERN          => 'Estagiário',
+            self::PJ              => 'PJ',
+            self::FREELANCE_FIXED => 'Fixo (Diarista Contínuo)',
+            self::FREELANCER      => 'Freelancer (Diarista Pontual)',
+            self::PARTNER         => 'Sócio',
         };
+    }
+
+    public function isClt(): bool
+    {
+        return $this === self::CLT;
+    }
+
+    public function isFreelancer(): bool
+    {
+        return in_array($this, [self::FREELANCER, self::FREELANCE_FIXED]);
     }
 }

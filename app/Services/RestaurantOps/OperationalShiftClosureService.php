@@ -53,18 +53,23 @@ class OperationalShiftClosureService
 
                     if ($alreadyProcessed) continue;
 
-                    $grossRate = (float) $user->pivot->daily_rate;
-                    $latestLedger = $user->employee->ledgers()->latest('id')->first();
+                    $employee = $user->employee;
+                    $isClt = $employee && ($employee->employment_type === \App\Enums\EmploymentType::CLT || (is_string($employee->employment_type) && $employee->employment_type === 'clt'));
+                    $grossRate = $isClt ? 0.00 : (float) ($user->pivot->daily_rate ?? 0);
+
+                    $latestLedger = $employee ? $employee->ledgers()->latest('id')->first() : null;
                     $balance = $latestLedger ? (float) $latestLedger->balance : 0.00;
 
-                    // 1. Crédito da Diária (Acumulada)
-                    $user->employee->ledgers()->create([
-                        'type'        => 'credit',
-                        'description' => "Diária de Trabalho (Turno #{$shift->id}) - Acumulada",
-                        'amount'      => $grossRate,
-                        'balance'     => $balance + $grossRate,
-                    ]);
-                    $balance += $grossRate;
+                    // 1. Crédito da Diária (Apenas para Freelancers/Diaristas — CLT recebe via Folha Mensal)
+                    if (!$isClt && $grossRate > 0) {
+                        $employee->ledgers()->create([
+                            'type'        => 'credit',
+                            'description' => "Diária de Trabalho (Turno #{$shift->id}) - Acumulada",
+                            'amount'      => $grossRate,
+                            'balance'     => $balance + $grossRate,
+                        ]);
+                        $balance += $grossRate;
+                    }
 
                     // 2. Abatimento de Consumo Interno do Turno
                     $consumptionData = $attendanceService->getFreelancerShiftConsumption($user, $shift);

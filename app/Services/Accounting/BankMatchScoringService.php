@@ -16,7 +16,7 @@ class BankMatchScoringService
     {
         $matches = collect();
 
-        if ($statement->type === 'in') {
+        if (in_array($statement->type, ['in', 'credit']) || (float) $statement->amount > 0) {
             $receivables = AccountReceivable::with(['customer', 'order'])
                 ->where('status', 'pending')
                 ->whereBetween('due_date', [

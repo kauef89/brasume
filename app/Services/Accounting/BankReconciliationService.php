@@ -31,7 +31,7 @@ class BankReconciliationService
             // 1. Cria a Transação Real amarrada ao Banco
             $transaction = Transaction::create([
                 "bank_account_id"  => $lockedStatement->bank_account_id,
-                "type"             => $lockedStatement->type,
+                "type"             => (in_array(strtolower($lockedStatement->type), ['in', 'credit']) || (float)$lockedStatement->amount >= 0) ? 'in' : 'out',
                 "amount"           => abs((float) $lockedStatement->amount),
                 "description"      => $description ?? $lockedStatement->description,
                 "transaction_date" => clone $lockedStatement->bank_date,
