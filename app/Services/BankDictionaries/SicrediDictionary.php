@@ -23,6 +23,20 @@ class SicrediDictionary implements BankDictionaryInterface
             return $result;
         }
 
+                // 2.1 Compras Nacionais / Cartão de Débito (Extrai o Estabelecimento)
+        if (str_starts_with($upperMemo, "COMPRAS NACIONAIS") || str_contains($upperMemo, "COMPRA DEBITO")) {
+            // Remove prefixo operacional (ex: COMPRAS NACIONAIS-VE0059839 )
+            $clean = preg_replace('/^COMPRAS NACIONAIS-[A-Z0-9]+\s+/i', '', $memo);
+            // Remove sufixo geográfico comum (ex: BALNEARIO BARBR, JOINVILLE BR, BR)
+            $clean = preg_replace('/\s+(BALNEARIO\s+BARBR|JOINVILLE\s+BR|ARAQUARI\s+BR|SAO\s+FRANCISCOBR|OSASCO\s+BR|BALNE\s+BR|BR)$/i', '', $clean);
+            $cleanName = trim($clean);
+
+            $result["name"] = $cleanName ?: "Compra no Débito";
+            $result["clean_description"] = "Débito: " . ($cleanName ?: $memo);
+            $result["movement_type"] = "debit_card";
+            return $result;
+        }
+
         // 2. Fatura de Cartão de Crédito Sicredi PJ
         if (str_contains($upperMemo, "DEB.CTA.FATURA") || str_contains($upperMemo, "DEB.FATURA")) {
             $result["name"] = "Cartão Sicredi PJ";

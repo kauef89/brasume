@@ -49,7 +49,7 @@
             <!-- ⚡ AÇÃO DE COBRANÇA PIX DO ATENDENTE / GARÇOM -->
             <OrderContextAction
                 v-if="canChargePix"
-                :disabled="order?.payment_status === 'paid' || order?.status === 'closed'"
+                :disabled="isPaid || order?.status === 'closed'"
                 label="Cobrar com PIX"
                 subtitle="QR Code Sicredi"
                 icon="pi pi-qrcode"
@@ -153,46 +153,72 @@ const hasPhone = computed(() => {
     return customerPhone.value.replace(/\D/g, '').length >= 10;
 });
 
+// Pedido quitado
 const isPaid = computed(() => props.order?.payment_status === 'paid');
 
-// 🔒 ESTADOS DINÂMICOS DO RECEBER CONTA
+// Detecta se a comanda/mesa não possui valor a pagar ou está vazia
+const isZeroOrEmpty = computed(() => {
+    const totalVal = Number(props.order?.total || 0);
+    const items = props.order?.items || [];
+    const hasActiveItems = items.some(i => i.status !== 'cancelled');
+    return totalVal <= 0.01 || (!hasActiveItems && items.length > 0) || items.length === 0;
+});
+
+// Se o pedido pode ser finalizado direto (pago OU zerado/vazio)
+const canFinishDirectly = computed(() => {
+    if (props.order?.status === 'closed' || props.order?.status === 'cancelled') return false;
+    return isPaid.value || isZeroOrEmpty.value;
+});
+
+// 🔒 ESTADOS DINÂMICOS DO BOTÃO PRINCIPAL
 const isReceiveDisabled = computed(() => {
-    if (props.order?.status === 'closed') return true;
-    if (isPaid.value && props.order?.type !== 'counter') return true;
-    if (!isPaid.value && !hasOpenShift.value) return true;
+    if (props.order?.status === 'closed' || props.order?.status === 'cancelled') return true;
+    if (canFinishDirectly.value) return false; // Sempre habilitado para finalizar!
+    if (!hasOpenShift.value) return true; // Caixa fechado e tem valor pendente
     return false;
 });
 
 const primaryActionLabel = computed(() => {
-    if (isPaid.value && props.order?.type === 'counter') return 'Finalizar Pedido';
+    if (canFinishDirectly.value) {
+        return props.order?.type === 'table' ? 'Finalizar Pedido' : 'Finalizar Pedido';
+    }
     if (!hasOpenShift.value && !isPaid.value) return 'Caixa Fechado';
     return 'Receber Conta';
 });
 
 const primaryActionSubtitle = computed(() => {
-    if (isPaid.value && props.order?.type === 'counter') return 'Entregar ao cliente';
+    if (canFinishDirectly.value) {
+        if (props.order?.type === 'table') return 'Liberar mesa e concluir';
+        if (props.order?.type === 'counter') return 'Entregar ao cliente';
+        return 'Concluir pedido';
+    }
     if (!hasOpenShift.value && !isPaid.value) return 'Abra o caixa para receber';
     return 'Ir para o caixa';
 });
 
 const primaryActionIcon = computed(() => {
-    if (isPaid.value && props.order?.type === 'counter') return 'pi pi-check-circle';
+    if (canFinishDirectly.value) return 'pi pi-check-circle';
     if (!hasOpenShift.value && !isPaid.value) return 'pi pi-lock';
     return 'pi pi-wallet';
 });
 
 const primaryActionColor = computed(() => {
-    if (isPaid.value && props.order?.type === 'counter') return 'text-success-500';
+    if (canFinishDirectly.value) return 'text-success-500';
     if (!hasOpenShift.value && !isPaid.value) return 'text-danger-500';
     return 'text-primary-500';
 });
 
 const isPrimaryAction = computed(() => {
-    if (!hasOpenShift.value && !isPaid.value) return false;
+    if (!hasOpenShift.value && !isPaid.value && !canFinishDirectly.value) return false;
     return true;
 });
 
 const handlePrimaryAction = () => {
+    if (canFinishDirectly.value) {
+        emit('action', 'finish_order', props.order);
+        return;
+    }
+
     if (!hasOpenShift.value && !isPaid.value) {
         toast.add({
             severity: 'warn',
@@ -203,11 +229,7 @@ const handlePrimaryAction = () => {
         return;
     }
 
-    if (isPaid.value && props.order?.type === 'counter') {
-        emit('action', 'finish_order', props.order);
-    } else {
-        emit('action', 'checkout', props.order);
-    }
+    emit('action', 'checkout', props.order);
 };
 
 const canChargePix = computed(() => {
@@ -215,6 +237,7 @@ const canChargePix = computed(() => {
         Boolean(companySettings.value.sicredi_is_active) &&
         companySettings.value.sicredi_enable_waiter_pix !== false &&
         !isPaid.value &&
+        !canFinishDirectly.value &&
         props.order?.status !== 'closed'
     );
 });

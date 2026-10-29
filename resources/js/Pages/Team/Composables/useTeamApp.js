@@ -83,6 +83,14 @@ export function useTeamApp() {
                 window.dispatchEvent(new CustomEvent('team-tab-changed', { detail: 'menu' }));
                 break;
             }
+                        case "finish_order":
+                router.post(route('operations.orders.update-status', order.id), {
+                    status: 'closed'
+                }, {
+                    preserveScroll: true,
+                    preserveState: true
+                });
+                break;
             case "checkout":
                 window.dispatchEvent(new CustomEvent('team-open-checkout', { detail: { orderId: order.id } }));
                 break;

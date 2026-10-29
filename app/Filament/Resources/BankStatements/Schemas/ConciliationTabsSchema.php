@@ -11,6 +11,7 @@ use App\Models\Transaction;
 use App\Models\Supplier;
 use App\Models\BankAccount;
 use App\Enums\AccountingCategory;
+use App\Enums\ConciliationType;
 use App\Filament\Resources\AccountPayables\Schemas\AccountPayableForm;
 use App\Filament\Resources\RecurringExpenses\Schemas\RecurringExpenseForm;
 use App\Services\Accounting\BankReconciliationService;
@@ -97,26 +98,21 @@ class ConciliationTabsSchema
 
             ToggleButtons::make('conciliation_type')
                 ->label('1. Qual é a natureza desta transação?')
-                ->options([
-                    'avulsa'        => 'Despesa Avulsa / Lote',
-                    'fixa'          => 'Conta Fixa (Recorrente)',
-                    'pessoal'       => 'Despesa Pessoal / Sócio',
-                    'transferencia' => 'Transferência / Pgto de Fatura',
-                ])
-                ->colors(['avulsa' => 'primary', 'fixa' => 'warning', 'pessoal' => 'info', 'transferencia' => 'success'])
-                ->icons(['avulsa' => 'heroicon-o-document-text', 'fixa' => 'heroicon-o-arrow-path', 'pessoal' => 'heroicon-o-user', 'transferencia' => 'heroicon-o-arrows-right-left'])
-                ->inline()->live()->required(),
+                ->options(ConciliationType::class)
+                ->inline()
+                ->live()
+                ->required(),
 
             ToggleButtons::make('action_mode')
                 ->label('2. O que deseja fazer?')
                 ->options(['link' => 'Vincular a um registo pendente', 'new' => 'Lançar como novo registo'])
                 ->icons(['link' => 'heroicon-o-link', 'new' => 'heroicon-o-plus-circle'])
                 ->inline()->live()->required()
-                ->visible(fn(Get $get) => filled($get('conciliation_type')) && $get('conciliation_type') !== 'transferencia'),
+                ->visible(fn(Get $get) => filled($get('conciliation_type')) && $get('conciliation_type') !== ConciliationType::TRANSFER->value),
 
             // SEÇÃO: VINCULAR PENDENTE
             Section::make("Vincular a Despesa/Lote/Romaneio Pendente")
-                ->visible(fn(Get $get) => $get('conciliation_type') === 'avulsa' && $get('action_mode') === 'link')
+                ->visible(fn(Get $get) => $get('conciliation_type') === ConciliationType::EXPENSE->value && $get('action_mode') === 'link')
                 ->schema([
                     Select::make("existing_payable_id")
                         ->hiddenLabel()->searchable()->placeholder("Busque por fornecedor, canhoto de romaneio ou valor...")
@@ -130,11 +126,11 @@ class ConciliationTabsSchema
                 ]),
 
             Section::make("Lançar Nova Despesa Operacional")
-                ->visible(fn(Get $get) => $get('conciliation_type') === 'avulsa' && $get('action_mode') === 'new')
+                ->visible(fn(Get $get) => $get('conciliation_type') === ConciliationType::EXPENSE->value && $get('action_mode') === 'new')
                 ->schema([ Group::make(AccountPayableForm::getFormSchema(true))->statePath('avulsa_new') ]),
 
             Section::make("Vincular a uma Conta Recorrente")
-                ->visible(fn(Get $get) => $get('conciliation_type') === 'fixa' && $get('action_mode') === 'link')
+                ->visible(fn(Get $get) => $get('conciliation_type') === ConciliationType::RECURRING->value && $get('action_mode') === 'link')
                 ->schema([
                     Select::make("existing_fixed_id")
                         ->hiddenLabel()->searchable()->placeholder("Selecione o Contrato / Assinatura")
@@ -142,11 +138,11 @@ class ConciliationTabsSchema
                 ]),
 
             Section::make("Cadastrar Nova Conta Recorrente")
-                ->visible(fn(Get $get) => $get('conciliation_type') === 'fixa' && $get('action_mode') === 'new')
+                ->visible(fn(Get $get) => $get('conciliation_type') === ConciliationType::RECURRING->value && $get('action_mode') === 'new')
                 ->schema([ Group::make(RecurringExpenseForm::getFormSchema(true))->statePath('fixa_new') ]),
 
             Section::make("Vincular a Despesa Pessoal Pendente")
-                ->visible(fn(Get $get) => $get('conciliation_type') === 'pessoal' && $get('action_mode') === 'link')
+                ->visible(fn(Get $get) => $get('conciliation_type') === ConciliationType::PERSONAL->value && $get('action_mode') === 'link')
                 ->schema([
                     Select::make("existing_personal_id")
                         ->hiddenLabel()->searchable()->placeholder("Busque pelas suas despesas pendentes...")
@@ -154,7 +150,7 @@ class ConciliationTabsSchema
                 ]),
 
             Section::make("Lançar Nova Despesa Pessoal")
-                ->visible(fn(Get $get) => $get('conciliation_type') === 'pessoal' && $get('action_mode') === 'new')
+                ->visible(fn(Get $get) => $get('conciliation_type') === ConciliationType::PERSONAL->value && $get('action_mode') === 'new')
                 ->schema([
                     Group::make([
                         Toggle::make('identify_supplier')->label('Deseja identificar o favorecido/sócio?')->live()->default(false)->hidden(fn(Get $get) => $get('is_supplier_locked')),
@@ -164,7 +160,7 @@ class ConciliationTabsSchema
                 ]),
 
             Section::make("Detalhes da Transferência")
-                ->visible(fn(Get $get) => $get('conciliation_type') === 'transferencia')
+                ->visible(fn(Get $get) => $get('conciliation_type') === ConciliationType::TRANSFER->value)
                 ->schema([
                     Group::make([
                         Select::make('target_account_id')
@@ -213,13 +209,13 @@ class ConciliationTabsSchema
         $category = null;
         $subcategory = null;
 
-        if ($type === 'transferencia') {
+        if (in_array($type, [ConciliationType::TRANSFER->value, 'transferencia'])) {
             $tData = $data['transfer_new'] ?? [];
             if (!empty($tData['target_account_id'])) {
                 $conciliable = BankAccount::find($tData['target_account_id']);
                 $description = $tData['description'] ?? "Transferência";
             }
-        } elseif ($type === 'avulsa') {
+        } elseif (in_array($type, [ConciliationType::EXPENSE->value, 'avulsa'])) {
             if ($mode === 'link' && !empty($data['existing_payable_id'])) {
                 $idRaw = $data["existing_payable_id"];
                 if (str_starts_with($idRaw, "batch_")) {
@@ -238,7 +234,7 @@ class ConciliationTabsSchema
                 $subcategory = $conciliable->accounting_subcategory;
                 $description = $conciliable->description;
             }
-        } elseif ($type === 'fixa') {
+        } elseif (in_array($type, [ConciliationType::RECURRING->value, 'fixa'])) {
             if ($mode === 'link' && !empty($data['existing_fixed_id'])) {
                 $fixed = RecurringExpense::find($data["existing_fixed_id"]);
                 $desc = $fixed->name . " (" . $statement->bank_date->format("M/Y") . ")";
@@ -267,7 +263,7 @@ class ConciliationTabsSchema
                 ]);
                 $supplierId = $fixed->supplier_id;
             }
-        } elseif ($type === 'pessoal') {
+        } elseif (in_array($type, [ConciliationType::PERSONAL->value, 'pessoal'])) {
             $category = AccountingCategory::PARTNERS->value;
             $subcategory = 'personal';
             if ($mode === 'link' && !empty($data['existing_personal_id'])) {
@@ -306,10 +302,22 @@ class ConciliationTabsSchema
 
         // 2. Memoriza Regra Futura (se selecionado)
         if (!empty($data['remember_future_rule']) && !empty($searchTerm)) {
+            $targetTypeEnum = match ($type) {
+                'transferencia', ConciliationType::TRANSFER->value => ConciliationType::TRANSFER,
+                'fixa', ConciliationType::RECURRING->value          => ConciliationType::RECURRING,
+                'pessoal', ConciliationType::PERSONAL->value        => ConciliationType::PERSONAL,
+                default                                            => ConciliationType::EXPENSE,
+            };
+
+            $targetAccId = ($targetTypeEnum === ConciliationType::TRANSFER && $conciliable instanceof BankAccount)
+                ? $conciliable->id
+                : null;
+
             BankReconciliationRule::updateOrCreate(
                 ['search_term' => $searchTerm],
                 [
-                    'target_type'            => $type,
+                    'target_type'            => $targetTypeEnum,
+                    'target_account_id'      => $targetAccId,
                     'supplier_id'            => $supplierId,
                     'accounting_category'    => $category,
                     'accounting_subcategory' => $subcategory,
@@ -349,7 +357,7 @@ class ConciliationTabsSchema
                 $simDesc = $description ?: ($simStmt->counterparty_name ?: $simStmt->description);
 
                 // CENÁRIO A: Pessoal / Sócios
-                if ($type === 'pessoal') {
+                if (in_array($type, [ConciliationType::PERSONAL->value, 'pessoal'])) {
                     $simPayable = AccountPayable::create([
                         "description"            => "Uso Pessoal: " . ($simStmt->counterparty_name ?: $simStmt->description),
                         "supplier_id"            => $supplierId,
@@ -362,7 +370,7 @@ class ConciliationTabsSchema
                     BankReconciliationService::finalize($simStmt, $simPayable, $supplierId, $simPayable->description);
                 }
                 // CENÁRIO B: Conta Fixa / Recorrente (Ex: Unifique, Aluguel)
-                elseif ($type === 'fixa') {
+                elseif (in_array($type, [ConciliationType::RECURRING->value, 'fixa'])) {
                     $fixedDesc = $simDesc . " (" . $simStmt->bank_date->format("M/Y") . ")";
                     $simPayable = AccountPayable::create([
                         "description"            => $fixedDesc,
@@ -375,7 +383,7 @@ class ConciliationTabsSchema
                     BankReconciliationService::finalize($simStmt, $simPayable, $supplierId, $fixedDesc);
                 }
                 // CENÁRIO C: Despesa Avulsa
-                elseif ($type === 'avulsa') {
+                elseif (in_array($type, [ConciliationType::EXPENSE->value, 'avulsa'])) {
                     $simPayable = AccountPayable::create([
                         "description"            => $simDesc,
                         "supplier_id"            => $supplierId,
@@ -387,7 +395,7 @@ class ConciliationTabsSchema
                     BankReconciliationService::finalize($simStmt, $simPayable, $supplierId, $simDesc);
                 }
                 // CENÁRIO D: Transferência / Pagamento de Fatura de Cartão
-                elseif ($type === 'transferencia' && $conciliable instanceof BankAccount) {
+                elseif (in_array($type, [ConciliationType::TRANSFER->value, 'transferencia']) && $conciliable instanceof BankAccount) {
                     $transfDesc = $description ?: ($simStmt->counterparty_name ?: "Transferência / Pgto de Fatura");
                     BankReconciliationService::finalize($simStmt, $conciliable, null, $transfDesc);
                 }

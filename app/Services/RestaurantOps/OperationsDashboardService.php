@@ -234,6 +234,18 @@ class OperationsDashboardService
                 if (true) {
                     $order->closed_at = now();
                 }
+
+                // 🚀 Libera a mesa automaticamente se não houver outros pedidos ativos nela
+                if ($order->type === 'table' && $order->dining_table_id) {
+                    $otherActive = Order::where('dining_table_id', $order->dining_table_id)
+                        ->where('id', '!=', $order->id)
+                        ->whereNotIn('status', ['closed', 'cancelled'])
+                        ->exists();
+
+                    if (!$otherActive) {
+                        DiningTable::where('id', $order->dining_table_id)->update(['status' => 'available']);
+                    }
+                }
             }
 
             $order->save();

@@ -82,9 +82,9 @@ class ImportOfxAction extends Action
                             $rawMemo = trim($mem[1] ?? "S/D");
 
                             $parsedData = $dictionary->parseMemo($rawMemo);
-                            $counterparty = empty($parsedData["name"])
-                                ? $account->name ?? "Desconhecido"
-                                : $parsedData["name"];
+                            $counterparty = !empty($parsedData["name"])
+                                ? $parsedData["name"]
+                                : null;
 
                             // 🛡️ A BARREIRA ANTIDUPLICAÇÃO: O firstOrCreate trava repetições baseadas no FITID!
                             $stmt = BankStatement::firstOrCreate(

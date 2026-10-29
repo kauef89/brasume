@@ -137,6 +137,14 @@ export function useControlPanel(initialOrders) {
     const handleMenuAction = (action, order) => {
         contextMenuVisible.value = false;
         switch (action) {
+                        case "finish_order":
+                router.post(route('operations.orders.update-status', order.id), {
+                    status: 'closed'
+                }, {
+                    preserveScroll: true,
+                    preserveState: true
+                });
+                break;
             case "checkout":
                 router.visit(route('operations.checkout', order.id));
                 break;

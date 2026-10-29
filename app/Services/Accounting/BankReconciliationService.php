@@ -76,7 +76,7 @@ class BankReconciliationService
             }
             // 6. 🚀 Transferência Entre Contas / Pagamento de Fatura (Gera a contrapartida na conta destino)
             elseif ($conciliable instanceof \App\Models\BankAccount) {
-                $counterpartType = $lockedStatement->type === 'out' ? 'in' : 'out';
+                $counterpartType = in_array(strtolower($lockedStatement->type), ['out', 'debit']) || (float)$lockedStatement->amount < 0 ? 'in' : 'out';
                 $originAccountName = $lockedStatement->bankAccount?->name ?? 'Conta Bancária';
                 
                 \App\Models\Transaction::create([
