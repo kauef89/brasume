@@ -267,99 +267,160 @@ class InvoiceImportService
         });
     }
 
-    protected function generateFinancial(array $data): void
+        protected function generateFinancial(array $data): void
     {
-        $supplier = Supplier::find($data['supplier_id']);
+        $supplier = !empty($data['supplier_id']) ? \App\Models\Supplier::find($data['supplier_id']) : null;
         $supplierName = $supplier ? ($supplier->trade_name ?: $supplier->name) : 'Fornecedor';
-        $installments = $data['xml_installments'] ?? [];
+        $category = $supplier?->accounting_category ?? (class_exists(\App\Enums\AccountingCategory::class) ? \App\Enums\AccountingCategory::INGREDIENTS->value : 'ingredients');
+        $subcategory = $supplier?->accounting_subcategory;
 
-        if (count($installments) > 0) {
-            foreach ($installments as $dup) {
-                AccountPayable::create([
-                    'nfe_key' => $data['invoice_key'],
-                    'supplier_id' => $data['supplier_id'],
-                    'supplier_name' => $supplierName,
-                    'description' => "Invoice #{$data['invoice_key']} - Parc {$dup['number']}",
-                    'amount' => $dup['amount'],
-                    'installment' => $dup['number'],
-                    'due_date' => $dup['due_date'],
-                    'status' => 'pending',
+        // 🚀 A MÁGICA DO FATIAMENTO: Busca o total pessoal já salvo no banco
+        $personalTotal = \App\Models\PersonalPurchase::where('nfe_key', $data['invoice_key'])->sum('total_cost');
+        $xmlTotalAmount = (float) $data['xml_total_amount'];
+
+        if ($xmlTotalAmount <= 0) $xmlTotalAmount = 1; // Previne divisão por zero
+        $personalRatio = min(1.0, $personalTotal / $xmlTotalAmount);
+
+        $installments = $data['xml_installments'] ?? [];
+        if (empty($installments)) {
+            $installments[] = ['number' => '1/1', 'due_date' => now()->toDateString(), 'amount' => $xmlTotalAmount];
+        }
+
+        foreach ($installments as $dup) {
+            $installmentAmount = (float) $dup['amount'];
+            $personalAmount = round($installmentAmount * $personalRatio, 2);
+            $operationalAmount = $installmentAmount - $personalAmount;
+
+            if ($operationalAmount > 0) {
+                \App\Models\AccountPayable::create([
+                    'nfe_key'                => $data['invoice_key'],
+                    'supplier_id'            => $data['supplier_id'],
+                    'supplier_name'          => $supplierName,
+                    'description'            => "Nota #{$data['invoice_key']} - Parc {$dup['number']}" . ($personalAmount > 0 ? " (Operacional)" : ""),
+                    'amount'                 => $operationalAmount,
+                    'installment'            => $dup['number'],
+                    'due_date'               => $dup['due_date'],
+                    'status'                 => 'pending',
+                    'accounting_category'    => $category,
+                    'accounting_subcategory' => $subcategory,
+                    'is_personal'            => false,
                 ]);
             }
-        } else {
-            AccountPayable::create([
-                'nfe_key' => $data['invoice_key'],
-                'supplier_id' => $data['supplier_id'],
-                'supplier_name' => $supplierName,
-                'description' => "Pagamento Único - Nota #{$data['invoice_key']}",
-                'amount' => $data['xml_total_amount'],
-                'installment' => '1/1',
-                'due_date' => now()->toDateString(),
-                'status' => 'pending',
-            ]);
+
+            if ($personalAmount > 0) {
+                \App\Models\AccountPayable::create([
+                    'nfe_key'                => $data['invoice_key'],
+                    'supplier_id'            => $data['supplier_id'],
+                    'supplier_name'          => $supplierName,
+                    'description'            => "Nota #{$data['invoice_key']} - Parc {$dup['number']} (Uso Pessoal)",
+                    'amount'                 => $personalAmount,
+                    'installment'            => $dup['number'],
+                    'due_date'               => $dup['due_date'],
+                    'status'                 => 'pending',
+                    'accounting_category'    => 'partners',
+                    'accounting_subcategory' => 'personal',
+                    'is_personal'            => true,
+                ]);
+            }
         }
     }
-
-    public function attemptAutoApproval(ReceivedInvoice $invoice): void
+public function attemptAutoApproval(ReceivedInvoice $invoice): bool
     {
         $data = $this->extractDataFromXml($invoice->xml_content, $invoice->id);
-
-        if (empty($data['xml_items']) || empty($data['supplier_id'])) {
-            return;
-        }
+        if (empty($data['xml_items']) || empty($data['supplier_id'])) return false;
 
         $supplier = Supplier::find($data['supplier_id']);
-        if (!$supplier || !$supplier->is_trusted) {
-            return;
-        }
+        if (!$supplier || !$supplier->is_trusted) return false;
 
-        $processor = app(InvoiceItemProcessor::class);
-        $allProcessed = true;
+        $familyIds = !empty($supplier->family_ids) ? $supplier->family_ids : [$supplier->id];
+        $itemsToProcess = [];
 
-        foreach ($data['xml_items'] as $index => $item) {
-            $rule = ProductCostHistory::where('supplier_id', $data['supplier_id'])
+        foreach ($data['xml_items'] as $item) {
+            $xmlUom = strtoupper(preg_replace('/[^A-Za-z]/', '', $item['xml_uom']));
+
+            $stockRule = ProductCostHistory::whereIn('supplier_id', $familyIds)
                 ->where('xml_name', $item['xml_name'])
                 ->where('auto_approve', true)
                 ->latest('id')
                 ->first();
 
-            if ($rule) {
-                $xmlUom = strtoupper(preg_replace('/[^A-Za-z]/', '', $item['xml_uom']));
-                $ruleUom = strtoupper(preg_replace('/[^A-Za-z]/', '', $rule->original_unit_of_measure ?? ''));
-
-                if ($xmlUom === $ruleUom) {
-                    $item['product_id'] = $rule->product_id;
-                    $item['conversion_factor'] = $rule->conversion_factor;
-                    $item['destination_type'] = 'stock';
-                    $item['is_personal'] = false;
-
-                    $processor->processDirectItem($item, $data['invoice_key'], $data['supplier_id'], true);
-                    continue;
-                }
+            if ($stockRule && $this->areUnitsCompatible($xmlUom, $stockRule->original_unit_of_measure)) {
+                $itemsToProcess[] = [
+                    'product_id'        => $stockRule->product_id,
+                    'conversion_factor' => (float) $stockRule->conversion_factor,
+                    'destination_type'  => 'stock',
+                    'is_personal'       => false,
+                    'item'              => $item,
+                ];
+                continue;
             }
 
-            $personalRule = PersonalPurchase::where('supplier_id', $data['supplier_id'])
+            $personalRule = PersonalPurchase::whereIn('supplier_id', $familyIds)
                 ->where('xml_name', $item['xml_name'])
                 ->where('auto_approve', true)
                 ->latest('id')
                 ->first();
 
             if ($personalRule) {
-                $item['destination_type'] = 'personal';
-                $item['is_personal'] = true;
-                $item['product_id'] = null;
-
-                $processor->processDirectItem($item, $data['invoice_key'], $data['supplier_id'], true);
+                $itemsToProcess[] = [
+                    'product_id'        => null,
+                    'conversion_factor' => 1.0,
+                    'destination_type'  => 'personal',
+                    'is_personal'       => true,
+                    'item'              => $item,
+                ];
                 continue;
             }
 
-            $allProcessed = false;
+            \Illuminate\Support\Facades\Log::info("⏸️ [Auto-Aprovação Pendente] NF-e {$invoice->nfe_key}: O item '{$item['xml_name']}' requer conferência.");
+            return false;
         }
 
-        if ($allProcessed) {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($itemsToProcess, $data, $invoice, $supplier) {
+            $processor = app(InvoiceItemProcessor::class);
+            foreach ($itemsToProcess as $p) {
+                $payload = array_merge($p['item'], [
+                    'product_id'        => $p['product_id'],
+                    'conversion_factor' => $p['conversion_factor'],
+                    'destination_type'  => $p['destination_type'],
+                    'is_personal'       => $p['is_personal'],
+                ]);
+                $processor->processDirectItem($payload, $data['invoice_key'], $data['supplier_id'], true);
+            }
             unset($data['xml_items']);
             $this->finalizeInvoice($data);
-            \Illuminate\Support\Facades\Log::info("🚀 [Auto-Importação] NF-e {$invoice->nfe_key} do Fornecedor Confiável '{$supplier->name}' finalizada e estocada automaticamente sem intervenção humana!");
-        }
+            \Illuminate\Support\Facades\Log::info("🚀 [Auto-Importação] NF-e {$invoice->nfe_key} finalizada automaticamente!");
+        });
+
+        return true;
     }
+
+    private function areUnitsCompatible(?string $uomA, ?string $uomB): bool
+    {
+        $cleanA = strtoupper(preg_replace('/[^A-Za-z]/', '', (string) $uomA));
+        $cleanB = strtoupper(preg_replace('/[^A-Za-z]/', '', (string) $uomB));
+        if ($cleanA === $cleanB) return true;
+        $synonyms = [
+            'UN'  => ['UN', 'UND', 'UNID', 'PC', 'PCA'],
+            'KG'  => ['KG', 'KIL', 'KILO', 'QUILO'],
+            'LT'  => ['L', 'LT', 'LIT', 'LITRO'],
+            'CX'  => ['CX', 'CXA', 'CAIXA'],
+            'PCT' => ['PC', 'PCT', 'PACOTE'],
+        ];
+        foreach ($synonyms as $group) {
+            if (in_array($cleanA, $group) && in_array($cleanB, $group)) return true;
+        }
+        return false;
+    }
+    public function isReadyToFinalize(ReceivedInvoice $invoice): bool
+    {
+        if ($invoice->status !== 'ready' || !$invoice->has_full_xml || empty($invoice->xml_content)) return false;
+        $hasHistory = \App\Models\ProductCostHistory::where('nfe_key', $invoice->nfe_key)->exists()
+            || \App\Models\PersonalPurchase::where('nfe_key', $invoice->nfe_key)->exists()
+            || \App\Models\CompanyAsset::where('nfe_key', $invoice->nfe_key)->exists();
+        if (!$hasHistory) return false;
+        $data = $this->extractDataFromXml($invoice->xml_content, $invoice->id);
+        return !empty($data) && empty($data['xml_items']) && !empty($data['supplier_id']);
+    }
+
 }

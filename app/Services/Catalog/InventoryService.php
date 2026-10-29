@@ -45,24 +45,26 @@ class InventoryService
         }
     }
 
-    private function addToStorageLocations(Product $product, float $qtyToAdd): void
+    private function addToStorageLocations(Product $product, float $qtyToAdd): ?int
     {
         // 🚀 OTIMIZAÇÃO: Evita a query de verificação caso não tenha localizações
         if (!$product->relationLoaded('storageLocations') && DB::table('product_storage_location')->where('product_id', $product->id)->count() === 0) {
-            return;
+            return null;
         }
 
         $locations = $product->storageLocations()
             ->orderByRaw("FIELD(type, 'storage', 'intermediate', 'display')")
             ->get();
 
-        if ($locations->isEmpty()) return;
+        if ($locations->isEmpty()) return null;
 
         $targetLoc = $locations->first();
         $currentLocal = (float) $targetLoc->pivot->current_stock;
         $product->storageLocations()->updateExistingPivot($targetLoc->id, [
             'current_stock' => $currentLocal + $qtyToAdd
         ]);
+
+        return (int) $targetLoc->id;
     }
 
     /**
@@ -93,18 +95,47 @@ class InventoryService
         ]);
     }
 
-    public function addStock(Product $product, float $quantity, string $origin = 'compra', $originModel = null): void
+    public function addStock(Product $product, float $quantity, string $origin = 'compra', $originModel = null, ?int $locationId = null): void
     {
         if ($quantity <= 0) return;
 
-        DB::transaction(function () use ($product, $quantity, $origin, $originModel) {
+        DB::transaction(function () use ($product, $quantity, $origin, $originModel, $locationId) {
             $wasOutOfStock = $product->status === 'out_of_stock' || (float) $product->current_stock <= 0;
             $newStock = (float) $product->current_stock + $quantity;
 
-            $this->logMovement($product, 'in', $quantity, $newStock, "Entrada via {$origin}", $originModel);
+            $resolvedLocationId = $locationId;
+            if ($resolvedLocationId) {
+                $pivot = DB::table('product_storage_location')
+                    ->where('product_id', $product->id)
+                    ->where('storage_location_id', $resolvedLocationId)
+                    ->first();
+
+                if ($pivot) {
+                    DB::table('product_storage_location')
+                        ->where('id', $pivot->id)
+                        ->update([
+                            'current_stock' => (float) $pivot->current_stock + $quantity,
+                            'updated_at'    => now(),
+                        ]);
+                } else {
+                    DB::table('product_storage_location')->insert([
+                        'product_id'          => $product->id,
+                        'storage_location_id' => $resolvedLocationId,
+                        'source_location_id'  => null,
+                        'max_capacity'        => 100,
+                        'current_stock'       => $quantity,
+                        'restock_threshold'   => 10,
+                        'created_at'          => now(),
+                        'updated_at'          => now(),
+                    ]);
+                }
+            } else {
+                $resolvedLocationId = $this->addToStorageLocations($product, $quantity);
+            }
+
+            $this->logMovement($product, 'in', $quantity, $newStock, "Entrada via {$origin}", $originModel, $resolvedLocationId);
 
             $product->update(['current_stock' => $newStock]);
-            $this->addToStorageLocations($product, $quantity);
 
             if ($wasOutOfStock && $newStock > 0 && $product->status !== 'paused' && $product->status !== 'archived') {
                 $this->triggerStockRestored($product);

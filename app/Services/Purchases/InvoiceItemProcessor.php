@@ -14,6 +14,73 @@ use InvalidArgumentException;
 
 class InvoiceItemProcessor
 {
+    public function resolveStorageLocationForProcurement(Product $product): ?int
+    {
+        if (!$product->track_inventory) {
+            return null;
+        }
+
+        $locations = DB::table('product_storage_location as psl')
+            ->join('storage_locations as sl', 'sl.id', '=', 'psl.storage_location_id')
+            ->where('psl.product_id', $product->id)
+            ->whereNull('sl.deleted_at')
+            ->where('sl.is_active', 1)
+            ->select('psl.*', 'sl.type as location_type')
+            ->get();
+
+        $storageLoc = $locations->firstWhere('location_type', 'storage');
+        $displayLoc = $locations->firstWhere('location_type', 'display');
+
+        // 🚀 CENÁRIO 1: Possui Armazenamento e Exposição -> Vai 100% para o Armazenamento
+        if ($storageLoc && $displayLoc) {
+            return (int) $storageLoc->storage_location_id;
+        }
+
+        // CENÁRIO 2: Possui apenas local de armazenamento
+        if ($storageLoc) {
+            return (int) $storageLoc->storage_location_id;
+        }
+
+        // CENÁRIO 3: Possui apenas exposição com local de reposição de origem (source_location_id)
+        if ($displayLoc && !empty($displayLoc->source_location_id)) {
+            $sourceId = (int) $displayLoc->source_location_id;
+            DB::table('product_storage_location')->updateOrInsert(
+                ['product_id' => $product->id, 'storage_location_id' => $sourceId],
+                ['updated_at' => now()]
+            );
+            return $sourceId;
+        }
+
+        // CENÁRIO 4: Revenda sem storage explícito -> Vincula ao Estoque de Armazenamento padrão (ex: Seco 1)
+        $isResale = $product->type === 'resale' || (class_exists(\App\Enums\ProductType::class) && $product->type === \App\Enums\ProductType::RESALE->value);
+        if ($isResale) {
+            $defaultStorage = DB::table('storage_locations')
+                ->where('type', 'storage')
+                ->where('is_active', 1)
+                ->whereNull('deleted_at')
+                ->orderBy('sort_order')
+                ->first();
+
+            if ($defaultStorage) {
+                DB::table('product_storage_location')->updateOrInsert(
+                    ['product_id' => $product->id, 'storage_location_id' => $defaultStorage->id],
+                    ['updated_at' => now()]
+                );
+
+                if ($displayLoc && empty($displayLoc->source_location_id)) {
+                    DB::table('product_storage_location')
+                        ->where('product_id', $product->id)
+                        ->where('storage_location_id', $displayLoc->storage_location_id)
+                        ->update(['source_location_id' => $defaultStorage->id, 'updated_at' => now()]);
+                }
+
+                return (int) $defaultStorage->id;
+            }
+        }
+
+        return $locations->isNotEmpty() ? (int) $locations->first()->storage_location_id : null;
+    }
+
     public function calculateSmartConversion(?int $productId, ?int $supplierId, ?string $currentXmlName, ?string $xmlUomRaw): array
     {
         $result = [
@@ -141,7 +208,7 @@ class InvoiceItemProcessor
                     $delta = round($actualQty - $receiptQty, 4);
 
                     if ($delta > 0) {
-                        $inventoryService->addStock($product->fresh(), $delta, 'nfe_reconcile_surplus');
+                        $targetLocationId = $this->resolveStorageLocationForProcurement($product); $inventoryService->addStock($product->fresh(), $delta, 'nfe_reconcile_surplus', null, $targetLocationId);
                     } elseif ($delta < 0) {
                         $inventoryService->deductStock($product->fresh(), abs($delta));
                     }
@@ -164,7 +231,8 @@ class InvoiceItemProcessor
                     }
                 }
             } else {
-                $inventoryService->addStock($product->fresh(), $actualQty, 'nfe_import');
+                $targetLocationId = $this->resolveStorageLocationForProcurement($product);
+            $inventoryService->addStock($product->fresh(), $actualQty, 'nfe_import', null, $targetLocationId);
             }
         }
 

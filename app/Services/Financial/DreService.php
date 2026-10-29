@@ -23,10 +23,20 @@ class DreService
     public function calculate(): array
     {
         // 1. RECEITA OPERACIONAL BRUTA
-        $grossRevenue = (float) Order::query()
+        $currentRevenue = (float) Order::query()
             ->whereBetween('created_at', [$this->startDate->startOfDay(), $this->endDate->endOfDay()])
             ->whereNotIn('status', ['cancelled', 'canceled', 'rejected', 'draft'])
             ->sum('total');
+
+        $legacyRevenue = 0.0;
+        if (class_exists(\App\Models\LegacyOrder::class)) {
+            $legacyRevenue = (float) \App\Models\LegacyOrder::query()
+                ->whereBetween('created_at', [$this->startDate->startOfDay(), $this->endDate->endOfDay()])
+                ->whereNotIn('status', ['cancelled', 'canceled', 'rejected', 'draft', 'trash', 'failed', 'refunded'])
+                ->sum('total_value');
+        }
+
+        $grossRevenue = $currentRevenue + $legacyRevenue;
 
         // 2. DEDUÇÕES DA RECEITA BRUTA (Tributos Diretos e Taxas de Cartão)
         $taxesAmount = $this->getPayablesSum(categories: [AccountingCategory::ADMINISTRATIVE->value], subcategories: ['taxes', 'impostos']);

@@ -129,6 +129,27 @@ class ReceivedInvoicesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    BulkAction::make("finalizar_lote")
+                        ->label("Finalizar Selecionadas")
+                        ->icon("heroicon-m-check-badge")
+                        ->color("success")
+                        ->requiresConfirmation()
+                        ->modalHeading("Finalizar Notas Selecionadas")
+                        ->modalDescription("Isso finalizará todas as notas selecionadas que já estiverem com 100% dos itens estocados, gerando o Contas a Pagar.")
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
+                            $service = app(\App\Services\Purchases\InvoiceImportService::class);
+                            $count = 0;
+                            foreach ($records as $record) {
+                                if ($service->isReadyToFinalize($record)) {
+                                    $data = $service->extractDataFromXml($record->xml_content, $record->id);
+                                    $service->finalizeInvoice($data);
+                                    $count++;
+                                }
+                            }
+                            \Filament\Notifications\Notification::make()->title("{$count} nota(s) finalizada(s)!")->success()->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
+
                     BulkAction::make("manifestar_lote")
                         ->label("Dar Ciência nas Selecionadas")
                         ->icon("heroicon-m-check-badge")
@@ -312,15 +333,36 @@ class ReceivedInvoicesTable
                         }
                     }),
 
-                    Action::make("processar")
-                                        ->label("Importar")
-                                        ->icon("heroicon-o-arrow-down-on-square-stack")
-                                        ->iconButton()
-                                        ->tooltip('Processar nota')
-                                        ->color("success")
-                                        // 🚀 Só mostra se for 'ready'. Ignora 'returned', 'return_receipt', etc.
-                                        ->visible(fn($record) => $record->status === "ready" && $record->has_full_xml)
-                                        ->action(fn($record) => redirect()->to(ImportInvoice::getUrl(["invoice" => $record->id]))),
+                    Action::make("finalizar_direto")
+                    ->label("Finalizar")
+                    ->icon("heroicon-m-check-badge")
+                    ->iconButton()
+                    ->tooltip("Finalizar Entrada (Itens 100% estocados)")
+                    ->color("success")
+                    ->visible(fn($record) => $record->status === "ready" && $record->has_full_xml && app(\App\Services\Purchases\InvoiceImportService::class)->isReadyToFinalize($record))
+                    ->requiresConfirmation()
+                    ->modalHeading("Finalizar Entrada da Nota Fiscal")
+                    ->modalDescription(fn($record) => "Todos os itens da nota (" . $record->emitter_name . ") já estão integrados ao estoque. Deseja gerar o Contas a Pagar e finalizar?")
+                    ->modalSubmitActionLabel("Finalizar Nota")
+                    ->action(function ($record) {
+                        try {
+                            $service = app(\App\Services\Purchases\InvoiceImportService::class);
+                            $data = $service->extractDataFromXml($record->xml_content, $record->id);
+                            $service->finalizeInvoice($data);
+                            \Filament\Notifications\Notification::make()->title("Nota Finalizada com Sucesso!")->body("Estoque atualizado e fatura gerada no Contas a Pagar.")->success()->send();
+                        } catch (\Throwable $e) {
+                            \Filament\Notifications\Notification::make()->title("Erro ao Finalizar")->body($e->getMessage())->danger()->send();
+                        }
+                    }),
+
+                Action::make("processar")
+                    ->label("Importar")
+                    ->icon("heroicon-o-arrow-down-on-square-stack")
+                    ->iconButton()
+                    ->tooltip("Processar nota (Itens pendentes)")
+                    ->color("gray")
+                    ->visible(fn($record) => $record->status === "ready" && $record->has_full_xml && ! app(\App\Services\Purchases\InvoiceImportService::class)->isReadyToFinalize($record))
+                    ->action(fn($record) => redirect()->to(ImportInvoice::getUrl(["invoice" => $record->id]))),
 
                 ViewDanfeAction::make(),
                 Action::make("download_xml")

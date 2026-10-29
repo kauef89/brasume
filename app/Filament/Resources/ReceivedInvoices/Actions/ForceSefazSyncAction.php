@@ -44,20 +44,22 @@ class ForceSefazSyncAction extends Action
             $tenantId = tenant('id');
 
             if ($tenantId) {
-                \App\Jobs\SyncTenantSefazJob::dispatch($tenantId);
+                try {
+                    // Executa sincronamente forçando o bypass de cooldown
+                    \App\Jobs\SyncTenantSefazJob::dispatchSync($tenantId, true);
 
-                Notification::make()
-                    ->title("Sincronização Iniciada")
-                    ->body("A varredura está acontecendo nos bastidores. Se houver novas notas, elas aparecerão aqui na tabela em breve.")
-                    ->success()
-                    ->send();
-            }
-
-            $setting = CompanySetting::first();
-            if ($setting) {
-                // 🚀 CORREÇÃO: Marca apenas a coluna de Sefaz, não afeta o update geral
-                $setting->sefaz_last_sync_at = now();
-                $setting->saveQuietly();
+                    Notification::make()
+                        ->title("Sincronização Concluída!")
+                        ->body("A consulta na SEFAZ foi finalizada. As novas notas foram importadas para a tabela.")
+                        ->success()
+                        ->send();
+                } catch (\Throwable $e) {
+                    Notification::make()
+                        ->title("Erro na Sincronização SEFAZ")
+                        ->body($e->getMessage())
+                        ->danger()
+                        ->send();
+                }
             }
 
             $livewire->dispatch('$refresh');
