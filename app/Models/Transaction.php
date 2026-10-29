@@ -54,4 +54,9 @@ class Transaction extends Model
     {
         return $this->belongsTo(CashShift::class);
     }
+
+    public function employee(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Employee::class);
+    }
 }
