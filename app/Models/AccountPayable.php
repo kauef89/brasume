@@ -80,4 +80,9 @@ class AccountPayable extends Model
     {
         return $this->hasOne(EmployeeSchedule::class, 'payable_id');
     }
+
+    public function transaction()
+    {
+        return $this->belongsTo(Transaction::class);
+    }
 }

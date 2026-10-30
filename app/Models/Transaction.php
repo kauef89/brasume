@@ -59,4 +59,14 @@ class Transaction extends Model
     {
         return $this->belongsTo(\App\Models\Employee::class);
     }
+
+    public function accountPayable()
+    {
+        return $this->hasOne(AccountPayable::class);
+    }
+
+    public function accountReceivable()
+    {
+        return $this->hasOne(AccountReceivable::class);
+    }
 }

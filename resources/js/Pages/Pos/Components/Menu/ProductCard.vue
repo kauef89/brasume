@@ -21,7 +21,7 @@
                 <i class="pi pi-image text-4xl"></i>
             </div>
 
-            <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/55 to-transparent z-[1] pointer-events-none"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/65 to-transparent z-[1] pointer-events-none"></div>
 
             <div v-if="product?.promo_price > 0" class="relative z-10 flex items-start justify-end gap-2 w-full">
                 <span class="bg-warning-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md shadow-sm">
@@ -30,7 +30,8 @@
             </div>
 
             <div class="relative z-10 mt-auto flex flex-col gap-1 w-full">
-                <h3 class="font-black text-sm text-white line-clamp-1 leading-tight drop-shadow-sm">
+                <!-- Nome completo sem truncamento -->
+                <h3 class="font-black text-sm text-white leading-tight drop-shadow-sm break-words">
                     {{ product?.name }}
                 </h3>
 
@@ -67,7 +68,8 @@
             </div>
 
             <div class="flex flex-col flex-1 min-w-0 w-full justify-center py-1">
-                <h3 class="font-medium text-sm text-surface-text w-full line-clamp-1">
+                <!-- Nome completo sem truncamento -->
+                <h3 class="font-medium text-sm text-surface-text w-full leading-snug break-words">
                     {{ product?.name }}
                 </h3>
 
