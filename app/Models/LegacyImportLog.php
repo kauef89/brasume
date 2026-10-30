@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 class LegacyImportLog extends Model
 {
     // 🚀 Avisa o Laravel qual é o nome exato da tabela no banco!
-    protected $table = "legacy_imports_log";
+    protected $table = "legacy_import_logs";
 
     protected $guarded = [];
 }

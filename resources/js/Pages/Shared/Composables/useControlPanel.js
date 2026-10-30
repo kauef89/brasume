@@ -99,7 +99,7 @@ export function useControlPanel(initialOrders) {
         const queryNum = queryStr.replace(/\D/g, '');
 
         return initialOrders.value.filter((o) => {
-            const isActive = !["closed", "cancelled", "completed", "delivered"].includes(o.status);
+            const isActive = !["closed", "cancelled", "completed"].includes(o.status);
             return isActive && orderMatchesSearch(o, queryStr, queryNum);
         });
     });
@@ -122,7 +122,7 @@ export function useControlPanel(initialOrders) {
 
         return initialOrders.value
             .filter((o) => {
-                const isClosedOrCancelled = ["closed", "cancelled", "completed", "delivered"].includes(o.status);
+                const isClosedOrCancelled = ["closed", "cancelled", "completed"].includes(o.status);
                 return isClosedOrCancelled && orderMatchesSearch(o, queryStr, queryNum);
             })
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));

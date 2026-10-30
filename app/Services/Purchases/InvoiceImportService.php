@@ -262,7 +262,10 @@ class InvoiceImportService
             }
 
             if (!empty($formData['received_invoice_id'])) {
-                ReceivedInvoice::where('id', $formData['received_invoice_id'])->update(['status' => 'processed']);
+                ReceivedInvoice::where('id', $formData['received_invoice_id'])->update([
+                    'status' => 'processed',
+                    'supplier_id' => $formData['supplier_id'] ?? null
+                ]);
             }
         });
     }

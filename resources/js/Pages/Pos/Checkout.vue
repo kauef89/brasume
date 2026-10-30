@@ -275,7 +275,7 @@ watch(
             : (Array.isArray(paymentsList) ? paymentsList.filter(p => p.status !== 'cancelled').reduce((acc, p) => acc + Number(p.amount || 0), 0) : 0);
 
         const isFullyPaid = payStatus === 'paid' || (calcPaid >= orderTotal - 0.05 && orderTotal > 0);
-        const isClosedOrFinal = ['closed', 'completed', 'delivered'].includes(orderStatus);
+        const isClosedOrFinal = ['closed', 'completed'].includes(orderStatus);
 
         if (isClosedOrFinal || isFullyPaid) {
             isPostPaymentPhase.value = true;

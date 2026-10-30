@@ -25,7 +25,7 @@ class PosCheckoutService
      */
     protected function assertOrderCanBeMutated(Order $order, bool $allowIfPaid = false): void
     {
-        $isClosed = in_array($order->status, ['closed', 'cancelled', 'completed', 'delivered', 'merged', 'transferred'], true);
+        $isClosed = in_array($order->status, ['closed', 'cancelled', 'completed', 'merged', 'transferred'], true);
         if ($isClosed) {
             throw new \Exception("Ação Recusada: O Pedido #{$order->id} já se encontra finalizado, cancelado ou transferido.");
         }

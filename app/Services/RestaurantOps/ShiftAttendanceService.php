@@ -166,7 +166,7 @@ class ShiftAttendanceService
         if ($missingIds->isNotEmpty()) {
             foreach ($missingIds as $missingId) {
                 $shift->attendees()->updateExistingPivot($missingId, [
-                    'status'         => 'inactive',
+                    'status'         => 'completed',
                     'checked_out_at' => now()
                 ]);
             }

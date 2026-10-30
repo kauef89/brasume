@@ -66,7 +66,7 @@ class CashShift extends Model
      */
     public function attendees(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'shift_attendance')
+        return $this->belongsToMany(User::class, 'shift_attendances')
                     ->withPivot(
                         'checked_in_at',
                         'checked_out_at',

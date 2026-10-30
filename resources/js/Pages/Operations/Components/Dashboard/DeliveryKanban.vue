@@ -74,7 +74,7 @@ const columnsData = ref({
 
 // Normaliza status para a coluna correspondente
 const getColumnForStatus = (status) => {
-    if (status === 'pending' || status === 'pending_payment') return 'pending';
+    if (status === 'pending' || status === 'pending_payment') return 'pending'; if (status === 'delivered') return 'dispatched';
     return status;
 };
 

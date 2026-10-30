@@ -93,7 +93,7 @@ class User extends Authenticatable implements HasTenants, FilamentUser
 
     public function attendedShifts(): BelongsToMany
     {
-        return $this->belongsToMany(CashShift::class, 'shift_attendance')
+        return $this->belongsToMany(CashShift::class, 'shift_attendances')
                     ->withPivot(
                         'checked_in_at',
                         'checked_out_at',

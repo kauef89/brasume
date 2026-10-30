@@ -34,7 +34,7 @@ class MigrateLegacyTenant extends Command
         // Tabelas na ordem correta de dependência (chaves estrangeiras)
         $tables = [
             'users', 'bank_accounts', 'categories', 'products', 'modifier_groups',
-            'modifier_options', 'product_modifier', 'dining_tables', 'customers',
+            'modifier_options', 'product_modifiers', 'dining_tables', 'customers',
             'addresses', 'orders', 'order_items', 'order_item_modifiers',
             'order_payments', 'company_settings', 'recurring_expenses',
             'account_payables', 'account_receivables', 'transactions', 'bank_statements'

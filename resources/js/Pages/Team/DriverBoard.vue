@@ -64,7 +64,7 @@
 
                             <button
                                 v-if="order.status === 'dispatched'"
-                                @click="updateStatus(order.id, 'closed')"
+                                @click="updateStatus(order.id, 'delivered')"
                                 type="button"
                                 class="flex-1 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer shadow-sm active:scale-98"
                             >
@@ -188,7 +188,7 @@ const myDeliveries = computed(() => {
         o.type === 'delivery' &&
         Number(o.driver_id) === Number(userId) &&
         o.status !== 'closed' &&
-        o.status !== 'cancelled'
+        o.status !== 'cancelled' && o.status !== 'delivered'
     );
 });
 
@@ -225,7 +225,7 @@ const updateStatus = (orderId, status) => {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
-            if (status === 'closed') {
+            if (status === 'delivered') {
                 toast.add({ severity: 'success', summary: 'Entrega Concluída', detail: `Pedido #${orderId} finalizado com sucesso!`, life: 3000 });
             } else if (status === 'dispatched') {
                 toast.add({ severity: 'info', summary: 'Em Rota', detail: `Pedido #${orderId} marcado como em rota de entrega.`, life: 3000 });

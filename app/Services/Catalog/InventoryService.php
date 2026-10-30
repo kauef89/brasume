@@ -48,7 +48,7 @@ class InventoryService
     private function addToStorageLocations(Product $product, float $qtyToAdd): ?int
     {
         // 🚀 OTIMIZAÇÃO: Evita a query de verificação caso não tenha localizações
-        if (!$product->relationLoaded('storageLocations') && DB::table('product_storage_location')->where('product_id', $product->id)->count() === 0) {
+        if (!$product->relationLoaded('storageLocations') && DB::table('product_storage_locations')->where('product_id', $product->id)->count() === 0) {
             return null;
         }
 
@@ -105,20 +105,20 @@ class InventoryService
 
             $resolvedLocationId = $locationId;
             if ($resolvedLocationId) {
-                $pivot = DB::table('product_storage_location')
+                $pivot = DB::table('product_storage_locations')
                     ->where('product_id', $product->id)
                     ->where('storage_location_id', $resolvedLocationId)
                     ->first();
 
                 if ($pivot) {
-                    DB::table('product_storage_location')
+                    DB::table('product_storage_locations')
                         ->where('id', $pivot->id)
                         ->update([
                             'current_stock' => (float) $pivot->current_stock + $quantity,
                             'updated_at'    => now(),
                         ]);
                 } else {
-                    DB::table('product_storage_location')->insert([
+                    DB::table('product_storage_locations')->insert([
                         'product_id'          => $product->id,
                         'storage_location_id' => $resolvedLocationId,
                         'source_location_id'  => null,
@@ -227,7 +227,7 @@ class InventoryService
             $product->update(['current_stock' => $newStock]);
 
             if ($loss->storage_location_id) {
-                $pivot = DB::table('product_storage_location')
+                $pivot = DB::table('product_storage_locations')
                     ->where('product_id', $product->id)
                     ->where('storage_location_id', $loss->storage_location_id)
                     ->first();
@@ -278,7 +278,7 @@ class InventoryService
             $product->update(['current_stock' => $newStock]);
 
             if ($loss->storage_location_id) {
-                $pivot = DB::table('product_storage_location')
+                $pivot = DB::table('product_storage_locations')
                     ->where('product_id', $product->id)
                     ->where('storage_location_id', $loss->storage_location_id)
                     ->first();
@@ -453,7 +453,7 @@ class InventoryService
                 $newLocationStock = (float) $entry['counted_stock'];
 
                 if ($locationId) {
-                    $pivot = DB::table('product_storage_location')
+                    $pivot = DB::table('product_storage_locations')
                         ->where('product_id', $product->id)
                         ->where('storage_location_id', $locationId)
                         ->first();
@@ -461,12 +461,12 @@ class InventoryService
                     $oldLocationStock = $pivot ? (float) $pivot->current_stock : 0.0;
                     $locationDelta = round($newLocationStock - $oldLocationStock, 4);
 
-                    DB::table('product_storage_location')->updateOrInsert(
+                    DB::table('product_storage_locations')->updateOrInsert(
                         ['product_id' => $product->id, 'storage_location_id' => $locationId],
                         ['current_stock' => $newLocationStock, 'updated_at' => now()]
                     );
 
-                    $sumLocations = (float) DB::table('product_storage_location')
+                    $sumLocations = (float) DB::table('product_storage_locations')
                         ->where('product_id', $product->id)
                         ->sum('current_stock');
 
@@ -588,7 +588,7 @@ class InventoryService
                 $product = Product::find($productId);
                 if (!$product || !$product->track_inventory) continue;
 
-                $pivotData = DB::table('product_storage_location')
+                $pivotData = DB::table('product_storage_locations')
                     ->where('product_id', $productId)
                     ->where('storage_location_id', $location->id)
                     ->first();
@@ -604,7 +604,7 @@ class InventoryService
                     $product->storageLocations()->attach($location->id, ['current_stock' => $countedQty]);
                 }
 
-                $newGlobalStock = (float) DB::table('product_storage_location')
+                $newGlobalStock = (float) DB::table('product_storage_locations')
                     ->where('product_id', $productId)
                     ->sum('current_stock');
 

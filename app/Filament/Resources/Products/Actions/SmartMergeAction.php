@@ -226,7 +226,7 @@ class SmartMergeAction extends Action
                     DB::table('technical_sheets')->where('ingredient_product_id', $loser->id)->update(['ingredient_product_id' => $masterId]);
 
                     DB::table('product_cost_histories')->where('product_id', $loser->id)->update(['product_id' => $masterId]);
-                    DB::table('product_modifier')->where('product_id', $loser->id)->update(['product_id' => $masterId]);
+                    DB::table('product_modifiers')->where('product_id', $loser->id)->update(['product_id' => $masterId]);
                     DB::table('modifier_options')->where('linked_product_id', $loser->id)->update(['linked_product_id' => $masterId]);
                     DB::table('combo_groups')->where('product_id', $loser->id)->update(['product_id' => $masterId]);
                     DB::table('combo_items')->where('product_id', $loser->id)->update(['product_id' => $masterId]);

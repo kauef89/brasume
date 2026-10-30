@@ -25,7 +25,7 @@ class StorageLocation extends Model
 
     public function products(): BelongsToMany
     {
-        return $this->belongsToMany(Product::class, 'product_storage_location', 'storage_location_id', 'product_id')
+        return $this->belongsToMany(Product::class, 'product_storage_locations', 'storage_location_id', 'product_id')
                     ->withPivot('current_stock', 'max_capacity', 'restock_threshold', 'source_location_id')
                     ->withTimestamps();
     }

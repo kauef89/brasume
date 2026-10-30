@@ -23,7 +23,7 @@ class OperationsDashboardService
         $shift = CashShift::where('status', 'open')->latest('opened_at')->first();
         $shiftStart = $shift ? $shift->opened_at : now()->startOfDay();
 
-        $terminalStatuses = ['closed', 'cancelled', 'completed', 'delivered', 'merged'];
+        $terminalStatuses = ['closed', 'cancelled', 'completed', 'merged'];
 
         $orders = Order::with([
                     "items.modifiers", "items.subItems.modifiers", "items.product.category",

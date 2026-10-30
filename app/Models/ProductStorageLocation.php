@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ProductStorageLocation extends Model
 {
     // 🚀 Nome real da tabela no banco
-    protected $table = 'product_storage_location';
+    protected $table = 'product_storage_locations';
 
     protected $guarded = [];
 

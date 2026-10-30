@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ShiftAttendance extends Model
 {
-    protected $table = 'shift_attendance';
+    protected $table = 'shift_attendances';
     protected $guarded = [];
 
     protected $casts = [

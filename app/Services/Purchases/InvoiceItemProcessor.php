@@ -44,7 +44,7 @@ class InvoiceItemProcessor
         // CENÁRIO 3: Possui apenas exposição com local de reposição de origem (source_location_id)
         if ($displayLoc && !empty($displayLoc->source_location_id)) {
             $sourceId = (int) $displayLoc->source_location_id;
-            DB::table('product_storage_location')->updateOrInsert(
+            DB::table('product_storage_locations')->updateOrInsert(
                 ['product_id' => $product->id, 'storage_location_id' => $sourceId],
                 ['updated_at' => now()]
             );
@@ -62,13 +62,13 @@ class InvoiceItemProcessor
                 ->first();
 
             if ($defaultStorage) {
-                DB::table('product_storage_location')->updateOrInsert(
+                DB::table('product_storage_locations')->updateOrInsert(
                     ['product_id' => $product->id, 'storage_location_id' => $defaultStorage->id],
                     ['updated_at' => now()]
                 );
 
                 if ($displayLoc && empty($displayLoc->source_location_id)) {
-                    DB::table('product_storage_location')
+                    DB::table('product_storage_locations')
                         ->where('product_id', $product->id)
                         ->where('storage_location_id', $displayLoc->storage_location_id)
                         ->update(['source_location_id' => $defaultStorage->id, 'updated_at' => now()]);

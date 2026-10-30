@@ -109,6 +109,7 @@ class OrderStatusService
     {
         if ($newStatus === 'preparing') return "👨‍🍳 O seu pedido #{$order->id} começou a ser preparado!";
         if ($newStatus === 'dispatched' && $order->type === 'delivery') return "🛵 O entregador está a caminho. Fique de olho!";
+        if ($newStatus === 'delivered' && $order->type === 'delivery') return '🎉 Pedido entregue! Bom apetite!';
         if ($newStatus === 'closed') return "✨ Pedido concluído. Muito obrigado pela preferência!";
 
         if ($newStatus === 'ready') {

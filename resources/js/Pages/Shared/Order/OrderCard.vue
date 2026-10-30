@@ -3,9 +3,9 @@
         @click="$emit('click', order)"
         class="relative overflow-hidden p-option group w-full rounded-2xl transition-all duration-300 shrink-0 flex flex-col justify-center cursor-pointer outline-none p-3.5 border"
         :class="[
-            isWaitingPix
+            order.status === 'delivered' ? 'border-emerald-500/50 bg-emerald-500/[0.03]' : (isWaitingPix
                 ? 'border-warning-500/80 bg-warning-500/10 shadow-warning-500/10 ring-2 ring-warning-500/40 hover:bg-warning-500/15 animate-pulse'
-                : (isPaymentUndefined && !isTeamMode ? 'bg-warning-500/10 border-warning-500/40 hover:bg-warning-500/20' : 'border-transparent bg-surface-2 hover:bg-surface-3'),
+                : (isPaymentUndefined && !isTeamMode ? 'bg-warning-500/10 border-warning-500/40 hover:bg-warning-500/20' : 'border-transparent bg-surface-2 hover:bg-surface-3')),
             isHighlighted ? 'ring-4 ring-purple-500 z-10 scale-[1.02] animate-pulse' : ''
         ]"
     >
@@ -32,9 +32,7 @@
                         <i class="pi pi-clock text-[10px]"></i>
                         {{ timeElapsed }}
                     </span>
-                    <span>
-                        #{{ $formatNumber(order.id) }}
-                    </span>
+                    <div class="flex items-center gap-1.5"><span v-if="order.status === 'delivered'" class="text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs"><i class="pi pi-check-circle text-[10px] text-emerald-500"></i> Entregue</span><span>#{{ $formatNumber(order.id) }}</span></div>
                 </div>
 
                 <!-- LINHA 2: Nome da Mesa/Cliente | Setas de avanço ou Valor -->
