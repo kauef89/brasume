@@ -22,7 +22,7 @@ class Address extends Model
 
     /**
      * Mutator: Normaliza qualquer link do Google Maps, WhatsApp ou coordenadas brutas
-     * para o formato canónico: https://www.google.com/maps?q=latitude,longitude
+     * para o formato canônico: https://www.google.com/maps?q=latitude,longitude
      */
     public function setLocationAttribute($value): void
     {
@@ -34,8 +34,12 @@ class Address extends Model
         $val = trim((string) $value);
         $unquoted = urldecode($val);
 
-        if (preg_match('/(-?\d{1,2}\.\d+)\s*[,/]\s*(-?\d{1,3}\.\d+)/', $unquoted, $matches)) {
-            $this->attributes['location'] = "https://www.google.com/maps?q={$matches[1]},{$matches[2]}";
+        if (preg_match('#(-?\d{1,2}\.\d+)\s*[,/]\s*(-?\d{1,3}\.\d+)#', $unquoted, $matches)) {
+            $url = "https://maps.google.com/maps?q={$matches[1]},{$matches[2]}&z=17&hl=pt-BR";
+            $this->attributes['location'] = $url;
+            if (empty($this->attributes['location_link'])) {
+                $this->attributes['location_link'] = $url;
+            }
         } else {
             $this->attributes['location'] = $val;
         }
@@ -46,10 +50,13 @@ class Address extends Model
      */
     public function getCoordinatesAttribute(): ?string
     {
-        if (!$this->location) return null;
-        if (preg_match('/(-?\d{1,2}\.\d+)\s*[,/]\s*(-?\d{1,3}\.\d+)/', urldecode($this->location), $matches)) {
+        $raw = $this->location ?: $this->location_link;
+        if (!$raw) return null;
+
+        if (preg_match('#(-?\d{1,2}\.\d+)\s*[,/]\s*(-?\d{1,3}\.\d+)#', urldecode($raw), $matches)) {
             return "{$matches[1]},{$matches[2]}";
         }
+
         return null;
     }
 

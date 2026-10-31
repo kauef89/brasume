@@ -96,6 +96,9 @@ class OrderAddressResolver
                 'reference'       => $addrModel->reference,
                 'full_address'    => $fullAddress,
                 'delivery_fee'    => $deliveryFee,
+                'location'        => $addrModel->location ?? $addrModel->location_link ?? null,
+                'location_link'   => $addrModel->location_link ?? $addrModel->location ?? null,
+                'coordinates'     => $addrModel->coordinates ?? null,
             ];
 
             return [

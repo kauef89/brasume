@@ -16,6 +16,11 @@ class ShiftAttendance extends Model
         'daily_rate'     => 'decimal:2',
     ];
 
+    public function cashShift(): BelongsTo
+    {
+        return $this->shift();
+    }
+
     public function shift(): BelongsTo
     {
         return $this->belongsTo(CashShift::class, 'cash_shift_id');

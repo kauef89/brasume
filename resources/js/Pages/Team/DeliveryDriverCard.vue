@@ -173,13 +173,29 @@ const page = usePage();
 const isExpanded = ref(false);
 const hasExactLocation = computed(() => {
     const addr = props.order.address_snapshot || props.order.address;
-    return Boolean(addr && typeof addr === 'object' && addr.location);
+    if (!addr || typeof addr !== 'object') return false;
+    return Boolean(addr.location || addr.location_link || addr.coordinates);
 });
 
 const navigationUrl = computed(() => {
     const addr = props.order.address_snapshot || props.order.address;
-    if (addr && typeof addr === 'object' && addr.location) {
-        return addr.location;
+    if (addr && typeof addr === 'object') {
+        const rawLoc = addr.location_link || addr.location;
+        if (rawLoc) {
+            const decoded = decodeURIComponent(String(rawLoc));
+            const match = decoded.match(/(-?\d{1,2}\.\d+)\s*[,/]\s*(-?\d{1,3}\.\d+)/);
+            if (match) {
+                return `https://www.google.com/maps/dir/?api=1&destination=${match[1]},${match[2]}`;
+            }
+            if (String(rawLoc).startsWith('http')) return rawLoc;
+        }
+        if (addr.coordinates && typeof addr.coordinates === 'object') {
+            const lat = addr.coordinates.lat || addr.coordinates.latitude;
+            const lng = addr.coordinates.lng || addr.coordinates.longitude;
+            if (lat && lng) {
+                return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+            }
+        }
     }
     const query = `${formattedAddress.value.main}${neighborhood.value ? ', ' + neighborhood.value : ''}`;
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;

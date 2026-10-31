@@ -235,11 +235,18 @@ const updateStatus = (orderId, status) => {
 };
 
 const resolveDestinationString = (order) => {
-    const addr = order.address_snapshot || order.address;
+    const addr = order.address_snapshot || order.address || order.delivery_address;
     if (typeof addr === 'object' && addr !== null) {
-        if (addr.location) {
-            const match = String(addr.location).match(/(-?\d{1,2}\.\d+)\s*[,/]\s*(-?\d{1,3}\.\d+)/);
+        const rawLoc = addr.location_link || addr.location;
+        if (rawLoc) {
+            const decoded = decodeURIComponent(String(rawLoc));
+            const match = decoded.match(/(-?\d{1,2}\.\d+)\s*[,/]\s*(-?\d{1,3}\.\d+)/);
             if (match) return `${match[1]},${match[2]}`;
+        }
+        if (addr.coordinates && typeof addr.coordinates === 'object') {
+            const lat = addr.coordinates.lat || addr.coordinates.latitude;
+            const lng = addr.coordinates.lng || addr.coordinates.longitude;
+            if (lat && lng) return `${lat},${lng}`;
         }
         return `${addr.street || ''}, ${addr.number || ''}, ${addr.neighborhood || ''}, ${settings.value.city || ''}`;
     }
