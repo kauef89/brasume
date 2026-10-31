@@ -201,8 +201,8 @@ class OrderLogisticsService
         if ($settings && $settings->require_shift_attendance) {
             $couriersQuery->whereHas('attendedShifts', function ($q) {
                 $q->where('cash_shifts.status', 'open')
-                  ->where('shift_attendance.status', 'active')
-                  ->where('shift_attendance.attendance_status', 'present');
+                  ->where('shift_attendances.status', 'active')
+                  ->where('shift_attendances.attendance_status', 'present');
             });
         }
 
@@ -217,21 +217,36 @@ class OrderLogisticsService
 
     public function bulkCompleteDispatched(): array
     {
-        $orders = Order::with('payments')->where('status', 'dispatched')->get();
+        // 🎯 Foca exclusivamente nos pedidos entregues pelo motoboy aguardando baixa
+        $orders = Order::with(['payments', 'customer'])
+            ->where('status', 'delivered')
+            ->get();
 
+        $activeShift = \App\Models\CashShift::where('status', 'open')->latest()->first();
         $processed = 0;
         $skipped = 0;
 
         foreach ($orders as $order) {
+            $now = now();
+            $deliveredAt = $order->delivered_at ?? $now;
+
+            // 1. Se já está pago (Pix, Cartão online, etc)
             if ($order->payment_status === 'paid' || $order->payment_intent_status === 'paid') {
-                $order->update(['status' => 'closed']);
+                $order->update([
+                    'status'       => 'closed',
+                    'closed_at'    => $now,
+                    'delivered_at' => $deliveredAt,
+                ]);
+
                 try {
-                    broadcast(new OrderUpdated($order));
+                    broadcast(new OrderUpdated($order->fresh()));
                 } catch (\Throwable $e) {}
+
                 $processed++;
                 continue;
             }
 
+            // 2. Liquidar pagamentos prometidos na entrega (Dinheiro / Maquininha)
             $promises = $order->payment_intent_methods;
             if (is_string($promises)) {
                 $promises = json_decode($promises, true);
@@ -250,40 +265,71 @@ class OrderLogisticsService
                 $order->update([
                     'payment_status'        => 'paid',
                     'payment_intent_status' => 'paid',
-                    'status'                => 'closed'
+                    'status'                => 'closed',
+                    'closed_at'             => $now,
+                    'delivered_at'          => $deliveredAt,
                 ]);
+
                 try {
-                    broadcast(new OrderUpdated($order));
+                    broadcast(new OrderUpdated($order->fresh()));
                 } catch (\Throwable $e) {}
+
                 $processed++;
                 continue;
             }
 
             $promisedTotal = collect($promises)->sum(fn ($p) => (float) ($p['amount'] ?? 0));
 
-            if (round($promisedTotal, 2) >= $remaining) {
-                DB::transaction(function () use ($order, $promises) {
+            if (round($promisedTotal, 2) >= ($remaining - 0.05)) {
+                DB::transaction(function () use ($order, $promises, $activeShift, $now, $deliveredAt) {
                     foreach ($promises as $promise) {
                         $amount = (float) ($promise['amount'] ?? 0);
                         if ($amount <= 0) continue;
 
-                        $order->payments()->create([
-                            'payment_method_id' => !empty($promise['method_id']) ? (int) $promise['method_id'] : null,
-                            'method'            => $promise['method_name'] ?? 'Dinheiro',
+                        $methodId = !empty($promise['method_id']) ? (int) $promise['method_id'] : null;
+                        $methodName = $promise['method_name'] ?? 'Dinheiro';
+
+                        $orderPayment = $order->payments()->create([
+                            'payment_method_id' => $methodId,
+                            'cash_shift_id'     => $activeShift?->id,
+                            'cashier_id'        => auth()->id(),
+                            'method'            => $methodName,
                             'amount'            => $amount,
+                            'status'            => 'completed',
+                            'is_paid'           => 1,
                         ]);
+
+                        if ($activeShift) {
+                            $isCash = str_contains(mb_strtolower($methodName), 'dinheiro');
+                            \App\Models\Transaction::create([
+                                'bank_account_id'   => $isCash ? 1 : null,
+                                'cash_shift_id'     => $activeShift->id,
+                                'order_id'          => $order->id,
+                                'payment_id'        => $orderPayment->id,
+                                'payment_method_id' => $methodId,
+                                'type'              => 'in',
+                                'category'          => 'order_sale',
+                                'amount'            => $amount,
+                                'description'       => "Pedido #{$order->id} ({$methodName})",
+                                'operator_name'     => auth()->user()?->name ?? 'Sistema',
+                                'transaction_date'  => $now,
+                            ]);
+                        }
                     }
 
                     $order->update([
                         'payment_status'        => 'paid',
                         'payment_intent_status' => 'paid',
-                        'status'                => 'closed'
+                        'status'                => 'closed',
+                        'closed_at'             => $now,
+                        'delivered_at'          => $deliveredAt,
                     ]);
                 });
 
                 try {
-                    broadcast(new OrderUpdated($order));
+                    broadcast(new OrderUpdated($order->fresh()));
                 } catch (\Throwable $e) {}
+
                 $processed++;
             } else {
                 $skipped++;

@@ -45,14 +45,24 @@ class InventoryMovementController extends Controller
 
         $msg = 'Balanço salvo com sucesso!';
         if ($result['losses_count'] > 0) {
-            $msg .= " ({$result['losses_count']} divergências de quebra registradas em auditoria).";
+            $msg .= " ({$result['losses_count']} divergências registradas em auditoria).";
+        }
+        if (!empty($result['transfers_summary'])) {
+            $msg .= " (" . implode('; ', $result['transfers_summary']) . ").";
+        }
+
+        $updatedProduct = null;
+        if (count($validated['items']) === 1) {
+            $updatedProduct = Product::with('storageLocations')->find($validated['items'][0]['product_id']);
         }
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
-                'success'      => true,
-                'message'      => $msg,
-                'losses_count' => $result['losses_count'] ?? 0,
+                'success'           => true,
+                'message'           => $msg,
+                'losses_count'      => $result['losses_count'] ?? 0,
+                'transfers_summary' => $result['transfers_summary'] ?? [],
+                'product'           => $updatedProduct,
             ]);
         }
 

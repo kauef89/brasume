@@ -314,7 +314,7 @@ class OrderPaymentService
         }
     }
 
-    
+
     public function processWebhookPayment(string $txid, float $amount, ?string $endToEndId = null): void
     {
         $payment = \App\Models\Payment::where('txid', $txid)->first();
@@ -322,37 +322,85 @@ class OrderPaymentService
 
         if ($payment) {
             $payment->update([
-                'status' => 'paid',
-                'is_paid' => true,
+                'status'        => 'completed',
+                'is_paid'       => true,
                 'end_to_end_id' => $endToEndId,
-                'amount' => $amount
+                'amount'        => $amount
             ]);
             $order = $payment->order;
         } else {
             $order = \App\Models\Order::where('txid', $txid)->first();
+            if ($order) {
+                $payment = $order->payments()->first();
+                if ($payment) {
+                    $payment->update([
+                        'status'        => 'completed',
+                        'is_paid'       => true,
+                        'end_to_end_id' => $endToEndId,
+                        'amount'        => $amount
+                    ]);
+                }
+            }
         }
 
         if (!$order) {
             throw new \Exception("Pedido ou Pagamento não encontrado para TXID: {$txid}");
         }
 
-        $order->update([
-            'payment_status' => 'paid',
-            'payment_intent_status' => 'paid'
+        // 1. Atualizar status financeiro e limpar anotação de timeout se houver
+        $updateData = [
+            'payment_status'        => 'paid',
+            'payment_intent_status' => 'paid',
+        ];
+        if ($order->notes === 'Cancelado pelo cliente via App') {
+            $updateData['notes'] = null;
+        }
+
+        // No Kanban operacional, novos pedidos pagos entram em "pending" para preparo
+        if (in_array($order->status, ['pending_payment', 'pending', 'cancelled'])) {
+            $updateData['status'] = 'pending';
+        }
+
+        $order->update($updateData);
+
+        // 2. Reativar itens e registrar quitação
+        \App\Models\OrderItem::where('order_id', $order->id)->update([
+            'status'            => 'active',
+            'production_status' => 'pending',
+            'cancel_reason'     => null,
+            'paid_qty'          => \Illuminate\Support\Facades\DB::raw('quantity'),
         ]);
 
-        if (in_array($order->status, ['pending_payment', 'pending'])) {
-            $order->update(['status' => 'confirmed']);
+        $order->load(['items.modifiers', 'items.product', 'payments']);
+
+        // 3. Garantir baixa de insumos/estoque
+        try {
+            $inventoryService = app(\App\Services\Catalog\InventoryService::class);
+            foreach ($order->items as $item) {
+                $inventoryService->processOrderItemStock($item, 'deduct');
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("🚨 [WEBHOOK INVENTORY ERRO] Pedido #{$order->id}: " . $e->getMessage());
         }
 
-        // Se for balcão/mesa, emite nota e imprime automaticamente
-        if (in_array($order->type, ['counter', 'table']) || empty($order->address_id)) {
-            try {
-                $printSvc = app(\App\Services\Printing\OrderPrintService::class);
-                $printSvc->dispatchCheckoutReceipts($order, 'both');
-            } catch (\Throwable $e) {}
+        // 4. 🚀 Disparar os Efeitos Colaterais Oficiais (KDS, Cozinha, Notificações da Equipe e Tracking)
+        try {
+            app(\App\Services\Orders\CustomerOrderSideEffects::class)->handle(
+                order: $order,
+                isAppend: false,
+                needsPixPayment: false // 🔓 Abre a represa: agora está pago!
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("🚨 [WEBHOOK SIDE-EFFECTS ERRO] Pedido #{$order->id}: " . $e->getMessage());
         }
 
-        broadcast(new \App\Events\OrderUpdated($order->fresh(['items', 'payments'])));
+        // 5. Imprimir recibos de expedição / entrega (para qualquer canal)
+        try {
+            if (class_exists(\App\Services\Printing\OrderPrintService::class)) {
+                app(\App\Services\Printing\OrderPrintService::class)->dispatchCheckoutReceipts($order, $payment);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("🚨 [WEBHOOK PRINT ERRO] Pedido #{$order->id}: " . $e->getMessage());
+        }
     }
 }

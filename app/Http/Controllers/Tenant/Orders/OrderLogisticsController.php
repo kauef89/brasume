@@ -121,6 +121,13 @@ class OrderLogisticsController extends Controller
     public function bulkCompleteDispatched()
     {
         $result = $this->logisticsService->bulkCompleteDispatched();
+
+        if (!empty($result['skipped'])) {
+            return back()
+                ->with('success', "{$result['processed']} pedido(s) finalizado(s) com sucesso!")
+                ->with('warning', "{$result['skipped']} pedido(s) não puderam ser baixados por pendência no valor ou forma de pagamento.");
+        }
+
         return back()->with('success', "{$result['processed']} pedidos finalizados com sucesso!");
     }
 }

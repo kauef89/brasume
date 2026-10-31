@@ -498,7 +498,7 @@ class ShiftAttendanceService
             ->wherePivot('status', 'active')
             ->wherePivot('attendance_status', 'present')
             ->where(function ($query) use ($roles) {
-                $query->whereIn('shift_attendance.assigned_role', $roles)
+                $query->whereIn('shift_attendances.assigned_role', $roles)
                       ->orWhereHas('roles', function ($q) use ($roles) {
                           $q->whereIn('name', $roles);
                       });

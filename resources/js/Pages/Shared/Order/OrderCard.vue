@@ -120,24 +120,45 @@ onBeforeUnmount(() => {
     if (clockInterval) clearInterval(clockInterval);
 });
 
-const timeElapsed = computed(() => {
-    if (!props.order?.created_at) return "0min";
-
-    let dateStr = props.order.created_at;
+const parseDateStr = (dateStr) => {
+    if (!dateStr) return null;
     let manipulatedStr = dateStr;
-
     if (typeof manipulatedStr === 'string') {
         manipulatedStr = manipulatedStr.replace(' ', 'T');
         if (!manipulatedStr.endsWith('Z') && !manipulatedStr.includes('-') && !manipulatedStr.includes('+')) {
             manipulatedStr += 'Z';
         }
     }
+    const d = new Date(manipulatedStr);
+    return isNaN(d.getTime()) ? null : d;
+};
 
-    const created = new Date(manipulatedStr);
-    const diffMs = now.value - created;
+const timeElapsed = computed(() => {
+    if (!props.order?.created_at) return "0min";
+
+    const created = parseDateStr(props.order.created_at);
+    if (!created) return "0min";
+
+    // 🛑 Se o motoboy já indicou entrega (ou se o pedido foi finalizado), congela o timer!
+    let referenceEnd = now.value;
+
+    if (props.order.status === 'delivered' || props.order.delivered_at) {
+        const deliveredStr = props.order.delivered_at || props.order.updated_at;
+        const deliveredDate = parseDateStr(deliveredStr);
+        if (deliveredDate && deliveredDate >= created) {
+            referenceEnd = deliveredDate;
+        }
+    } else if (props.order.status === 'closed' && props.order.closed_at) {
+        const closedDate = parseDateStr(props.order.closed_at);
+        if (closedDate && closedDate >= created) {
+            referenceEnd = closedDate;
+        }
+    }
+
+    const diffMs = referenceEnd - created;
     const diffMins = Math.floor(diffMs / 60000);
 
-    if (isNaN(created) || diffMins < 0) return "0min";
+    if (diffMins < 0) return "0min";
     if (diffMins < 60) return `${diffMins}min`;
 
     const hours = Math.floor(diffMins / 60);

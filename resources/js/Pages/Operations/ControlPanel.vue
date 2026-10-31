@@ -15,12 +15,12 @@
 
             <!-- 🚀 BOTÃO "BAIXAR ROTA" (RAIO) -->
             <PosTeleportButton
-                v-if="activeTab === 'active' && hasDispatchedOrders"
+                v-if="activeTab === 'active' && hasDeliveredOrders"
                 @click="confirmBulkComplete"
                 icon="pi-bolt"
                 color="warning"
                 :active="true"
-                :badge="dispatchedOrdersCount"
+                :badge="deliveredOrdersCount"
                 badge-severity="warning"
                 label="Baixar Entregas Concluídas"
                 class="animate-in fade-in slide-in-from-right-2"
@@ -219,16 +219,16 @@ const availablePaymentMethods = computed(() => {
     return page.props.paymentMethods || page.props.cashierData?.paymentMethods || [];
 });
 
-const dispatchedOrdersCount = computed(() => {
-    return deliveryOrders.value.filter(o => o.status === 'dispatched').length;
+const deliveredOrdersCount = computed(() => {
+    return deliveryOrders.value.filter(o => o.status === 'delivered').length;
 });
 
-const hasDispatchedOrders = computed(() => dispatchedOrdersCount.value > 0);
+const hasDeliveredOrders = computed(() => deliveredOrdersCount.value > 0);
 
 const confirmBulkComplete = () => {
     confirm.require({
-        message: `Você tem certeza que deseja finalizar os ${dispatchedOrdersCount.value} pedidos que estão em rota? O sistema tentará processar os pagamentos automaticamente usando as promessas do motoboy.`,
-        header: 'Baixar Entregas em Rota',
+        message: `Você tem certeza que deseja finalizar os ${deliveredOrdersCount.value} pedidos entregues pelo motoboy? O sistema liquidará as contas pendentes e arquivará os pedidos no histórico.`,
+        header: 'Baixar Entregas Concluídas',
         icon: 'pi pi-bolt text-warning-500',
         rejectProps: { label: 'Cancelar', severity: 'secondary', outlined: true },
         acceptProps: { label: 'Sim, Baixar Todos', severity: 'warning', icon: 'pi pi-bolt' },

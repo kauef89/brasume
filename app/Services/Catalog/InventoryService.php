@@ -537,6 +537,7 @@ class InventoryService
         return [
             'losses_count'      => $lossesCount,
             'total_loss_amount' => $totalLossAmount,
+            'transfers_summary' => $transfersSummary ?? [],
         ];
     }
 

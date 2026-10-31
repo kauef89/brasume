@@ -219,20 +219,33 @@ export function useInventoryCount(catalogRef) {
             });
 
             if (response.data?.success) {
-                // 1. Atualiza reativamente o rascunho com o valor confirmado
                 draftCounts.value = {
                     ...draftCounts.value,
                     [key]: Number(countedQty)
                 };
 
-                // 2. Fecha o card expandido
                 expandedItemKey.value = null;
+
+                if (response.data?.product) {
+                    const p = response.data.product;
+                    const prodInCatalog = (catalogRef.value || []).find(x => x.id === p.id);
+                    if (prodInCatalog) {
+                        prodInCatalog.current_stock = Number(p.current_stock);
+                        if (Array.isArray(p.storage_locations)) {
+                            prodInCatalog.storage_locations = p.storage_locations;
+                        }
+                    }
+                }
+
+                const detailMsg = response.data?.transfers_summary?.length
+                    ? `${response.data.transfers_summary.join(' | ')}.`
+                    : `${item.name}: conferido em ${countedQty} ${item.unit_of_measure}.`;
 
                 toast.add({
                     severity: 'success',
                     summary: 'Estoque Gravado',
-                    detail: `${item.name}: conferido em ${countedQty} ${item.unit_of_measure}.`,
-                    life: 2500
+                    detail: detailMsg,
+                    life: 3500
                 });
             }
         } catch (err) {

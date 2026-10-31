@@ -5,6 +5,7 @@ namespace App\Services\RestaurantOps;
 use App\Models\Order;
 use App\Models\User;
 use App\Models\CashShift;
+use App\Models\DiningTable;
 use App\Events\OrderUpdated;
 use App\Notifications\OrderReadyForDeliveryNotification;
 use App\Services\Customers\CustomerMappingService;
