@@ -126,23 +126,42 @@ class CashierController extends Controller
         }
     }
 
-    public function closeOperationalShift(
-        Request $request,
-        OperationalShiftClosureService $operationalService
-    ) {
+    public function closeOperationalShift(Request $request)
+    {
+        $activeShift = CashShift::where('status', 'open')->latest('opened_at')->first();
+        if (!$activeShift) {
+            return back()->withErrors(['error' => 'Nenhum turno aberto no momento.']);
+        }
+
         $closeStore = $request->boolean('close_store', true);
-        $activeShift = CashShift::where('status', 'open')->latest()->first();
+        $acceptingOrders = $request->has('accepting_orders')
+            ? $request->boolean('accepting_orders')
+            : !$closeStore;
 
         try {
-            $operationalService->closeShift($activeShift?->id, $closeStore);
+            $activeShift->update([
+                'accepting_orders' => $acceptingOrders,
+            ]);
 
-            $msg = $closeStore
-                ? 'Turno encerrado e loja fechada no app do cliente!'
-                : 'Turno operacional encerrado. A loja continua aberta no app!';
+            \Illuminate\Support\Facades\Cache::forget('store_availability_status');
+            \Illuminate\Support\Facades\Cache::forget('customer_catalog_data');
+
+            if (method_exists(\App\Models\CompanySetting::class, 'purgeCache')) {
+                \App\Models\CompanySetting::purgeCache();
+            }
+
+            $tenantId = function_exists('tenant') && tenant() ? tenant('id') : 'central';
+            if (class_exists(\App\Events\StoreStatusUpdated::class)) {
+                broadcast(new \App\Events\StoreStatusUpdated($tenantId));
+            }
+
+            $msg = $acceptingOrders
+                ? 'Loja online aberta! O cardápio digital voltou a aceitar pedidos.'
+                : 'Loja online pausada! Novos pedidos no app do cliente foram suspensos.';
 
             return back()->with('success', $msg);
-        } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Falha ao encerrar turno: ' . $e->getMessage()]);
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => 'Falha ao atualizar status da loja: ' . $e->getMessage()]);
         }
     }
 

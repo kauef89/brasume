@@ -219,10 +219,33 @@ const resolvedPaymentMethods = computed(() => {
     const customerPoints = Number(activeCustomer?.loyalty_points || 0);
     const availableCashback = roundNumber((customerPoints / 100) * conversionRate);
 
+    const isCustomerLinkedToSupplier = Boolean(activeCustomer?.supplier_id || activeCustomer?.supplier);
+    const isCustomerAnEmployee = Boolean(activeCustomer?.employee_id || activeCustomer?.employee || activeCustomer?.is_employee);
+
     return rawMethods
         .filter(m => m.is_active !== false && m.status !== 'inactive')
+        .filter(m => {
+            const engine = typeof m.engine_type === 'object' ? m.engine_type?.value : m.engine_type;
+
+            // 1. Vale-alimentação nunca aparece no modal de pagamento
+            if (engine === 'allowance') {
+                return false;
+            }
+
+            // 2. Convénio: exige cliente associado a um fornecedor
+            if (engine === 'customer_credit') {
+                return isCustomerLinkedToSupplier;
+            }
+
+            // 3. Consumo Interno: exige cliente associado a um colaborador
+            if (engine === 'internal') {
+                return isCustomerAnEmployee;
+            }
+
+            return true;
+        })
         .map(m => {
-            const isCash = m.engine_type === 'cash' || String(m.name).toLowerCase().includes('dinheiro');
+            const isCash = m.engine_type === 'money' || m.engine_type === 'cash' || String(m.name).toLowerCase().includes('dinheiro');
             const isLoyalty = m.engine_type === 'internal_loyalty' || String(m.name).toLowerCase().includes('cashback');
 
             let icon = m.icon;

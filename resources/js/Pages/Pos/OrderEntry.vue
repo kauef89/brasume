@@ -7,6 +7,7 @@
         v-model:product-card-layout="productCardLayout"
         :selected-category="selectedCategory"
         :has-favorites="favorites.length > 0"
+        :favorites-count="favorites.length"
         :is-favorites-active="isFavoritesViewActive"
         :is-manager-active="isCategoryManagerActive"
         @toggle-favorites="handleToggleFavorites"
@@ -42,6 +43,7 @@
                     @undo-category-change="undoCategoryChange"
                     @save-category="handleCategorySave"
                     @favorite-click="handleFavoriteClick"
+                    @batch-add-favorites="handleBatchAddFavorites"
                     @category-click="handleCategorySelect"
                     @product-click="onProductClick"
                 />
@@ -168,7 +170,7 @@ const { categoryLayout, productCardLayout, categoryHierarchy } = settings;
 
 const cartContext = useCart();
 const favoritesContext = useCustomerFavorites();
-const { cart, cartSubtotal, updateQty, autoParkCurrent, draftRouting, orderType, clearCart, parkOrder, resetDraftState } = cartContext;
+const { cart, cartSubtotal, updateQty, autoParkCurrent, draftRouting, orderType, clearCart, parkOrder, resetDraftState, addToCart } = cartContext;
 const { favorites } = favoritesContext;
 
 const isMounted = ref(false);
@@ -629,6 +631,46 @@ const handleToggleManager = () => {
         isFavoritesViewActive.value = false;
         searchQuery.value = '';
     }
+};
+
+const handleBatchAddFavorites = (items) => {
+    if (!items || !Array.isArray(items) || items.length === 0) return;
+
+    items.forEach(item => {
+        const rawSelections = item.favorite_selections || item.cartItem?.structuredModifiers || [];
+        const structuredModifiers = rawSelections.map(m => ({
+            id: m.id || m.modifier_option_id,
+            name: m.name,
+            price: Number(m.price || 0),
+            qty: Number(m.quantity || m.qty || 1),
+            is_joker: !!m.is_joker,
+            group_id: m.group_id || m.modifier_group_id || null
+        }));
+
+        let extraPrice = 0;
+        structuredModifiers.forEach(m => {
+            extraPrice += (Number(m.price || 0) * (m.qty || 1));
+        });
+
+        const comboItems = item.combo_items || item.cartItem?.comboItems || null;
+        if (comboItems && Array.isArray(comboItems)) {
+            comboItems.forEach(c => {
+                (c.structuredModifiers || []).forEach(cm => {
+                    extraPrice += (Number(cm.price || 0) * (cm.qty || 1));
+                });
+            });
+        }
+
+        cartContext.addToCart({
+            product: item,
+            extraPrice: extraPrice,
+            structuredModifiers: structuredModifiers,
+            comboItems: comboItems,
+            qty: item.cartItem?.qty || item.quantity || 1,
+            notes: item.notes || item.cartItem?.notes || null,
+            isTakeaway: false
+        });
+    });
 };
 
 const onProductClick = (product) => {

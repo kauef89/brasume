@@ -30,16 +30,16 @@
         />
 
         <!-- FAVORITOS -->
-        <button
+        <PosTeleportButton
             v-if="hasFavorites"
+            :icon="isFavoritesActive ? 'pi-star-fill' : 'pi-star'"
+            label="O de Sempre (Favoritos)"
+            :active="isFavoritesActive"
+            color="warning"
+            :badge="favoritesCount > 0 ? favoritesCount : null"
+            badge-severity="warning"
             @click="$emit('toggle-favorites')"
-            class="h-10 md:h-12 px-4 rounded-full font-black text-sm transition-all outline-none flex items-center gap-2 shrink-0 cursor-pointer ml-1"
-            :class="isFavoritesActive ? 'bg-amber-500/40' : 'bg-surface-1 hover:border-amber-500/50'"
-            title="Alternar O de Sempre"
-        >
-            <i class="pi" :class="isFavoritesActive ? 'pi-star-fill' : 'pi-star'"></i>
-            <span class="hidden md:inline">{{ isFavoritesActive ? 'Favoritos' : 'Ver Favoritos' }}</span>
-        </button>
+        />
 
         <!-- CATEGORY MANAGER -->
         <PosTeleportButton
@@ -67,6 +67,7 @@ const props = defineProps({
     categoryLayout: String,
     productCardLayout: String,
     hasFavorites: Boolean,
+    favoritesCount: [Number, String],
     isFavoritesActive: Boolean,
     isManagerActive: Boolean
 });

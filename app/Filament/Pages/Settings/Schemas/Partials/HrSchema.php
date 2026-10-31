@@ -6,6 +6,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Forms\Components\TextInput;
 
@@ -18,7 +19,7 @@ class HrSchema
                 ->icon("heroicon-o-users")
                 ->description("Configure as regras de Vale-Alimentação (cortesia) e Consumo Interno (desconto em folha).")
                 ->schema([
-                    
+
                     Grid::make(2)->schema([
                         // 🚀 FLUXO 1: VALE-ALIMENTAÇÃO (CORTESIA)
                         Toggle::make('has_food_allowance')
@@ -30,7 +31,7 @@ class HrSchema
                         // 🚀 FLUXO 2: FIADO (DESCONTO EM FOLHA)
                         Toggle::make('allow_employee_tab')
                             ->label('Permitir Fiado / Desconto em Folha')
-                            ->helperText('Permite que o colaborador consuma na loja e o valor seja acumulado para desconto na diária ou folha de pagamento.')
+                            ->helperText('Permite que o colaborador consuma na loja e o valor excedente seja acumulado para desconto na diária ou folha de pagamento.')
                             ->default(true)
                             ->live(),
                     ]),
@@ -73,6 +74,29 @@ class HrSchema
                                 ->prefix('R$')
                                 ->required(fn (Get $get) => $get('allowance_scope') === 'global')
                                 ->visible(fn (Get $get) => $get('allowance_scope') === 'global')
+                                ->columnSpan(1),
+                        ]),
+
+                    // 🎯 RESTRIÇÕES DE CARDÁPIO (Vazio = Todo o cardápio liberado)
+                    Grid::make(2)
+                        ->visible(fn(Get $get) => $get('has_food_allowance'))
+                        ->schema([
+                            Select::make('meal_allowance_categories')
+                                ->label('Categorias Permitidas para o Lanche')
+                                ->helperText('Deixe vazio para liberar todas as categorias.')
+                                ->multiple()
+                                ->searchable()
+                                ->preload()
+                                ->options(fn () => \App\Models\Category::where('is_active', true)->orderBy('name')->pluck('name', 'id')->toArray())
+                                ->columnSpan(1),
+
+                            Select::make('meal_allowance_products')
+                                ->label('Produtos Específicos Permitidos')
+                                ->helperText('Deixe vazio para liberar todos os produtos das categorias permitidas.')
+                                ->multiple()
+                                ->searchable()
+                                ->preload()
+                                ->options(fn () => \App\Models\Product::where('status', 'available')->orderBy('name')->pluck('name', 'id')->toArray())
                                 ->columnSpan(1),
                         ])
                 ])

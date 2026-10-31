@@ -45,6 +45,12 @@ class CompanySetting extends Model
         'home_bg_closed'             => 'array',
         'has_food_allowance'         => 'boolean',
         'self_service_enabled'       => 'boolean',
+        'has_food_allowance'         => 'boolean',
+        'self_service_enabled'       => 'boolean',
+        'allow_employee_tab'         => 'boolean',
+        'meal_allowance_categories'  => 'array',
+        'meal_allowance_products'    => 'array',
+        'global_allowance_amount'    => 'decimal:2',
         'allow_table_self_service'   => 'boolean',
         'attention_categories'       => 'array',
         'cashier_auth_methods'       => 'array',
@@ -169,7 +175,7 @@ class CompanySetting extends Model
         } catch (\Throwable $e) {}
     }
 
-    
+
     public function getTeamOrderChannelsAttribute($value)
     {
         if (empty($value)) {

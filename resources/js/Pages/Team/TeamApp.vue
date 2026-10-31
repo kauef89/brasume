@@ -32,9 +32,7 @@
                 </div>
             </Teleport>
 
-            <div
-                class="flex-1 flex flex-col min-h-0 relative transition-all duration-200"
-            >
+            <div class="flex-1 flex flex-col min-h-0 relative transition-all duration-200">
                 <!-- 📖 FATIA 3: RENDERIZADOR DE ABAS DA OPERAÇÃO -->
                 <TeamTabContainer
                     ref="tabContainerRef"
@@ -77,6 +75,7 @@
                     @kds-print="handleKdsPrint"
                     @kds-loss="handleKdsCancel"
                     @kds-cancel="handleKdsCancel"
+                    @open-meal-modifiers="handleOpenMealModifiers"
                 />
             </div>
 
@@ -129,7 +128,7 @@
                 :selected-order-context="selectedOrderContext"
                 :company-settings="$page.props.companySettings"
                 @update:total="productTotal = Number($event || 0)"
-                @confirm-modifiers="handleModifiersConfirm"
+                @confirm-modifiers="handleCustomModifiersConfirm"
                 @confirm-combo="handleComboConfirm"
                 @close-configurators="closeConfigurators"
                 @action="(actionId, orderObj) => customHandleMenuAction(actionId, orderObj)"
@@ -189,8 +188,6 @@ import { useTeamBarKds } from "@/Pages/Team/Composables/useTeamBarKds";
 import { useTeamHeaderContext } from "@/Pages/Team/Composables/useTeamHeaderContext";
 import { useTeamSync } from "@/Pages/Team/Composables/useTeamSync";
 import { useTenantEcho } from '@/Composables/useTenantEcho';
-
-// 🚀 IMPORTAÇÃO DO NOVO COMPOSABLE DE HEIGHT
 import { useDynamicFooterHeight } from '@/Composables/useDynamicFooterHeight';
 
 defineOptions({ layout: MobileLayout });
@@ -221,6 +218,7 @@ const cartRoutingValid = ref(false);
 const cartRoutingMeta = ref(null);
 const activePrintAlert = ref(null);
 const isMounted = ref(false);
+const mealTargetAttendee = ref(null);
 
 const handleClearCart = () => {
     isAllowanceMode.value = false;
@@ -262,7 +260,7 @@ useAppLifecycleSync({
                 toast.add({
                     severity: 'warn',
                     summary: 'Comanda Encerrada',
-                    detail: 'Esta mesa foi quitada ou finalizada no caixa enquanto o aparelho estava em repouso.',
+                    detail: 'Esta mesa foi quitada ou finalizada no caixa.',
                     life: 6000
                 });
                 handleClearCart();
@@ -329,26 +327,6 @@ watch(activeTab, (newTab, oldTab) => {
     }
 });
 
-watch(showQuickUnlockSheet, (isVisible) => {
-    if (!isVisible && window.location.search.includes('quick_unlock_token')) {
-        router.visit(route('team.app', { tab: activeTab.value }), {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true
-        });
-    }
-});
-
-const handlePopState = (event) => {
-    if (event.state && event.state.tab) {
-        activeTab.value = event.state.tab;
-    } else {
-        const path = window.location.pathname;
-        const match = path.match(/\/team\/app\/([^/?#]+)/) || path.match(/\/waiter\/([^/?#]+)/);
-        activeTab.value = match ? match[1] : 'menu';
-    }
-};
-
 const handleTabChange = (e) => {
     activeTab.value = e.detail;
 };
@@ -357,12 +335,6 @@ const selectMenuTab = (tab) => {
     activeTab.value = tab;
     showMoreMenu.value = false;
 };
-
-const openCheckout = (orderId) => {
-    router.visit(route('operations.checkout', orderId));
-};
-
-const handleOpenCheckoutEvent = (e) => openCheckout(e.detail.orderId || e.detail);
 
 const startShift = async () => {
     isStarting.value = true;
@@ -411,7 +383,40 @@ const {
     handleModifiersConfirm, handleComboConfirm
 } = useOrderFlow(props, cartContext, triggerCheckout);
 
-// 🚀 CÁLCULO DINÂMICO DO RODAPÉ (AGORA LOGO APÓS A CRIAÇÃO DE isModifiersVisible/isComboVisible)
+// 🥪 INTEGRAÇÃO DO CONFIGURADOR DE LANCHE COM O MODAL DE MODIFICADORES
+const handleOpenMealModifiers = (payload) => {
+    mealTargetAttendee.value = payload.attendee;
+    handleProductClick(payload.product);
+};
+
+const handleCustomModifiersConfirm = (configuredItem) => {
+    if (mealTargetAttendee.value && activeTab.value === 'meal') {
+        const prod = activeProduct.value;
+        const unitPrice = Number(prod.price || prod.base_price || 0);
+        const extra = Number(configuredItem.extraPrice || 0);
+        const qty = Number(configuredItem.qty || 1);
+
+        tabContainerRef.value?.addMealItemToSlot(mealTargetAttendee.value.id, {
+            product_id: prod.id,
+            name: prod.name,
+            qty: qty,
+            price: unitPrice,
+            extraPrice: extra,
+            totalPrice: (unitPrice + extra) * qty,
+            modifiersText: configuredItem.text || '',
+            is_takeaway: Boolean(configuredItem.isTakeaway),
+            notes: configuredItem.notes || null,
+            structuredModifiers: configuredItem.structuredModifiers || []
+        });
+
+        mealTargetAttendee.value = null;
+        closeConfigurators();
+        return;
+    }
+
+    handleModifiersConfirm(configuredItem);
+};
+
 const islandRef = ref(null);
 const overlaysRef = ref(null);
 
@@ -420,7 +425,6 @@ useDynamicFooterHeight(islandRef, {
     fallbackHeight: 96,
     extraOffset: 16
 });
-// ===============================================
 
 const { handleItemModify, handleItemSwap, handleItemCancel } = useItemActions(
     selectedOrderContext,
@@ -443,14 +447,6 @@ const {
     handleKdsPrint,
     handleKdsCancel
 } = useTeamBarKds(props, handleKdsCancelWrapper);
-
-const handleItemReprint = (item) => {
-    router.post(route('operations.kds.print-item', item.id), {}, {
-        preserveScroll: true,
-        preserveState: true,
-        onSuccess: () => { toast.add({ severity: 'success', summary: 'Reimpressão', detail: 'Via enviada para a cozinha!', life: 3000 }); }
-    });
-};
 
 const mobileCategoryLayout = computed(() => categoryLayout.value === 'list' || productCardLayout.value === 'list' ? 'list' : 'grid');
 
@@ -482,9 +478,9 @@ useTenantEcho().listenChannel('operations', '.print.alert', (data) => {
 onMounted(() => {
     checkSubscriptionStatus();
     window.addEventListener('team-tab-changed', handleTabChange);
-    window.addEventListener('team-open-checkout', handleOpenCheckoutEvent);
-    window.addEventListener('popstate', handlePopState);
-    window.addEventListener('pos-order-completed', handleClearCart);
+    window.addEventListener('popstate', (e) => {
+        if (e.state && e.state.tab) activeTab.value = e.state.tab;
+    });
 
     if (!props.isOnDuty) {
         handleClearCart();
@@ -493,34 +489,13 @@ onMounted(() => {
     }
 
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('quick_unlock_token');
-
-    if (token) {
-        quickUnlockToken.value = token;
-        showQuickUnlockSheet.value = true;
-        urlParams.delete('quick_unlock_token');
-        const cleanSearch = urlParams.toString() ? `?${urlParams.toString()}` : '';
-        window.history.replaceState({ tab: activeTab.value }, document.title, `${window.location.pathname}${cleanSearch}`);
-    }
-
     initializeFlow(urlParams);
-    if (urlParams.get('action') === 'new') cartComponentKey.value++;
-    if (props.editOrderData) activeTab.value = 'menu';
-
-    if (!token) {
-        window.history.replaceState({ tab: activeTab.value }, '', route('team.app', { tab: activeTab.value }));
-    }
-    nextTick(() => {
-        isMounted.value = true;
-    });
+    nextTick(() => { isMounted.value = true; });
 });
 
 onBeforeUnmount(() => {
     autoParkCurrent();
     window.removeEventListener('team-tab-changed', handleTabChange);
-    window.removeEventListener('team-open-checkout', handleOpenCheckoutEvent);
-    window.removeEventListener('popstate', handlePopState);
-    window.removeEventListener('pos-order-completed', handleClearCart);
 });
 
 const onProductClick = (product) => {

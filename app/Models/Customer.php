@@ -11,7 +11,7 @@ use NotificationChannels\WebPush\HasPushSubscriptions;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 
-#[ObservedBy([CustomerObserver::class])] // 🚀 AQUI: Conectando o Observer ao Model!
+#[ObservedBy([CustomerObserver::class])]
 class Customer extends Model
 {
     use Notifiable, HasPushSubscriptions;
@@ -22,7 +22,6 @@ class Customer extends Model
     protected function cpf(): Attribute
     {
         return Attribute::make(
-            // 🚀 CORREÇÃO: Se estiver vazio, devolve null puro para o banco não reclamar do Unique!
             set: fn (?string $value) => blank($value) ? null : preg_replace('/[^0-9]/', '', $value),
         );
     }
@@ -30,7 +29,6 @@ class Customer extends Model
     protected function phone(): Attribute
     {
         return Attribute::make(
-            // 🚀 CORREÇÃO APLICADA AO TELEFONE TAMBÉM POR SEGURANÇA
             set: fn (?string $value) => blank($value) ? null : preg_replace('/[^0-9]/', '', $value),
         );
     }
@@ -50,10 +48,21 @@ class Customer extends Model
         return $this->hasMany(Order::class);
     }
 
-    // 🚀 A LIGAÇÃO NOVA: Cupons exclusivos vinculados a este cliente (Aniversário, etc)
     public function coupons()
     {
         return $this->hasMany(Coupon::class);
+    }
+
+    // 🏢 CONVÉNIO: Empresa / Fornecedor conveniado ao qual o cliente pertence
+    public function supplier()
+    {
+        return $this->belongsTo(Supplier::class);
+    }
+
+    // 👷 RH: Cadastro de funcionário correspondente ao cliente
+    public function employee()
+    {
+        return $this->belongsTo(Employee::class);
     }
 
     public function pushSubscriptions(): \Illuminate\Database\Eloquent\Relations\MorphMany

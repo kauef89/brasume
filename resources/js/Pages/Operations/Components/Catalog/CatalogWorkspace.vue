@@ -2,23 +2,57 @@
     <div class="w-full h-full flex flex-col min-h-0 bg-surface-2 rounded-2xl relative">
 
         <!-- CABEÇALHO UNIFICADO DE NAVEGAÇÃO -->
-            <div v-if="!isManagerActive" class="w-full flex items-center gap-3 shrink-0 px-6 py-3.5 min-h-[56px] z-10">
+        <div v-if="!isManagerActive" class="w-full flex items-center gap-3 shrink-0 px-6 py-3.5 min-h-[56px] z-10">
 
-                <!-- 1. MODO BUSCA -->
-                <div v-if="searchQuery" class="flex items-center gap-2 text-xs font-bold text-surface-muted min-h-[32px]">
-                    <i class="pi pi-search text-xs"></i>
-                    <span>Buscando por: <strong class="text-surface-text">"{{ searchQuery }}"</strong></span>
-                </div>
+            <!-- 1. MODO BUSCA -->
+            <div v-if="searchQuery" class="flex items-center gap-2 text-xs font-bold text-surface-muted min-h-[32px]">
+                <i class="pi pi-search text-xs"></i>
+                <span>Buscando por: <strong class="text-surface-text">"{{ searchQuery }}"</strong></span>
+            </div>
 
-                <!-- 2. MODO FAVORITOS -->
-                <div v-else-if="isFavoritesActive" class="shrink-0 flex items-center min-h-[32px]">
+            <!-- 2. MODO FAVORITOS -->
+            <div v-else-if="isFavoritesActive" class="w-full flex items-center justify-between min-h-[32px] gap-3">
+                <div class="flex items-center gap-2.5">
                     <span class="text-xl font-black flex items-center gap-2">
                         <i class="pi pi-star-fill text-amber-500"></i> O de Sempre
                     </span>
+                    <span v-if="favorites && favorites.length > 0" class="text-xs font-bold text-surface-muted bg-surface-1 px-2.5 py-0.5 rounded-full border border-surface-border/50">
+                        {{ favorites.length }}
+                    </span>
                 </div>
 
-                <!-- 3. MODO NORMAL (BREADCRUMB COMPLETO) -->
-                <div v-else class="shrink-0 flex items-center min-h-[32px]">
+                <!-- BOTÃO CHECKBOX E DISPARO EM LOTE -->
+                <div v-if="favorites && favorites.length > 0" class="flex items-center gap-2">
+                    <button
+                        type="button"
+                        @click="isMultiSelectActive = !isMultiSelectActive"
+                        :class="[
+                            'h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer border outline-none select-none',
+                            isMultiSelectActive
+                                ? 'bg-primary-500/20 text-primary-smart border-primary-500/40 shadow-xs'
+                                : 'bg-surface-1 text-surface-muted hover:text-surface-text border-surface-border/60 hover:bg-surface-3/50'
+                        ]"
+                        :title="isMultiSelectActive ? 'Desativar seleção múltipla' : 'Selecionar múltiplos favoritos'"
+                    >
+                        <i class="pi" :class="isMultiSelectActive ? 'pi-check-square text-primary-smart' : 'pi-stop text-surface-muted'"></i>
+                        <span class="hidden sm:inline">Seleção Múltipla</span>
+                    </button>
+
+                    <button
+                        v-if="isMultiSelectActive && selectedFavorites.length > 0"
+                        type="button"
+                        @click="handleBatchAddFavorites"
+                        class="h-9 px-3.5 rounded-xl font-black text-xs uppercase tracking-wider bg-primary-smart hover:bg-primary-smart/90 text-white flex items-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer outline-none animate-in fade-in zoom-in-95 duration-150"
+                    >
+                        <i class="pi pi-shopping-cart text-xs"></i>
+                        <span>Lançar ({{ selectedFavorites.length }})</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. MODO NORMAL (BREADCRUMB COMPLETO + BOTÃO WHATSAPP) -->
+            <div v-else class="w-full flex items-center justify-between min-h-[32px] gap-3">
+                <div class="shrink-0 flex items-center">
                     <Breadcrumb
                         :items="catalogBreadcrumbs.items"
                         :active-item="catalogBreadcrumbs.active"
@@ -26,24 +60,40 @@
                         size="sm"
                     />
                 </div>
-            </div>
 
-            <!-- CABEÇALHO ORGANIZADOR DE CARDÁPIO -->
-            <div v-else class="w-full flex items-center justify-between shrink-0 px-6 py-3.5 border-b border-surface-border/50 bg-surface-2 min-h-[56px] z-10">
-                <button @click="$emit('close-manager')" class="flex items-center gap-2 text-surface-muted hover:text-primary-smart transition-colors font-black uppercase tracking-widest text-[11px] outline-none cursor-pointer border-none bg-transparent">
-                    <i class="pi pi-arrow-left"></i> Voltar ao Cardápio
+                <button
+                    type="button"
+                    @click="handleCopyCategoryWhatsApp"
+                    class="h-8 md:h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 outline-none select-none active:scale-95 shrink-0"
+                    title="Copiar cardápio em texto para o WhatsApp"
+                >
+                    <i class="pi text-sm font-black" :class="isCopied ? 'pi-check text-emerald-500' : 'pi-whatsapp'"></i>
+                    <span class="hidden sm:inline">{{ isCopied ? 'Copiado!' : 'Copiar' }}</span>
                 </button>
-                <span class="text-sm font-black text-primary-500 uppercase tracking-widest flex items-center gap-2">
-                    <i class="pi pi-sitemap"></i> Organizar Cardápio
-                </span>
             </div>
+        </div>
 
+        <!-- CABEÇALHO ORGANIZADOR DE CARDÁPIO -->
+        <div v-else class="w-full flex items-center justify-between shrink-0 px-6 py-3.5 border-b border-surface-border/50 bg-surface-2 min-h-[56px] z-10">
+            <button @click="$emit('close-manager')" class="flex items-center gap-2 text-surface-muted hover:text-primary-smart transition-colors font-black uppercase tracking-widest text-[11px] outline-none cursor-pointer border-none bg-transparent">
+                <i class="pi pi-arrow-left"></i> Voltar ao Cardápio
+            </button>
+            <span class="text-sm font-black text-primary-500 uppercase tracking-widest flex items-center gap-2">
+                <i class="pi pi-sitemap"></i> Organizar Cardápio
+            </span>
+        </div>
 
         <div class="scroll-container flex-1 min-h-0 overflow-y-auto hide-scrollbar p-6">
 
             <!-- TELA 1: FAVORITOS -->
             <div v-show="isFavoritesActive && favorites.length > 0" class="pb-8">
-                <CustomerFavoritesGrid :favorites="favorites" :layout="productCardLayout" @favorite-click="$emit('favorite-click', $event)"/>
+                <CustomerFavoritesGrid
+                    :favorites="favorites"
+                    :layout="productCardLayout"
+                    :is-multi-select="isMultiSelectActive"
+                    v-model:selected-items="selectedFavorites"
+                    @favorite-click="$emit('favorite-click', $event)"
+                />
             </div>
 
             <!-- TELA 2: ORGANIZADOR DE CATEGORIAS INLINE -->
@@ -106,13 +156,16 @@
 </template>
 
 <script setup>
+import { ref, watch } from 'vue';
+import { usePage } from '@inertiajs/vue3';
 import Breadcrumb from "@/Components/UI/Breadcrumb.vue";
 import CustomerFavoritesGrid from '@/Pages/Operations/Components/Catalog/CustomerFavoritesGrid.vue';
 import CategoryCloudNode from "@/Pages/Pos/Components/Menu/CategoryCloudNode.vue";
 import CategoryGrid from "@/Pages/Pos/Components/Menu/CategoryGrid.vue";
 import ProductGrid from "@/Pages/Pos/Components/Menu/ProductGrid.vue";
+import { useWhatsAppMenuText } from '@/Pages/Shared/Composables/useWhatsAppMenuText';
 
-defineProps({
+const props = defineProps({
     isTeamMode: { type: Boolean, default: false },
     searchQuery: String,
     categoryHierarchy: String,
@@ -131,8 +184,41 @@ defineProps({
     productCardLayout: String
 });
 
-defineEmits([
+const emit = defineEmits([
     'navigate', 'close-manager', 'undo-category-change', 'update:localCategories',
-    'save-category', 'favorite-click', 'category-click', 'product-click'
+    'save-category', 'favorite-click', 'category-click', 'product-click', 'batch-add-favorites'
 ]);
+
+const page = usePage();
+const { copyCategoryMenu } = useWhatsAppMenuText();
+
+const isMultiSelectActive = ref(false);
+const selectedFavorites = ref([]);
+const isCopied = ref(false);
+
+watch(() => props.isFavoritesActive, (active) => {
+    if (!active) {
+        isMultiSelectActive.value = false;
+        selectedFavorites.value = [];
+    }
+});
+
+const handleBatchAddFavorites = () => {
+    emit('batch-add-favorites', selectedFavorites.value);
+    selectedFavorites.value = [];
+    isMultiSelectActive.value = false;
+};
+
+const handleCopyCategoryWhatsApp = async () => {
+    const categories = (page.props.initialCategories && page.props.initialCategories.length > 0)
+        ? page.props.initialCategories
+        : (props.localCategories || page.props.categories || []);
+    const products = page.props.initialProducts || page.props.products || [];
+
+    const ok = await copyCategoryMenu(props.selectedCategory, categories, products);
+    if (ok) {
+        isCopied.value = true;
+        setTimeout(() => { isCopied.value = false; }, 2000);
+    }
+};
 </script>

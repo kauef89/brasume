@@ -6,7 +6,7 @@
 
         <!-- CABEÇALHO DESKTOP / POS (Oculto no TeamApp mobile) -->
         <div v-if="!isTeamMode && !isCustomerMode" class="shrink-0 flex flex-col w-full">
-            <ProductHeader
+            <ProductHeader :product="product"
                 :title="product?.name || ''"
                 :total="currentTotal * localQuantity"
                 :show-breadcrumbs="true"

@@ -9,13 +9,34 @@
                     : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 md:gap-3'
             ]"
         >
-            <ProductCard
+            <div
                 v-for="(item, index) in enrichedFavorites"
                 :key="item.variant_signature || (item.id + '-' + index)"
-                :product="item"
-                :layout="layout"
-                @click="$emit('favorite-click', $event)"
-            />
+                class="relative group/fav select-none"
+            >
+                <ProductCard
+                    :product="item"
+                    :layout="layout"
+                    :class="[
+                        'transition-all duration-200',
+                        isMultiSelect && isItemSelected(item)
+                            ? 'ring-4 ring-primary-500 scale-[0.98] rounded-2xl shadow-xl'
+                            : ''
+                    ]"
+                    @click="onCardClick(item)"
+                />
+
+                <!-- CHECKBOX OVERLAY (QUANDO MODO SELEÇÃO LIGADO) -->
+                <button
+                    v-if="isMultiSelect"
+                    type="button"
+                    @click.stop="toggleItem(item)"
+                    class="absolute top-2.5 left-2.5 z-20 w-7 h-7 rounded-xl flex items-center justify-center transition-all shadow-md cursor-pointer border-none outline-none"
+                    :class="isItemSelected(item) ? 'bg-primary-500 text-white shadow-primary-500/30' : 'bg-black/60 text-white/70 backdrop-blur-md hover:bg-black/80 hover:text-white'"
+                >
+                    <i class="pi text-xs font-black" :class="isItemSelected(item) ? 'pi-check' : ''"></i>
+                </button>
+            </div>
         </div>
         <EmptyState
             v-else
@@ -34,11 +55,38 @@ import EmptyState from "@/Components/UI/EmptyState.vue";
 
 const props = defineProps({
     favorites: { type: Array, required: true },
-    layout: { type: String, default: 'square' }
+    layout: { type: String, default: 'square' },
+    isMultiSelect: { type: Boolean, default: false },
+    selectedItems: { type: Array, default: () => [] }
 });
 
-defineEmits(['favorite-click']);
+const emit = defineEmits(['favorite-click', 'update:selectedItems']);
 const page = usePage();
+
+const isItemSelected = (item) => {
+    const sig = item.variant_signature || item.id;
+    return props.selectedItems.some(i => (i.variant_signature || i.id) === sig);
+};
+
+const toggleItem = (item) => {
+    const sig = item.variant_signature || item.id;
+    const exists = props.selectedItems.some(i => (i.variant_signature || i.id) === sig);
+    let updated;
+    if (exists) {
+        updated = props.selectedItems.filter(i => (i.variant_signature || i.id) !== sig);
+    } else {
+        updated = [...props.selectedItems, item];
+    }
+    emit('update:selectedItems', updated);
+};
+
+const onCardClick = (item) => {
+    if (props.isMultiSelect) {
+        toggleItem(item);
+    } else {
+        emit('favorite-click', item);
+    }
+};
 
 const enrichedFavorites = computed(() => {
     const dict = {};
@@ -50,7 +98,7 @@ const enrichedFavorites = computed(() => {
 
         const rawSelections = fav.modifiers || fav.selections || fav.favorite_selections || [];
 
-        // 🚀 O MOTOR DE HIGIENIZAÇÃO (Tolerância Zero)
+        // MOTOR DE HIGIENIZAÇÃO (Tolerância Zero)
         const ingredientGroups = (realProduct.modifiers || []).filter(g => g.type === 'ingredient');
         let cleanedSelections = rawSelections;
 

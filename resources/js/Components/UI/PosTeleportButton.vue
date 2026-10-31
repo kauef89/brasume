@@ -9,6 +9,7 @@
                 { 'opacity-40 cursor-not-allowed pointer-events-none': disabled || loading }
             ]"
             v-bind="$attrs"
+            @click="$emit('click', $event)"
         >
             <!-- ÍCONE OU SPINNER -->
             <i v-if="loading" class="pi pi-spinner pi-spin text-sm"></i>
@@ -38,6 +39,12 @@
 
 <script setup>
 import { computed } from 'vue';
+
+defineOptions({
+    inheritAttrs: false
+});
+
+defineEmits(['click']);
 
 const props = defineProps({
     icon: { type: String, required: true },

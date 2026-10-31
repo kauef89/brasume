@@ -2,7 +2,7 @@
     <div class="flex-1 flex flex-col h-full relative overflow-hidden w-full" :class="(isTeamMode || isCustomerMode) ? 'bg-surface-1 pt-42 pb-32' : 'bg-surface-2'">
 
         <!-- CABEÇALHO DESKTOP / POS (Oculto nos apps mobile) -->
-        <ProductHeader
+        <ProductHeader :product="product"
             v-if="!isTeamMode && !isCustomerMode"
             :show-breadcrumbs="true"
             subtitle="Montando Combo"

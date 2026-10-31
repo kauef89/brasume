@@ -43,6 +43,9 @@ Route::middleware(['auth:team'])->group(function () {
         ->where('tab', '.*')
         ->name("team.app");
 
+    Route::post("/team/meal-allowance", [TeamAppController::class, "submitMealAllowance"])
+        ->name("team.meal-allowance");
+
     // 🍳 3. KdsApp
     Route::get("/kds/{kitchen_id?}", [KdsAppController::class, "index"])
         ->name("kds.index");

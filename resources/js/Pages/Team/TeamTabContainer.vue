@@ -6,6 +6,18 @@
             <TeamHomeTab />
         </div>
 
+        <!-- 🥪 NOVO: ABA LANCHE DA EQUIPA (VALE-ALIMENTAÇÃO) -->
+        <div v-if="activeTab === 'meal'" class="flex-1 h-full min-h-0 flex flex-col overflow-hidden animate-in fade-in">
+            <MealAllowanceTab
+                ref="mealTabRef"
+                :attendees="$page.props.currentAttendees || []"
+                :catalog="catalog || initialProducts"
+                :company-settings="$page.props.companySettings"
+                @back="$emit('update:activeTab', 'home')"
+                @open-modifiers="$emit('open-meal-modifiers', $event)"
+            />
+        </div>
+
         <!-- 📖 ABA: CARDÁPIO -->
         <TeamMenuTab
             v-show="activeTab === 'menu'"
@@ -61,7 +73,7 @@
             />
         </div>
 
-        <!-- 🖥️ NOVO: ABA: TERMINAIS (FROTA) -->
+        <!-- 🖥️ ABA: TERMINAIS (FROTA) -->
         <div v-if="activeTab === 'fleet'" class="flex-1 overflow-y-auto hide-scrollbar p-0 pb-32 animate-in fade-in">
             <DeviceFleetPanel />
         </div>
@@ -144,6 +156,7 @@ import OpenTabs from "@/Pages/Operations/Components/Dashboard/OpenTabs.vue";
 import TeamMenuTab from "@/Pages/Team/TeamMenuTab.vue";
 
 // Abas Assíncronas (Lazy Load)
+const MealAllowanceTab = defineAsyncComponent(() => import('@/Pages/Team/MealAllowanceTab.vue'));
 const InventoryTab = defineAsyncComponent(() => import('@/Pages/Team/InventoryTab.vue'));
 const TeamHomeTab = defineAsyncComponent(() => import('@/Pages/Team/TeamHomeTab.vue'));
 const RestockTab = defineAsyncComponent(() => import('@/Pages/Team/RestockTab.vue'));
@@ -188,16 +201,22 @@ defineEmits([
     'update:activeTab', 'update:searchQuery', 'categorySelect', 'productClick', 'openMenu',
     'createOrder', 'startAllowanceOrder', 'update-qty', 'clearCart',
     'edit-item', 'checkout', 'update:orderType', 'routingValid', 'routingMeta',
-    'kds-take', 'kds-complete', 'kds-print', 'kds-loss', 'kds-cancel'
+    'kds-take', 'kds-complete', 'kds-print', 'kds-loss', 'kds-cancel', 'open-meal-modifiers'
 ]);
 
 const cartRef = ref(null);
+const mealTabRef = ref(null);
 
 const toggleCartRouting = () => {
     cartRef.value?.toggleRouting();
 };
 
+const addMealItemToSlot = (attendeeId, item) => {
+    mealTabRef.value?.addItemToActiveAttendee(attendeeId, item);
+};
+
 defineExpose({
-    toggleCartRouting
+    toggleCartRouting,
+    addMealItemToSlot
 });
 </script>

@@ -65,11 +65,12 @@
                         @click="retryFailedFiscal"
                     />
 
-                    <!-- ENCERRAR TURNO OPERACIONAL -->
+                    <!-- LOJA ONLINE (CUSTOMER APP) -->
                     <PosTeleportButton
-                        icon="pi-history"
-                        color="primary"
-                        label="Encerrar Turno Operacional"
+                        :icon="isStoreAcceptingOrders ? 'pi-globe' : 'pi-pause-circle'"
+                        :color="isStoreAcceptingOrders ? 'primary' : 'warning'"
+                        :active="!isStoreAcceptingOrders"
+                        :label="isStoreAcceptingOrders ? 'Loja Online: Aberta' : 'Loja Online: Pausada'"
                         @click="openOperationalView"
                     />
 
@@ -185,10 +186,11 @@
                     @confirm="handleTransactionConfirm"
                 />
 
-                <!-- PAINEL DE FECHAMENTO OPERACIONAL -->
+                <!-- PAINEL DE CONTROLE DA LOJA ONLINE -->
                 <CloseOperationalShift
                     v-else-if="rightView === 'close_operational'"
                     class="w-full h-full"
+                    :current-shift="currentShift"
                     :is-processing="isOperationalProcessing"
                     @cancel="resetViews"
                     @confirm="handleConfirmOperationalClose"
@@ -308,6 +310,10 @@ const {
 } = useOperationalShift();
 
 // 🚀 2. COMPUTEDS E MÉTODOS DE ESTADO DE VIEW
+const isStoreAcceptingOrders = computed(() => {
+    return props.currentShift?.accepting_orders !== false;
+});
+
 const currentAttendanceFlowMode = computed(() => {
     if (!props.currentShift || shiftActionType.value === 'open') {
         return 'open';
@@ -332,7 +338,7 @@ const resetViews = () => {
     }
 };
 
-// 🚀 3. WATCHER DE TURNO (Agora shiftActionType já existe com segurança)
+// 🚀 3. WATCHER DE TURNO
 watch(() => props.currentShift, () => {
     resetViews();
 }, { immediate: true });
@@ -369,7 +375,6 @@ const openShiftView = (type) => {
     shiftActionType.value = type;
 
     if (type === 'open') {
-        // 🚀 Pré-carrega a equipe a partir da escala 5x2 programada para hoje
         stagedAttendees.value = props.todayScheduledAttendees?.length > 0
             ? [...props.todayScheduledAttendees]
             : [];
@@ -457,10 +462,9 @@ const openOperationalView = () => {
 };
 
 const handleConfirmOperationalClose = (closeStoreChoice) => {
-    const unpaidCount = (props.currentAttendees || []).filter(a => Number(a.daily_rate) > 0 && !a.account_payable_id).length;
     submitOperationalCloseShift(closeStoreChoice, () => {
         resetViews();
-    }, unpaidCount);
+    });
 };
 </script>
 

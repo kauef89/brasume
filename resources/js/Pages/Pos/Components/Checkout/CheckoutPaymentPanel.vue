@@ -125,15 +125,54 @@ const goToCashier = () => {
 
 const isLoyaltyActive = computed(() => props.companySettings?.loyalty_is_active && props.companySettings?.loyalty_reward_type === 'cashback');
 
+const activeCustomer = computed(() => props.order?.customer || null);
+
+// 🔍 IDENTIFICAÇÃO CONDICIONAL DE CLIENTE
+const isCustomerLinkedToSupplier = computed(() => {
+    const c = activeCustomer.value;
+    if (!c) return false;
+    return Boolean(c.supplier_id || c.supplier);
+});
+
+const isCustomerAnEmployee = computed(() => {
+    const c = activeCustomer.value;
+    if (!c) return false;
+    return Boolean(c.employee_id || c.employee || c.is_employee);
+});
+
 const customerBalanceReais = computed(() => {
-    if (!props.order?.customer) return 0;
-    const pts = props.order.customer.loyalty_points || 0;
+    if (!activeCustomer.value) return 0;
+    const pts = activeCustomer.value.loyalty_points || 0;
     const rate = Number(props.companySettings?.loyalty_cashback_conversion_rate || 5);
     return (pts / 100) * rate;
 });
 
 const mappedMethods = computed(() => {
-    let methods = props.paymentMethods.map(m => ({
+    const rawList = props.paymentMethods || [];
+
+    // 🛡️ REGRAS DE VISIBILIDADE DAS FORMAS DE PAGAMENTO
+    const eligibleMethods = rawList.filter(m => {
+        const engine = typeof m.engine_type === 'object' ? m.engine_type?.value : m.engine_type;
+
+        // 1. Vale-alimentação nunca aparece no checkout normal (restrito ao lanche da equipa)
+        if (engine === 'allowance') {
+            return false;
+        }
+
+        // 2. Convénio: exige cliente vinculado a um fornecedor / empresa conveniada
+        if (engine === 'customer_credit') {
+            return isCustomerLinkedToSupplier.value;
+        }
+
+        // 3. Consumo Interno: exige que o cliente seja um colaborador
+        if (engine === 'internal') {
+            return isCustomerAnEmployee.value;
+        }
+
+        return true;
+    });
+
+    let methods = eligibleMethods.map(m => ({
         id: m.id,
         name: m.name,
         icon: getPaymentIcon(m),
@@ -142,7 +181,7 @@ const mappedMethods = computed(() => {
     }));
 
     if (isLoyaltyActive.value) {
-        const hasCustomer = !!props.order?.customer;
+        const hasCustomer = !!activeCustomer.value;
         const balance = customerBalanceReais.value;
         const alreadyStaged = props.stagedPayments.some(p => p.engine_type === 'internal_loyalty');
         const minRedeem = Number(props.companySettings?.loyalty_min_redeem_value || 0);
