@@ -392,7 +392,15 @@ const handleOpenMealModifiers = (payload) => {
 const handleCustomModifiersConfirm = (configuredItem) => {
     if (mealTargetAttendee.value && activeTab.value === 'meal') {
         const prod = activeProduct.value;
-        const unitPrice = Number(prod.price || prod.base_price || 0);
+
+        // 🚀 Resolução prioritária do preço de salão/balcão
+        const unitPrice = Number(
+            prod.dine_in_price
+            ?? prod.price
+            ?? configuredItem.unitPrice
+            ?? configuredItem.price
+            ?? 0
+        );
         const extra = Number(configuredItem.extraPrice || 0);
         const qty = Number(configuredItem.qty || 1);
 
