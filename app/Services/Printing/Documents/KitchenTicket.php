@@ -213,7 +213,19 @@ class KitchenTicket
         });
 
         if ($validModifiers->isNotEmpty()) {
-            $itemQty = max(1, (float)($item->quantity ?: 1));
+            // 🛡️ Recupera a quantidade original do produto para calcular a proporção correta por lanche
+            $originalQuantity = $item->original_quantity ?? null;
+            if (!$originalQuantity && !empty($item->id)) {
+                $dbItem = $this->order->relationLoaded('items')
+                    ? $this->order->items->firstWhere('id', $item->id)
+                    : OrderItem::where('order_id', $this->order->id)->find($item->id);
+
+                if ($dbItem && (float)$dbItem->quantity > (float)$item->quantity) {
+                    $originalQuantity = (float)$dbItem->quantity;
+                }
+            }
+
+            $itemQty = max(1, (float)($originalQuantity ?? $item->quantity ?: 1));
 
             $rankedModifiers = $validModifiers->map(function ($mod) use ($modifierGroups, $itemQty) {
                 $groupId = $mod->modifier_group_id ?? $mod->group_id ?? null;

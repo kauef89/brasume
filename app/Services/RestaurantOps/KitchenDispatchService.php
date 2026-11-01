@@ -148,15 +148,19 @@ class KitchenDispatchService
 
             if ($actualPrintMode === 'item') {
                 foreach ($printerItems as $item) {
+                    $originalQty = max(1, (float) $item->quantity);
                     $copies = $actualSeparateMultiples ? (int) $item->quantity : 1;
-                    $printItem = clone $item;
-
-                    if ($actualSeparateMultiples) {
-                        $printItem->quantity = 1;
-                    }
 
                     for ($i = 0; $i < $copies; $i++) {
-                        $document = new KitchenTicket($order, collect([$printItem]), 'item', $actualSeparateMultiples, false);
+                        $printItem = clone $item;
+
+                        if ($actualSeparateMultiples) {
+                            $printItem->quantity = 1;
+                            $printItem->original_quantity = $originalQty;
+                        }
+
+                        // Passa separateMultiples como false pois o despachador já gerou os jobs individuais
+                        $document = new KitchenTicket($order, collect([$printItem]), 'item', false, false);
                         $dispatcher->dispatch($printer, $document);
                     }
                 }

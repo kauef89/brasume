@@ -7,19 +7,16 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Financial\Gateways\SicrediPixGateway;
 use App\Services\Orders\OrderPaymentService;
-use App\Services\Orders\PaymentEligibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 class CheckoutPaymentController extends Controller
 {
     public function processPayment(
         Order $order,
         Request $request,
-        OrderPaymentService $paymentService,
-        PaymentEligibilityService $eligibilityService
+        OrderPaymentService $paymentService
     ): JsonResponse|RedirectResponse {
         if ($request->has('items') && is_array($request->input('items'))) {
             $filteredItems = array_values(array_filter($request->input('items'), function ($item) {
@@ -42,10 +39,6 @@ class CheckoutPaymentController extends Controller
         ]);
 
         try {
-            // 1. Elegibilidade (Convênio, Colaborador, Vale)
-            $eligibilityService->validatePayments($order, $data['payments']);
-
-            // 2. Vínculo de turno e cupom
             $paymentService->attachActiveShiftIfMissing($order);
 
             if (!empty($data['coupon_code'])) {
@@ -56,8 +49,8 @@ class CheckoutPaymentController extends Controller
                 );
             }
 
-            // 3. Liquidação
             $paymentService->processPayment($order, $data);
+
             $order->refresh()->load([
                 'items.modifiers',
                 'payments.items.modifiers',
@@ -65,6 +58,7 @@ class CheckoutPaymentController extends Controller
                 'customer',
                 'diningTable'
             ]);
+
             $paymentService->resolveOrderCompletion($order);
 
             if ($request->wantsJson()) {
@@ -77,11 +71,10 @@ class CheckoutPaymentController extends Controller
 
             return redirect()->back()->with('success', 'Pagamento processado!');
         } catch (\Throwable $e) {
-            $message = $e instanceof ValidationException ? $e->getMessage() : $e->getMessage();
             if ($request->wantsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 422);
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
             }
-            return redirect()->back()->with('error', $message);
+            return redirect()->back()->with('error', $e->getMessage());
         }
     }
 
@@ -97,6 +90,7 @@ class CheckoutPaymentController extends Controller
             if ($request->wantsJson()) {
                 return response()->json(['success' => true, 'message' => 'Pagamento removido com sucesso.']);
             }
+
             return back()->with('success', 'Pagamento removido com sucesso.');
         } catch (\Throwable $e) {
             if ($request->wantsJson()) {
@@ -114,7 +108,7 @@ class CheckoutPaymentController extends Controller
     ): JsonResponse {
         try {
             $amount = $request->input('amount') ? (float) $request->input('amount') : null;
-            $pixData = $paymentService->generatePixCharge($order, $amount, $pixGateway);
+            $pixData = $paymentService->generatePixPayment($order, $amount, $pixGateway);
 
             return response()->json(array_merge(['success' => true], $pixData));
         } catch (\Throwable $e) {
@@ -127,7 +121,7 @@ class CheckoutPaymentController extends Controller
         Request $request,
         OrderPaymentService $paymentService
     ): JsonResponse|RedirectResponse {
-        $paymentService->cancelPixCharge($order);
+        $paymentService->cancelPixPayment($order);
 
         if ($request->wantsJson()) {
             return response()->json([
