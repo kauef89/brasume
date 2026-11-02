@@ -1,5 +1,5 @@
 import { router } from "@inertiajs/vue3";
-import { ref } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 
 export function useOrderFlow(props, cartContext, autoCheckoutCallback = null) {
     const { cart, addToCart, updateItemModifiers, loadEditOrder, startNewOrder, orderType } = cartContext;
@@ -8,6 +8,34 @@ export function useOrderFlow(props, cartContext, autoCheckoutCallback = null) {
     const isComboVisible = ref(false);
     const activeProduct = ref(null);
     const editItemIndex = ref(null);
+
+    // 🛑 LIMPEZA COMPULSÓRIA DE CARRINHO FANTASMA
+    const clearResidualCart = () => {
+        if (typeof startNewOrder === 'function') {
+            startNewOrder();
+        }
+        if (cart && 'value' in cart) {
+            cart.value = [];
+        }
+        localStorage.removeItem('pos_cart');
+        localStorage.removeItem('pos_draft_cart');
+        localStorage.removeItem('pos_swap_context');
+    };
+
+    // Ouve eventos disparados pelo painel de operações ou OrderDetails
+    onMounted(() => {
+        if (typeof window !== 'undefined') {
+            window.addEventListener('pos-append-to-order', clearResidualCart);
+            window.addEventListener('pos-clear-cart', clearResidualCart);
+        }
+    });
+
+    onUnmounted(() => {
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('pos-append-to-order', clearResidualCart);
+            window.removeEventListener('pos-clear-cart', clearResidualCart);
+        }
+    });
 
     const hasComboGroups = (prod) => {
         if (!prod || !prod.combo_groups) return false;
@@ -43,7 +71,13 @@ export function useOrderFlow(props, cartContext, autoCheckoutCallback = null) {
     };
 
     const initializeFlow = (urlParams) => {
-        if (urlParams.get('action') === 'new') startNewOrder();
+        const isNew = urlParams.get('action') === 'new';
+        const appendOrderId = urlParams.get('append_to_order');
+
+        // Se entrou em ação nova ou em append por URL, purga resíduos imediatamente
+        if (isNew || appendOrderId) {
+            clearResidualCart();
+        }
 
         if (props.editOrderData) {
             loadEditOrder(props.editOrderData);
@@ -152,7 +186,6 @@ export function useOrderFlow(props, cartContext, autoCheckoutCallback = null) {
             localStorage.removeItem('pos_swap_context');
         }
 
-        // Preserva comboItems e notas de favoritos
         if (product.cartItem?.comboItems) {
             productWithContext.cartItem = { ...product.cartItem };
         } else if (product.combo_items && product.combo_items.length > 0) {

@@ -239,18 +239,34 @@ export function useOrderDetailsOrchestrator(props, activeItemsGrouped) {
     };
 
     const handleChangeAddressConfirm = (payload) => {
-        router.post(route('operations.orders.change-address', payload.order_id), {
-            address_id: payload.new_address_id,
-            address: payload.new_address,
-            delivery_fee: payload.new_delivery_fee
-        }, {
-            preserveState: true,
-            onSuccess: () => {
-                isChangeAddressModalVisible.value = false;
-                activeSidebarView.value = 'menu';
-            }
-        });
-    };
+            router.post(route('operations.orders.change-address', payload.order_id), {
+                address_id: payload.new_address_id,
+                address: payload.new_address,
+                delivery_fee: payload.new_delivery_fee
+            }, {
+                preserveState: true,
+                preserveScroll: true,
+                onSuccess: () => {
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Endereço Atualizado',
+                        detail: 'O local de entrega e a taxa foram atualizados com sucesso.',
+                        life: 3000
+                    });
+                    isChangeAddressModalVisible.value = false;
+                    activeSidebarView.value = 'menu';
+                },
+                onError: (errors) => {
+                    const message = Object.values(errors)[0] || 'Falha ao atualizar o endereço da comanda.';
+                    toast.add({
+                        severity: 'error',
+                        summary: 'Erro na Atualização',
+                        detail: message,
+                        life: 5000
+                    });
+                }
+            });
+        };
 
     const handleDeactivateAddress = (addressId) => {
         router.post(route('operations.customers.addresses.deactivate', [props.order.customer_id, addressId]), {}, {

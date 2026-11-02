@@ -13,9 +13,9 @@ use App\Models\Employee;
 use App\Models\DiningTable;
 use App\Models\Coupon;
 use App\Events\OrderUpdated;
+use App\Events\DiningTableUpdated;
 use App\Services\Marketing\CouponService;
 use App\Services\Marketing\LoyaltyService;
-use App\Services\RestaurantOps\TablesService;
 use App\Services\Financial\Gateways\SicrediPixGateway;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -166,7 +166,7 @@ class OrderPaymentService
                         'amount'            => $payment['amount'],
                         'description'       => "Pedido #{$order->id} ({$methodName})",
                         'operator_name'     => auth()->user()->name ?? 'Sistema',
-                        'transaction_date' => now(),
+                        'transaction_date'  => now(),
                     ]);
                 }
             }
@@ -196,11 +196,11 @@ class OrderPaymentService
                     'amount'            => $cashChange,
                     'description'       => "Troco - Pedido #{$order->id}",
                     'operator_name'     => auth()->user()->name ?? 'Sistema',
-                    'transaction_date' => now(),
+                    'transaction_date'  => now(),
                 ]);
             }
 
-            // Atualização do status final do pedido
+            // Atualização do status financeiro do pedido
             if ($totalPaid >= ($expectedTotal - 0.05) || $areAllItemsPaid || $excess > 0.02) {
                 $order->service_fee = $requestedServiceFee;
                 $order->total = $expectedTotal;
@@ -210,6 +210,8 @@ class OrderPaymentService
                     ->where('status', '!=', 'cancelled')
                     ->update(['paid_qty' => DB::raw('quantity')]);
 
+                // O balcão pago permanece em 'preparing' (ou status atual de produção).
+                // Ele NUNCA é fechado automaticamente aqui.
                 if ($order->type === 'table') {
                     $order->status = 'closed';
                     $order->closed_at = now();
@@ -224,6 +226,9 @@ class OrderPaymentService
 
             $order->save();
         });
+
+        // Resolve liberação de mesas (sem auto-split) e verificação de entrega de delivery
+        $this->resolveOrderCompletion($order);
 
         try {
             broadcast(new OrderUpdated($order));
@@ -279,29 +284,45 @@ class OrderPaymentService
         $this->pixService->handleWebhook($txid, $amount, $endToEndId);
     }
 
+    /**
+     * Conclui pedidos e libera mesas físicas com integridade de layout.
+     */
     public function resolveOrderCompletion(Order $order): void
     {
-        $isPosSource = in_array($order->source, [Order::SOURCE_POS_APP, Order::SOURCE_CASHIER], true);
-
-        $shouldClose = (in_array($order->status, ['dispatched', 'delivered']) && $order->payment_status === 'paid')
-            || ($order->type === 'counter' && $order->payment_status === 'paid' && ($isPosSource || in_array($order->status, ['ready', 'dispatched', 'delivered'])))
+        $shouldClose = ($order->type === 'delivery' && in_array($order->status, ['dispatched', 'delivered']) && $order->payment_status === 'paid')
             || ($order->type === 'table' && $order->payment_status === 'paid');
 
-        if (!$shouldClose) return;
+        if (!$shouldClose) {
+            return;
+        }
 
         $order->status = 'closed';
         $order->closed_at = now();
         $order->save();
 
+        // Libera a mesa física preservando o layout de junção (sem auto-split)
         if ($order->type === 'table') {
             $table = $order->diningTable
                 ?? ($order->dining_table_id ? DiningTable::find($order->dining_table_id) : null)
                 ?? (!empty($order->table_number) ? DiningTable::where('name', $order->table_number)->first() : null);
 
             if ($table && !$table->hasActiveOrdersInGroup($order->id)) {
-                $primaryTable = $table->parent_table_id ? $table->parentTable : $table;
-                if ($primaryTable) {
-                    app(TablesService::class)->split($primaryTable);
+                $groupTableIds = $table->getGroupTableIds();
+                DiningTable::whereIn('id', $groupTableIds)->update(['status' => 'available']);
+
+                $broadcastTables = function () use ($groupTableIds) {
+                    foreach ($groupTableIds as $id) {
+                        $t = DiningTable::find($id);
+                        if ($t) {
+                            broadcast(new DiningTableUpdated($t));
+                        }
+                    }
+                };
+
+                if (DB::transactionLevel() > 0) {
+                    DB::afterCommit($broadcastTables);
+                } else {
+                    $broadcastTables();
                 }
             }
         }

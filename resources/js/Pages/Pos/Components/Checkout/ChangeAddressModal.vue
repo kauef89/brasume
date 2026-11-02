@@ -16,23 +16,22 @@
         </div>
 
         <div class="flex flex-col gap-4 flex-1 overflow-y-auto hide-scrollbar">
-            <div class="p-4 flex flex-col gap-1 shrink-0 text-center">
-                <span class="text-[11px] font-black uppercase tracking-widest text-primary-600">Endereço Atual</span>
+            <div class="p-4 flex flex-col gap-1 shrink-0 text-center bg-surface-2/40 border border-surface-border/50 rounded-2xl">
+                <span class="text-[11px] font-black uppercase tracking-widest text-primary-600">Endereço Atual na Comanda</span>
                 <span class="text-sm font-medium text-surface-text">{{ currentAddressText }}</span>
             </div>
 
             <div class="flex flex-col gap-2 mt-2">
-                <h3 class="text-sm font-black text-surface-muted pl-1 text-center">Selecione outro endereço</h3>
+                <h3 class="text-sm font-black text-surface-muted pl-1 text-center">Selecione o endereço de entrega</h3>
 
                 <div class="flex flex-col gap-2">
                     <div v-if="formattedAddresses.length > 0" class="flex flex-col gap-2">
-                        <!-- 🚀 CORRIGIDO: O botão absoluto duplicado foi deletado daqui -->
                         <AddressCard
                             v-for="addr in formattedAddresses"
                             :key="addr.id"
                             :address="addr"
                             :customer-id="order?.customer_id"
-                            :is-selected="selectedAddressId === addr.id"
+                            :is-selected="Number(selectedAddressId) === Number(addr.id)"
                             @select="selectAddress"
                             @deactivate="$emit('deactivate', $event)"
                             @edit="$emit('edit', $event)"
@@ -42,7 +41,11 @@
                         Este cliente não possui outros endereços salvos.
                     </div>
 
-                    <button @click="$emit('create-new')" class="w-full mt-2 p-4 border border-dashed border-primary-500/40 rounded-xl bg-primary-500/5 text-primary-600 hover:bg-primary-500/10 hover:border-primary-500/60 transition-colors flex items-center justify-center gap-2 outline-none cursor-pointer">
+                    <button
+                        type="button"
+                        @click="$emit('create-new')"
+                        class="w-full mt-2 p-4 border border-dashed border-primary-500/40 rounded-xl bg-primary-500/5 text-primary-600 hover:bg-primary-500/10 hover:border-primary-500/60 transition-colors flex items-center justify-center gap-2 outline-none cursor-pointer"
+                    >
                         <i class="pi pi-plus text-sm"></i>
                         <span class="font-black text-sm uppercase tracking-widest text-[11px]">Novo Endereço</span>
                     </button>
@@ -51,22 +54,28 @@
         </div>
 
         <div class="flex gap-2 w-full shrink-0 mt-auto pt-6 border-t border-surface-border/50">
-            <SecureActionButton action-code="cancel" label="Cancelar" variant="text" severity="secondary" custom-class="font-medium flex-1" @secure-click="handleCancel" />
             <Button
+                type="button"
+                label="Cancelar"
+                variant="text"
+                severity="secondary"
+                class="font-medium flex-1 outline-none cursor-pointer"
+                @click="handleCancel"
+            />
+            <Button
+                type="button"
                 label="Confirmar"
                 icon="pi pi-check"
                 @click="handleConfirm"
-                :disabled="!selectedAddressId || isCurrentAddressSelected"
-                class="flex-1 font-black shadow-md"
+                :disabled="!selectedAddressObj"
+                class="flex-1 font-black shadow-md outline-none cursor-pointer"
             />
         </div>
     </component>
 </template>
 
 <script setup>
-import SecureActionButton from '@/Components/UI/SecureActionButton.vue';
-
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import Button from "primevue/button";
 import AdaptiveModal from "@/Components/UI/AdaptiveModal.vue";
 import AddressCard from "@/Pages/Pos/Components/Cart/AddressCard.vue";
@@ -97,17 +106,6 @@ const currentAddressId = computed(() => {
     return props.order?.address_id || props.order?.address?.id || null;
 });
 
-const isCurrentAddressSelected = computed(() => {
-    return selectedAddressId.value === currentAddressId.value;
-});
-
-watch(() => props.visible, (isOpen) => {
-    if (isOpen) {
-        selectedAddressId.value = currentAddressId.value;
-        selectedAddressObj.value = null;
-    }
-});
-
 const formattedAddresses = computed(() => {
     if (!props.order?.customer?.addresses) return [];
 
@@ -127,9 +125,46 @@ const formattedAddresses = computed(() => {
                 fee = typeof addr.neighborhood === 'object' ? addr.neighborhood.delivery_fee : 0;
             }
 
-            return { ...addr, full_address: addressText || 'Endereço sem detalhes', delivery_fee: Number(fee || 0) };
+            return {
+                ...addr,
+                full_address: addressText || 'Endereço sem detalhes',
+                delivery_fee: Number(fee || 0)
+            };
         });
 });
+
+const syncInitialSelection = () => {
+    const curId = currentAddressId.value;
+    if (curId && formattedAddresses.value.length > 0) {
+        const found = formattedAddresses.value.find(a => Number(a.id) === Number(curId));
+        if (found) {
+            selectedAddressId.value = found.id;
+            selectedAddressObj.value = found;
+            return;
+        }
+    }
+
+    if (formattedAddresses.value.length > 0 && !selectedAddressObj.value) {
+        selectedAddressId.value = formattedAddresses.value[0].id;
+        selectedAddressObj.value = formattedAddresses.value[0];
+    }
+};
+
+onMounted(() => {
+    syncInitialSelection();
+});
+
+watch(() => props.visible, (isOpen) => {
+    if (isOpen) {
+        syncInitialSelection();
+    }
+}, { immediate: true });
+
+watch(formattedAddresses, () => {
+    if (!selectedAddressObj.value) {
+        syncInitialSelection();
+    }
+}, { immediate: true });
 
 const selectAddress = (addr) => {
     selectedAddressId.value = addr.id;
@@ -143,12 +178,14 @@ const handleCancel = () => {
 
 const handleConfirm = () => {
     if (!selectedAddressObj.value) return;
+
     emit("confirm", {
         order_id: props.order.id,
         new_address_id: selectedAddressObj.value.id,
-        new_address: selectedAddressObj.value.full_address,
+        new_address: selectedAddressObj.value,
         new_delivery_fee: selectedAddressObj.value.delivery_fee
     });
+
     if (props.mode !== 'inline') isVisible.value = false;
 };
 </script>

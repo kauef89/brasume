@@ -30,7 +30,7 @@ class PaymentEligibilityService
                 : (string) $paymentMethod->engine_type;
 
             // 1. Vale-Alimentação: exclusivo do fluxo de lanche da equipe
-            if ($engine === PaymentEngineType::ALLOWANCE->value \vert{}\vert{}$engine === 'allowance') {
+            if ($engine === PaymentEngineType::ALLOWANCE->value ||$engine === 'allowance') {
                 throw new Exception("A forma de pagamento Vale-Alimentação é restrita ao lanche da equipe.");
             }
 
@@ -42,7 +42,7 @@ class PaymentEligibilityService
             }
 
             // 3. Consumo Interno: exige que o cliente seja um colaborador
-            if ($engine === PaymentEngineType::INTERNAL->value \vert{}\vert{}$engine === 'internal') {
+            if ($engine === PaymentEngineType::INTERNAL->value ||$engine === 'internal') {
                 if (!$customer) {
                     throw new Exception("A forma de pagamento Consumo Interno exige a identificação do colaborador no pedido.");
                 }

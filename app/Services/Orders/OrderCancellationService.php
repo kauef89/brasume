@@ -3,7 +3,6 @@
 namespace App\Services\Orders;
 
 use App\Enums\PaymentEngineType;
-
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -22,9 +21,9 @@ use App\Services\Fiscal\SpedDocumentService;
 use App\Services\Marketing\LoyaltyService;
 use App\Events\OrderUpdated;
 use App\Events\OrderCancelled;
+use App\Events\DiningTableUpdated;
 use App\Notifications\OrderStatusUpdated;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Exception;
 
 class OrderCancellationService
@@ -37,7 +36,7 @@ class OrderCancellationService
 
     public function cancelByCustomer(Order $order, ?int $activeCustomerId): void
     {
-        if ($order->customer_id && (int) $order->customer_id !== (int) $activeCustomerId) {
+        if ($order->customer_id && (int) $order->customer_id !== (int)$activeCustomerId) {
             throw new Exception("Operação não autorizada. Este pedido não pertence à sua conta.", 403);
         }
 
@@ -47,49 +46,42 @@ class OrderCancellationService
 
         $this->executeB2CCancellation($order, 'Cancelado pelo cliente via App');
 
-        $this->notificationDispatcher->notifyTeamOfCancellation(
-            $order,
+        $this->notificationDispatcher->notifyTeamOfCancellation($order,
             "ALERTA: O cliente cancelou o pedido #{$order->id} pelo App!"
         );
     }
 
-    public function cancelBySystem(Order $order, string $reason = 'Cancelado pelo sistema'): void
+    public function cancelBySystem(Order $order, string$reason = 'Cancelado pelo sistema'): void
     {
         if (!in_array($order->status, ['pending', 'pending_payment'])) {
             return;
         }
 
-        $this->executeB2CCancellation($order, $reason);
+        $this->executeB2CCancellation($order,$reason);
 
-        $this->notificationDispatcher->notifyTeamOfCancellation(
-            $order,
+        $this->notificationDispatcher->notifyTeamOfCancellation($order,
             "Sistema: Pedido #{$order->id} cancelado ({$reason})."
         );
     }
 
-    protected function executeB2CCancellation(Order $order, string $reason): void
+    protected function executeB2CCancellation(Order $order, string$reason): void
     {
-        DB::transaction(function () use ($order, $reason) {
-            $order->update([
+        DB::transaction(function () use ($order, $reason) {$order->update([
                 'status'         => 'cancelled',
                 'payment_status' => 'cancelled',
-                'notes'          => trim(($order->notes ? $order->notes . ' | ' : '') . $reason)
+                'notes'          => trim(($order->notes ? $order->notes . ' | ' : '') .$reason)
             ]);
 
-            // Carrega os itens e subitens com Eager Loading
             $order->load(['items.modifiers', 'items.subItems.modifiers']);
 
-            foreach ($order->items as $item) {
+            foreach ($order->items as$item) {
                 if ($item->status === 'cancelled') continue;
 
-                // 🚀 OTIMIZAÇÃO: Estorna apenas se for item principal (parent_item_id = null)
-                // O método processOrderItemStock JÁ lida com os subitens recursivamente!
                 if ($item->parent_item_id === null) {
                     $this->inventoryService->processOrderItemStock($item, 'restore');
                 }
             }
 
-            // Atualiza o status em massa (uma query para todos os itens do pedido)
             $order->items()->update([
                 'status'            => 'cancelled',
                 'production_status' => 'cancelled',
@@ -98,121 +90,88 @@ class OrderCancellationService
 
             if ($order->coupon_id) {
                 $coupon = Coupon::find($order->coupon_id);
-                if ($coupon && $coupon->usage_count > 0) {
-                    $coupon->decrement('usage_count');
+                if ($coupon && $coupon->usage_count > 0) {$coupon->decrement('usage_count');
                 }
             }
+
+            $this->evaluateTableRelease($order);
         });
 
         broadcast(new OrderUpdated($order));
         event(new OrderCancelled($order));
     }
 
-    public function cancelItem(Order $order, array $data): void
+    public function cancelItem(Order $order, array$data): void
     {
         $orderWasCancelled = false;
 
-        DB::transaction(function () use ($order, $data, &$orderWasCancelled) {
-            $item = OrderItem::with(['modifiers', 'subItems.modifiers'])
+        DB::transaction(function () use ($order,$data, &$orderWasCancelled) {$item = OrderItem::with(['modifiers', 'subItems.modifiers'])
                 ->where('order_id', $order->id)
                 ->findOrFail($data['item_id']);
 
-            $authorizer = $this->securityService->validateAndLog(
+            $authorizer =$this->securityService->validateAndLog(
                 'cancel_item',
                 $data['pin'] ?? null,
                 $data['reason'] ?? 'Sem motivo informado',
-                ['item_name' => $item->product_name, 'price' => $item->total_price, 'order_id' => $order->id]
+                ['item_name' => $item->product_name, 'price' => $item->total_price, 'order_id' =>$order->id]
             );
 
-            // Se for perda operacional, lança o registro
+            // Registo de quebra operacional ou reposição de stock
             if (!empty($data['is_loss'])) {
                 $product = Product::find($item->product_id);
-                if ($product) {
-                    $this->inventoryService->registerLoss(
-                        $product,
-                        $item->quantity,
+                if ($product) {$this->inventoryService->registerLoss(
+                        $product,$item->quantity,
                         'Salão: ' . ($data['reason'] ?? 'Não especificado'),
                         'Estornado diretamente na comanda.',
-                        $authorizer->id,
-                        $item->id
+                        $authorizer->id,$item->id
                     );
                 }
             } else {
-                // Estorna tudo do item pai E DOS SUBITENS usando o método centralizado
                 $this->inventoryService->processOrderItemStock($item, 'restore');
             }
 
-            // 1. Cancela o item solicitado
+            // 1. Cancela o item
             $item->update([
                 'status'            => 'cancelled',
                 'production_status' => 'cancelled',
                 'cancel_reason'     => 'Salão: ' . ($data['reason'] ?? null)
             ]);
 
-            // 🚀 OTIMIZAÇÃO: Apenas altera o status no BD dos subitens, sem restaurar estoque de novo (evitando Kardex N+1 duplicado)
-            if ($item->subItems()->exists()) {
-                $item->subItems()->update([
+            if ($item->subItems()->exists()) {$item->subItems()->update([
                     'status'            => 'cancelled',
                     'production_status' => 'cancelled',
                     'cancel_reason'     => 'Salão: Combo cancelado (' . ($data['reason'] ?? 'Cancelamento') . ')'
                 ]);
             }
 
-            // 2. Recalcula o subtotal e total com base nos itens ativos não-filhos
-            $remainingSubtotal = $order->items()
+            // 2. Recalcula os totais
+            $remainingSubtotal =$order->items()
                 ->where('status', '!=', 'cancelled')
                 ->whereNull('parent_item_id')
                 ->sum(DB::raw('quantity * unit_price'));
 
-            $order->subtotal = max(0, (float) $remainingSubtotal);
-            $order->total = max(0, (float) $order->subtotal + (float) $order->delivery_fee + (float) $order->service_fee - (float) $order->discount);
-            $order->save();
+            $order->subtotal = max(0, (float)$remainingSubtotal);
+            $order->total = max(0, (float)$order->subtotal + (float) $order->delivery_fee + (float)$order->service_fee - (float) $order->discount);$order->save();
 
-            // 3. AUTO-CANCELAMENTO: Verifica se restou algum item ativo na comanda
-            $hasActiveItems = $order->items()
-                ->where('status', '!=', 'cancelled')
-                ->exists();
+            // 3. Verifica se ainda restam itens ativos
+            $hasActiveItems =$order->items()->where('status', '!=', 'cancelled')->exists();
+            $totalPaid = (float)$order->payments()->sum('amount');
 
-            $totalPaid = (float) $order->payments()->sum('amount');
-
-            // Se não restou item ativo e não há saldo pago, cancela a comanda e libera a mesa
-            if (!$hasActiveItems && $totalPaid <= 0.01) {
-                $order->update([
+            if (!$hasActiveItems && $totalPaid <= 0.01) {$order->update([
                     'status'         => 'cancelled',
                     'payment_status' => 'cancelled',
                     'total'          => 0,
                     'subtotal'       => 0,
+                    'closed_at'      => now(),
                     'notes'          => trim(($order->notes ? $order->notes . ' | ' : '') . 'Cancelado automaticamente: todos os itens foram estornados.')
                 ]);
 
-                if (true) {
-                    $order->update(['closed_at' => now()]);
-                }
-
-                // 4. Liberação da mesa física
-                $tableId = $order->dining_table_id;
-                if ($tableId) {
-                    $hasOtherActive = Order::where('dining_table_id', $tableId)
-                        ->where('id', '!=', $order->id)
-                        ->whereNotIn('status', ['closed', 'cancelled'])
-                        ->exists();
-
-                    if (!$hasOtherActive) {
-                        $table = DiningTable::find($tableId);
-                        if ($table) {
-                            $table->update(['status' => 'free']);
-                            if (class_exists(TablesService::class)) {
-                                app(TablesService::class)->split($table);
-                            }
-                        }
-                    }
-                }
-
-                $orderWasCancelled = true;
+                // 4. Avaliação resiliente de libertação da mesa e do grupo
+                $this->evaluateTableRelease($order);$orderWasCancelled = true;
             }
         });
 
-        $freshOrder = $order->fresh(['items', 'payments', 'diningTable']);
+        $freshOrder =$order->fresh(['items', 'payments', 'diningTable']);
         broadcast(new OrderUpdated($freshOrder));
 
         if ($orderWasCancelled) {
@@ -220,37 +179,33 @@ class OrderCancellationService
         }
     }
 
-    public function cancelOrder(Order $order, array $data): void
+    public function cancelOrder(Order $order, array$data): void
     {
-        DB::transaction(function () use ($order, $data) {
-            $authorizer = $this->securityService->validateAndLog(
+        DB::transaction(function () use ($order,$data) {
+            $authorizer =$this->securityService->validateAndLog(
                 'cancel_order',
                 $data['pin'] ?? null,
                 $data['reason'] ?? 'Cancelamento de Pedido',
-                ['order_id' => $order->id, 'total' => $order->total]
+                ['order_id' => $order->id, 'total' =>$order->total]
             );
 
-            $reasonText = $data['reason'] ?? 'Cancelado pela loja';
-            $operatorId = $authorizer?->id ?? auth()->id();
+            $reasonText =$data['reason'] ?? 'Cancelado pela loja';
+            $operatorId =$authorizer?->id ?? auth()->id();
 
             $order->load(['items.modifiers', 'items.subItems.modifiers']);
 
-            foreach ($order->items as $item) {
+            foreach ($order->items as$item) {
                 if ($item->status === 'cancelled') continue;
 
-                // Apenas processa se for o PAI (o processOrderItemStock vai varrer os filhos)
                 if ($item->parent_item_id === null) {
-                    if (!empty($data['is_loss']) && !empty($data['lost_items']) && in_array($item->id, $data['lost_items'])) {
+                    if (!empty($data['is_loss']) && !empty($data['lost_items']) && in_array($item->id,$data['lost_items'])) {
                         if ($item->product_id) {
                             $product = Product::find($item->product_id);
-                            if ($product) {
-                                $this->inventoryService->registerLoss(
-                                    $product,
-                                    $item->quantity,
-                                    'Cancelamento do Pedido #' . $order->id . ': ' . $reasonText,
+                            if ($product) {$this->inventoryService->registerLoss(
+                                    $product,$item->quantity,
+                                    'Cancelamento do Pedido #' . $order->id . ': ' .$reasonText,
                                     'Cancelamento total via POS.',
-                                    $operatorId,
-                                    $item->id
+                                    $operatorId,$item->id
                                 );
                             }
                         }
@@ -263,7 +218,8 @@ class OrderCancellationService
             $order->update([
                 'status'         => 'cancelled',
                 'payment_status' => 'cancelled',
-                'notes'          => trim(($order->notes ? $order->notes . ' | ' : '') . 'Cancelado: ' . $reasonText),
+                'closed_at'      => now(),
+                'notes'          => trim(($order->notes ? $order->notes . ' | ' : '') . 'Cancelado: ' .$reasonText),
             ]);
 
             $order->items()->update([
@@ -274,88 +230,93 @@ class OrderCancellationService
 
             if ($order->coupon_id) {
                 $coupon = Coupon::find($order->coupon_id);
-                if ($coupon && $coupon->usage_count > 0) {
-                    $coupon->decrement('usage_count');
+                if ($coupon && $coupon->usage_count > 0) {$coupon->decrement('usage_count');
                 }
             }
 
-            // Libera a mesa física se for pedido de mesa
-            $tableId = $order->dining_table_id;
-            if ($tableId) {
-                $hasOtherActive = Order::where('dining_table_id', $tableId)
-                    ->where('id', '!=', $order->id)
-                    ->whereNotIn('status', ['closed', 'cancelled'])
-                    ->exists();
-
-                if (!$hasOtherActive) {
-                    $table = DiningTable::find($tableId);
-                    if ($table) {
-                        $table->update(['status' => 'free']);
-                        if (class_exists(TablesService::class)) {
-                            app(TablesService::class)->split($table);
-                        }
-                    }
-                }
-            }
+            // Libertação do grupo físico sem quebrar layout
+            $this->evaluateTableRelease($order);
         });
 
         broadcast(new OrderUpdated($order));
         event(new OrderCancelled($order));
 
-        if ($order->customer && $order->customer->user_id) {
-            $pushMessage = "O pedido #{$order->id} foi cancelado pela loja.";
-            $order->customer->user->notify(new OrderStatusUpdated($order, $pushMessage));
+        if ($order->customer && $order->customer->user_id) {$pushMessage = "O pedido #{$order->id} foi cancelado pela loja.";
+            $order->customer->user->notify(new OrderStatusUpdated($order,$pushMessage));
         }
     }
 
-    public function refundAndClone(Order $order, array $data): void
+    /**
+     * 🛡️ Avalia a ocupação da mesa e de todo o seu grupo (mãe + filhas)
+     * Nunca desmembra as mesas unidas e utiliza sempre o estado 'available'.
+     */
+    protected function evaluateTableRelease(Order $order): void
     {
-        $justification = $data['reason'] ?? 'Correcao de lancamento';
-        if (strlen($justification) < 15) {
-            $justification .= ' - Solicitado Reabertura';
+        $tableId =$order->dining_table_id;
+        if (!$tableId) return;
+
+        $table = DiningTable::find($tableId);
+        if (!$table) return;
+
+        // Se existirem outras contas ativas em qualquer mesa do grupo, mantém 'occupied'
+        if ($table->hasActiveOrdersInGroup($order->id)) {
+            return;
         }
 
-        $fiscalDoc = FiscalDocument::where('order_id', $order->id)
+        // Caso o grupo inteiro esteja sem qualquer conta ativa, liberta as mesas sem as separar
+        $groupTableIds =$table->getGroupTableIds();
+        DiningTable::whereIn('id', $groupTableIds)->update(['status' => 'available']);
+
+        DB::afterCommit(function () use ($groupTableIds) {
+            foreach ($groupTableIds as$id) {
+                $t = DiningTable::find($id);
+                if ($t) broadcast(new DiningTableUpdated($t));
+            }
+        });
+    }
+
+    public function refundAndClone(Order $order, array$data): void
+    {
+        $justification =$data['reason'] ?? 'Correcao de lancamento';
+        if (strlen($justification) < 15) {$justification .= ' - Solicitado Reabertura';
+        }
+
+        $fiscalDoc = FiscalDocument::where('order_id',$order->id)
             ->where('status', 'authorized')
             ->first();
 
         if ($fiscalDoc) {
-            $spedService = app(SpedDocumentService::class);
-            $spedService->cancelNfce($fiscalDoc, $justification);
+            $spedService = app(SpedDocumentService::class);$spedService->cancelNfce($fiscalDoc,$justification);
         }
 
-        DB::transaction(function () use ($order, $data) {
-            $shift = CashShift::where('status', 'open')->latest()->first();
+        DB::transaction(function () use ($order, $data) {$shift = CashShift::where('status', 'open')->latest()->first();
 
-            if (!$shift && $order->payments()->count() > 0) {
+            if (!$shift &&$order->payments()->count() > 0) {
                 throw new Exception("Não é possível realizar o estorno financeiro com o caixa fechado. Abra o turno primeiro para poder devolver o dinheiro do pedido #{$order->id}.");
             }
 
             $totalChangeReturned = (float) ($order->change_returned ?? 0);
 
-            foreach ($order->payments as $payment) {
-                $pm = $payment->payment_method_id ? PaymentMethod::find($payment->payment_method_id) : null;
+            foreach ($order->payments as $payment) {$pm = $payment->payment_method_id ? PaymentMethod::find($payment->payment_method_id) : null;
 
-                if ($pm && ($pm->engine_type === PaymentEngineType::INTERNAL_LOYALTY || $pm->engine_type?->value === 'internal_loyalty')) {
+                if ($pm && ($pm->engine_type === PaymentEngineType::INTERNAL_LOYALTY ||$pm->engine_type?->value === 'internal_loyalty')) {
                     app(LoyaltyService::class)->refundOrderCashback($order);
                     continue;
                 }
 
                 if ($pm && ($pm->engine_type === PaymentEngineType::INTERNAL || $pm->engine_type === PaymentEngineType::ALLOWANCE || in_array($pm->engine_type?->value, ['internal', 'allowance']))) {
                     if ($order->customer) {
-                        $employee = Employee::where('cpf', preg_replace('/\D/', '', $order->customer->cpf ?? ''))
+                        $employee = Employee::where('cpf', preg_replace('/\D/', '',$order->customer->cpf ?? ''))
                             ->orWhere('email', $order->customer->email)
                             ->first();
 
-                        if ($employee) {
-                            $latestLedger = $employee->ledgers()->latest('id')->first();
-                            $currentBalance = $latestLedger ? (float) $latestLedger->balance : 0;
+                        if ($employee) {$latestLedger = $employee->ledgers()->latest('id')->first();$currentBalance = $latestLedger ? (float) $latestLedger->balance : 0;
 
                             $employee->ledgers()->create([
                                 'type'        => 'credit',
                                 'description' => "Estorno de Consumo Interno - Pedido #{$order->id}",
                                 'amount'      => $payment->amount,
-                                'balance'     => $currentBalance + (float) $payment->amount
+                                'balance'     => $currentBalance + (float)$payment->amount
                             ]);
                         }
                     }
@@ -365,22 +326,21 @@ class OrderCancellationService
                 $isCash = ($pm && ($pm->engine_type === PaymentEngineType::MONEY || in_array($pm->engine_type?->value, ['money', 'cash'])))
                     || str_contains(mb_strtolower($payment->method ?? ''), 'dinheiro');
 
-                $amountToRefund = (float) $payment->amount;
+                $amountToRefund = (float)$payment->amount;
 
-                if ($isCash && $totalChangeReturned > 0) {
-                    $deduction = min($amountToRefund, $totalChangeReturned);
-                    $amountToRefund -= $deduction;
-                    $totalChangeReturned -= $deduction;
+                if ($isCash && $totalChangeReturned > 0) {$deduction = min($amountToRefund,$totalChangeReturned);
+                    $amountToRefund -=$deduction;
+                    $totalChangeReturned -=$deduction;
                 }
 
-                if ($amountToRefund > 0 && $shift) {
+                if ($amountToRefund > 0 &&$shift) {
                     Transaction::create([
                         'bank_account_id'  => $shift->bank_account_id,
                         'cash_shift_id'    => $shift->id,
                         'type'             => 'out',
                         'category'         => 'refund',
                         'amount'           => $amountToRefund,
-                        'description'      => 'Estorno Pedido #' . $order->id . ' (' . $payment->method . ')',
+                        'description'      => 'Estorno Pedido #' . $order->id . ' (' .$payment->method . ')',
                         'operator_name'    => auth()->user()->name ?? 'Sistema',
                         'transaction_date' => now(),
                         'order_id'         => $order->id
@@ -389,8 +349,7 @@ class OrderCancellationService
             }
 
             $order->change_returned = 0;
-            $order->payments()->delete();
-            $order->items()->update(['paid_qty' => 0]);
+            $order->payments()->delete();$order->items()->update(['paid_qty' => 0]);
 
             $order->update([
                 'status'                => 'pending',

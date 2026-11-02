@@ -36,7 +36,7 @@ class WmsRestockController extends Controller
     public function updateStock(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'rule_id'     => 'required|integer|exists:product_storage_location,id',
+            'rule_id'     => 'required|integer|exists:product_storage_locations,id',
             'added_stock' => 'required|numeric|min:0.01',
         ]);
 

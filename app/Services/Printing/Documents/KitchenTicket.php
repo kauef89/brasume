@@ -154,7 +154,10 @@ class KitchenTicket
         $this->blueprint[] = ['cmd' => 'align', 'val' => 'ct'];
 
         $headerText = 'CLIENTE';
-        if ($this->order->type === 'table') {
+        // 🥪 Se for lanche da equipe, prioriza SEMPRE o nome formatado do colaborador
+        if ($this->order->source === 'team_app' && !empty($this->order->customer_name)) {
+            $headerText = $this->order->customer_name;
+        } elseif ($this->order->type === 'table') {
             $headerText = 'MESA ' . ($this->order->table_number ?: '?');
         } elseif ($this->order->customer_id && $this->order->customer) {
             $headerText = $this->abbreviateName($this->order->customer->name);
@@ -178,7 +181,14 @@ class KitchenTicket
 
         $time = $this->order->created_at ? $this->order->created_at->format('H:i') : now()->format('H:i');
         $orderIdFmt = number_format($this->order->id, 0, '', '.');
-        $operator = $this->order->employee ? $this->abbreviateName($this->order->employee->name) : 'APP';
+
+        // 👤 Resolução resiliente do Operador: Employee -> Cashier/User -> APP
+        $operatorName = $this->order->employee?->name
+            ?? $this->order->cashier?->name
+            ?? ($this->order->items->first()?->user_name)
+            ?? 'APP';
+
+        $operator = $this->abbreviateName($operatorName);
         $infoLine = "{$time} - #{$orderIdFmt} - {$operator}";
 
         $this->blueprint[] = ['cmd' => 'text', 'val' => $this->cleanText($infoLine), 'bold' => false, 'size' => '1x'];

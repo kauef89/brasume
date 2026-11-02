@@ -588,6 +588,14 @@ const handleFinishOrder = () => {
 const handleGridAction = (actionId) => {
     if (actionId === 'add_items') {
         const orderData = props.order;
+
+        // 🛑 PREVENÇÃO CONTRA CONTAMINAÇÃO DE CARRINHO:
+        // Limpa storages locais de rascunhos antes de navegar para o reforço de comanda
+        localStorage.removeItem('pos_cart');
+        localStorage.removeItem('pos_draft_cart');
+        localStorage.removeItem('pos_swap_context');
+        window.dispatchEvent(new CustomEvent('pos-clear-cart'));
+
         const newUrl = `/pos?append_to_order=${orderData.id}`;
         window.history.pushState({ tab: 'pos' }, '', newUrl);
         window.dispatchEvent(new CustomEvent('pos-append-to-order', { detail: orderData }));

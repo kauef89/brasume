@@ -29,7 +29,7 @@
                     </span>
                     <input
                         :value="identifier"
-                        @input="$emit('update:identifier',$event.target.value)"
+                        @input="$emit('update:identifier', $event.target.value)"
                         type="text"
                         class="w-full pl-11 pr-28 py-3.5 bg-transparent border-none outline-none text-sm text-surface-text placeholder:text-surface-muted/50 font-medium"
                         placeholder="Nome do cliente (Opcional)..."
@@ -48,10 +48,10 @@
 
         <!-- LISTA DE MESAS POR ÁREA -->
         <template v-else>
-            <!-- BOTÃO DE ATIVAÇÃO DA JUNÇÃO DE MESAS -->
+            <!-- BARRA DO MODO DE JUNÇÃO -->
             <div class="flex items-center justify-between px-1">
                 <span class="text-xs font-bold text-surface-muted uppercase tracking-wider">
-                    {{ isMergeMode ? 'Selecione as mesas para unir' : '' }}
+                    {{ isMergeMode ? 'Selecione mesas para unir ou desfaça grupos' : '' }}
                 </span>
                 <button
                     type="button"
@@ -62,7 +62,7 @@
                         : 'bg-primary-500/20 text-primary-300 hover:bg-primary-500/30'"
                 >
                     <i class="pi" :class="isMergeMode ? 'pi-times' : 'pi-link'"></i>
-                    {{ isMergeMode ? 'Cancelar Junção' : 'Juntar Mesas' }}
+                    {{ isMergeMode ? 'Sair do Modo Junção' : 'Juntar Mesas' }}
                 </button>
             </div>
 
@@ -105,9 +105,20 @@
                                        :class="isTableOccupied(table) ? 'text-warning-400' : 'text-primary-300'"></i>
                                 </div>
 
-                                <!-- BADGE MODO JUNÇÃO -->
+                                <!-- BOTÃO RÁPIDO PARA DESMEMBRAR NO MODO JUNÇÃO -->
+                                <button
+                                    v-if="isMergeMode && isMergedParent(table)"
+                                    type="button"
+                                    @click.stop="handleSplitTable(table)"
+                                    class="absolute -top-1.5 -left-1.5 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center border-2 border-surface-2 shadow-md z-20 transition-transform hover:scale-110 cursor-pointer"
+                                    title="Desmembrar estas mesas"
+                                >
+                                    <i class="pi pi-unlink text-[10px] font-black"></i>
+                                </button>
+
+                                <!-- BADGE SELEÇÃO NO MODO JUNÇÃO -->
                                 <div
-                                    v-if="selectedForMerge.includes(table.id)"
+                                    v-if="isMergeMode && selectedForMerge.includes(table.id)"
                                     class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-success-500 text-white flex items-center justify-center border-2 border-surface-2 shadow-sm z-10 animate-in zoom-in-50 duration-150"
                                     title="Selecionada para Junção"
                                 >
@@ -116,17 +127,17 @@
 
                                 <!-- INDICADOR DE STATUS OCUPADA -->
                                 <div
-                                    v-else-if="isTableOccupied(table)"
+                                    v-else-if="!isMergeMode && isTableOccupied(table)"
                                     class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-warning-500 border-2 border-surface-2 shadow-sm animate-pulse"
                                     title="Mesa Ocupada"
                                 ></div>
                             </div>
 
-                            <!-- CARD EXPANDIDO: CONTAS ATIVAS DA MESA -->
+                            <!-- CARD EXPANDIDO: DETALHES E CONTAS DA MESA -->
                             <div v-if="expandedTableId === table.id" class="basis-full w-full my-1 p-3 bg-surface-2 border border-surface-border rounded-2xl flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 shadow-inner">
                                 <div class="flex items-center justify-between">
                                     <span class="micro-label">
-                                        Contas ativas na Mesa {{ getMergedDisplayName(table) }} ({{ getTableActiveOrders(table).length }})
+                                        Mesa {{ getMergedDisplayName(table) }} • {{ isTableOccupied(table) ? `${getTableActiveOrders(table).length} conta(s) ativa(s)` : 'Livre' }}
                                     </span>
 
                                     <!-- Botão Separar se a mesa estiver agrupada -->
@@ -134,13 +145,14 @@
                                         v-if="isMergedParent(table)"
                                         type="button"
                                         @click.stop="handleSplitTable(table)"
-                                        class="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white text-[10px] font-black uppercase tracking-wider border border-red-500/20 transition-all cursor-pointer"
+                                        class="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white text-[10px] font-black uppercase tracking-wider border border-red-500/20 transition-all cursor-pointer flex items-center gap-1"
                                     >
-                                        <i class="pi pi-unlink mr-1"></i> Separar Mesas
+                                        <i class="pi pi-unlink text-xs"></i> Separar Mesas
                                     </button>
                                 </div>
 
                                 <div class="flex flex-col gap-2">
+                                    <!-- Contas existentes -->
                                     <button v-for="order in getTableActiveOrders(table)" :key="order.id"
                                         @click="selectExistingOrder(table, order)"
                                         class="p-3 bg-surface-1 border border-surface-border hover:border-warning-500 hover:text-warning-400 rounded-xl text-sm font-medium text-surface-text text-left truncate transition-colors flex items-center gap-2 outline-none cursor-pointer">
@@ -148,9 +160,10 @@
                                         {{ order.identifier ? `${getMergedDisplayName(table)} (${order.identifier})` : `Conta #${order.id}` }}
                                     </button>
 
+                                    <!-- Abrir nova conta / pedido -->
                                     <button @click="createNewSubAccount(table)"
                                         class="p-3 bg-primary-500/10 text-primary-400 hover:bg-primary-500/20 rounded-xl text-sm font-black border border-transparent transition-colors flex items-center justify-center gap-2 shadow-sm outline-none cursor-pointer">
-                                        <i class="pi pi-plus-circle text-sm"></i> Nova Conta Paralela
+                                        <i class="pi pi-plus-circle text-sm"></i> {{ getTableActiveOrders(table).length > 0 ? 'Nova Conta Paralela' : 'Abrir Pedido na Mesa' }}
                                     </button>
                                 </div>
                             </div>
@@ -160,7 +173,7 @@
                 </div>
             </div>
 
-            <!-- BLOCO DE CONFIRMAÇÃO DA JUNÇÃO NA BASE DO WIDGET -->
+            <!-- BLOCO DE CONFIRMAÇÃO DA JUNÇÃO NA BASE -->
             <div
                 v-if="isMergeMode && selectedForMerge.length > 0"
                 class="mt-4 p-3.5 bg-surface-2 border border-surface-border rounded-2xl flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 shadow-lg shrink-0"
@@ -233,13 +246,11 @@ const isMergedChild = (table) => {
     return table.parent_table_id !== null && table.parent_table_id !== undefined && table.parent_table_id !== '';
 };
 
-// Filtra mesas secundárias da grade (mesas filhas são ocultadas)
 const getVisibleTables = (area) => {
     if (!area?.tables) return [];
     return area.tables.filter(table => !isMergedChild(table));
 };
 
-// Nome amigável combinado em ordem ascendente (ex: 1+12)
 const getMergedDisplayName = (table) => {
     if (!table) return '';
     const children = getLinkedChildren(table);
@@ -252,7 +263,6 @@ const getMergedDisplayName = (table) => {
     return names.join('+');
 };
 
-// Consolida os pedidos ativos da mesa e de suas mesas filhas
 const getTableActiveOrders = (table) => {
     if (!table) return [];
     const orders = [...(table.active_orders || [])];
@@ -273,7 +283,6 @@ const getTableActiveOrders = (table) => {
     });
 };
 
-// Determina ocupação via status ou presença de pedidos ativos
 const isTableOccupied = (table) => {
     if (!table) return false;
     if (table.status === 'occupied') return true;
@@ -318,9 +327,12 @@ const handleTableClick = (table) => {
     const occupied = isTableOccupied(table);
     const activeOrders = getTableActiveOrders(table);
     const existingOrder = occupied && activeOrders.length > 0 ? activeOrders[0] : null;
+    const isMerged = isMergedParent(table);
 
+    // Se estiver em modo direto (PDV / Cardápio de Salão)
     if (props.mode === 'direct') {
-        if (occupied && activeOrders.length > 1) {
+        // Se a mesa estiver ocupada com múltiplas contas OU se for agrupada, abre o seletor para gerenciar/separar
+        if ((occupied && activeOrders.length > 1) || isMerged) {
             expandedTableId.value = expandedTableId.value === table.id ? null : table.id;
             return;
         }
@@ -328,7 +340,8 @@ const handleTableClick = (table) => {
         return;
     }
 
-    if (occupied) {
+    // Modo seletor comum: se estiver ocupada OU for agrupada, expande para ver opções
+    if (occupied || isMerged) {
         expandedTableId.value = expandedTableId.value === table.id ? null : table.id;
     } else {
         expandedTableId.value = null;
@@ -363,7 +376,7 @@ const confirmMergeTables = async () => {
 
         isMergeMode.value = false;
         selectedForMerge.value = [];
-        router.reload({ only: ['initialTableAreas'], preserveState: true, preserveScroll: true });
+        router.reload({ only: ['initialTableAreas', 'tableAreas'], preserveState: true, preserveScroll: true });
 
     } catch (error) {
         toast.add({
@@ -387,7 +400,7 @@ const handleSplitTable = async (table) => {
         });
 
         expandedTableId.value = null;
-        router.reload({ only: ['initialTableAreas'], preserveState: true, preserveScroll: true });
+        router.reload({ only: ['initialTableAreas', 'tableAreas'], preserveState: true, preserveScroll: true });
 
     } catch (error) {
         toast.add({
@@ -414,7 +427,7 @@ const createNewSubAccount = (table) => {
         emit('table-click', table, false, null);
     } else {
         emit('update:modelValue', table);
-        emit('update:identifier', "Nova Conta");
+        emit('update:identifier', "");
         emit('apply');
     }
 };

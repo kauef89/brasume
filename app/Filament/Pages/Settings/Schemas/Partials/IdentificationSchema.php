@@ -135,63 +135,128 @@ class IdentificationSchema
                         TextInput::make("company_name")->label("Razão Social")->readOnly(fn(Get $get) => filled($get('certificate_expiration')))->columnSpan(2),
                         TextInput::make("cnpj")->label("CNPJ")->mask("99.999.999/9999-99")->readOnly(fn(Get $get) => filled($get('certificate_expiration')))->columnSpan(1),
                         TextInput::make("ie")->label("Inscrição Estadual (IE)")->numeric()->required(fn(Get $get) => $get('is_fiscal_emitter'))->helperText("Obrigatório para emissão de notas.")->columnSpan(1),
+
                         TextInput::make("zip_code")
                             ->label("CEP")
                             ->columnSpan(1)
                             ->mask("99999-999")
-                            ->live(debounce: 500)
+                            ->live(debounce: 600)
                             ->afterStateUpdated(function (?string $state, Set $set) {
                                 if (!$state) return;
                                 $cleanCep = preg_replace('/[^0-9]/', '', $state);
-                                if (strlen($cleanCep) === 8) {
-                                    $response = Http::get("https://brasilapi.com.br/api/cep/v2/{$cleanCep}");
-                                    if ($response->successful()) {
-                                        $data = $response->json();
-                                        if (!empty($data['street'])) $set('street', $data['street']);
-                                        if (!empty($data['neighborhood'])) $set('neighborhood', $data['neighborhood']);
-                                        $set('state', $data['state'] ?? null);
-                                        $set('ibge_code', $data['ibge'] ?? null);
-                                        $set('city', $data['city'] ?? null);
+                                if (strlen($cleanCep) !== 8) return;
+
+                                // 🚀 1. ViaCEP (fonte primária com código IBGE garantido)
+                                try {
+                                    $viaCep = Http::timeout(4)->get("https://viacep.com.br/ws/{$cleanCep}/json/");
+                                    if ($viaCep->successful() && empty($viaCep->json('erro'))) {
+                                        $data = $viaCep->json();
+                                        if (!empty($data['logradouro'])) $set('street', $data['logradouro']);
+                                        if (!empty($data['bairro'])) $set('neighborhood', $data['bairro']);
+                                        if (!empty($data['uf'])) $set('state', strtoupper($data['uf']));
+                                        if (!empty($data['ibge'])) $set('ibge_code', (string) $data['ibge']);
+                                        if (!empty($data['localidade'])) $set('city', $data['localidade']);
+                                        return;
                                     }
-                                }
+                                } catch (\Throwable $e) {}
+
+                                // 🚀 2. Fallback BrasilAPI
+                                try {
+                                    $brasilApi = Http::timeout(4)->get("https://brasilapi.com.br/api/cep/v2/{$cleanCep}");
+                                    if ($brasilApi->successful()) {
+                                        $bData = $brasilApi->json();
+                                        if (!empty($bData['street'])) $set('street', $bData['street']);
+                                        if (!empty($bData['neighborhood'])) $set('neighborhood', $bData['neighborhood']);
+                                        if (!empty($bData['state'])) $set('state', strtoupper($bData['state']));
+                                        if (!empty($bData['city'])) $set('city', $bData['city']);
+                                    }
+                                } catch (\Throwable $e) {}
                             }),
+
                         TextInput::make("street")->label("Rua / Logradouro")->columnSpan(2),
                         TextInput::make("number")->label("Número")->columnSpan(1),
                         TextInput::make("neighborhood")->label("Bairro")->columnSpan(2),
+
                         Select::make("state")
                             ->label("Estado (UF)")
                             ->columnSpan(1)
                             ->searchable()
                             ->options(function () {
-                                return Cache::remember('ufs_brasilapi', 86400, function () {
-                                    $response = Http::get('https://brasilapi.com.br/api/ibge/uf/v1');
-                                    return $response->successful() ? collect($response->json())->pluck('nome', 'sigla')->toArray() : [];
+                                return Cache::remember('ufs_lista_oficial', 604800, function () {
+                                    return [
+                                        'AC' => 'Acre', 'AL' => 'Alagoas', 'AP' => 'Amapá', 'AM' => 'Amazonas',
+                                        'BA' => 'Bahia', 'CE' => 'Ceará', 'DF' => 'Distrito Federal', 'ES' => 'Espírito Santo',
+                                        'GO' => 'Goiás', 'MA' => 'Maranhão', 'MT' => 'Mato Grosso', 'MS' => 'Mato Grosso do Sul',
+                                        'MG' => 'Minas Gerais', 'PA' => 'Pará', 'PB' => 'Paraíba', 'PR' => 'Paraná',
+                                        'PE' => 'Pernambuco', 'PI' => 'Piauí', 'RJ' => 'Rio de Janeiro', 'RN' => 'Rio Grande do Norte',
+                                        'RS' => 'Rio Grande do Sul', 'RO' => 'Rondônia', 'RR' => 'Roraima', 'SC' => 'Santa Catarina',
+                                        'SP' => 'São Paulo', 'SE' => 'Sergipe', 'TO' => 'Tocantins'
+                                    ];
                                 });
                             })
                             ->live()
                             ->afterStateUpdated(fn(Set $set) => $set('ibge_code', null)),
+
                         Select::make("ibge_code")
                             ->label("Cidade")
                             ->columnSpan(1)
                             ->searchable()
-                            ->required(fn(Get $get) => $get('is_fiscal_emitter'))
+                            ->required(fn(Get $get) => (bool) $get('is_fiscal_emitter'))
                             ->options(function (Get $get) {
                                 $uf = $get('state');
                                 if (!$uf) return [];
-                                return Cache::remember("ibge_cities_v2_{$uf}", 86400, function () use ($uf) {
-                                    $response = Http::get("https://brasilapi.com.br/api/ibge/municipios/v1/{$uf}");
-                                    return $response->successful() ? collect($response->json())->pluck('nome', 'codigo_ibge')->toArray() : [];
-                                });
+
+                                $cacheKey = "ibge_cities_v3_{$uf}";
+                                $cached = Cache::get($cacheKey);
+                                if (!empty($cached) && is_array($cached)) {
+                                    return $cached;
+                                }
+
+                                // 🏛️ 1. API Oficial do IBGE (Direta, sem rate-limit e oficial do governo)
+                                try {
+                                    $res = Http::timeout(4)->get("https://servicodados.ibge.gov.br/api/v1/localidades/estados/{$uf}/municipios");
+                                    if ($res->successful() && is_array($res->json())) {
+                                        $cities = collect($res->json())
+                                            ->mapWithKeys(fn($c) => [(string) $c['id'] => (string) $c['nome']])
+                                            ->sort()
+                                            ->toArray();
+
+                                        if (!empty($cities)) {
+                                            Cache::put($cacheKey, $cities, 604800); // 7 dias
+                                            return $cities;
+                                        }
+                                    }
+                                } catch (\Throwable $e) {}
+
+                                // 🇧🇷 2. Fallback BrasilAPI
+                                try {
+                                    $res = Http::timeout(4)->get("https://brasilapi.com.br/api/ibge/municipios/v1/{$uf}");
+                                    if ($res->successful() && is_array($res->json())) {
+                                        $cities = collect($res->json())
+                                            ->mapWithKeys(fn($c) => [(string) $c['codigo_ibge'] => (string) $c['nome']])
+                                            ->sort()
+                                            ->toArray();
+
+                                        if (!empty($cities)) {
+                                            Cache::put($cacheKey, $cities, 604800);
+                                            return $cities;
+                                        }
+                                    }
+                                } catch (\Throwable $e) {}
+
+                                return [];
                             })
                             ->live()
                             ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                if ($state) {
-                                    $uf = $get('state');
-                                    $cidades = Cache::get("ibge_cities_v2_{$uf}", []);
-                                    if (isset($cidades[$state])) $set('city', $cidades[$state]);
+                                if (!$state) return;
+                                $uf = $get('state');
+                                $cidades = Cache::get("ibge_cities_v3_{$uf}", []);
+                                if (isset($cidades[(string)$state])) {
+                                    $set('city', $cidades[(string)$state]);
                                 }
                             }),
-                        Hidden::make("city"),
+
+                        Hidden::make("city")->dehydrated(true),
                     ])
                 ]),
         ];

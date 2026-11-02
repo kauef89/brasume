@@ -8,7 +8,6 @@ use App\Models\DiningTable;
 use App\Models\CompanySetting;
 use App\Events\OrderUpdated;
 use App\Events\DiningTableUpdated;
-use App\Services\RestaurantOps\TablesService;
 use Illuminate\Support\Facades\DB;
 
 class OrderTransferService
@@ -18,8 +17,9 @@ class OrderTransferService
         DB::transaction(function () use ($data) {
             $sourceOrder = Order::lockForUpdate()->findOrFail($data['source_order_id']);
             $itemIds = $data['item_ids'];
+            $transferQuantities = $data['item_quantities'] ?? [];
 
-            // 1. Busca e valida os itens principais
+            // 1. Localização e validação dos itens principais
             $mainItems = OrderItem::where('order_id', $sourceOrder->id)
                 ->whereIn('id', $itemIds)
                 ->lockForUpdate()
@@ -34,56 +34,104 @@ class OrderTransferService
                     throw new \Exception("Não é possível transferir '{$item->product_name}' pois o item já possui pagamentos vinculados.");
                 }
 
-                // Impede transferir um subitem/adicional sem o seu item principal
                 if ($item->parent_item_id && !in_array($item->parent_item_id, $itemIds)) {
-                    throw new \Exception("Não é possível transferir o adicional '{$item->product_name}' sem transferir o prato principal.");
+                    throw new \Exception("Não é possível transferir o adicional/subitem '{$item->product_name}' sem transferir o item principal.");
                 }
             }
 
-            // Captura os filhos imediatos de itens compostos/combos
-            $childItems = OrderItem::where('order_id', $sourceOrder->id)
-                ->whereIn('parent_item_id', $mainItems->pluck('id'))
-                ->lockForUpdate()
-                ->get();
-
-            // 2. Resolve ou localiza a comanda de destino
+            // 2. Destino do Pedido
             $destOrder = $this->resolveDestinationOrder($data, $sourceOrder);
 
-            // Trava para evitar transferência para a mesma comanda
             if ($sourceOrder->id === $destOrder->id) {
                 throw new \Exception("A comanda de destino não pode ser a mesma de origem.");
             }
 
-            // 3. Transfere os itens para a comanda de destino
-            $allItemsToTransfer = $mainItems->pluck('id')->merge($childItems->pluck('id'));
-            OrderItem::whereIn('id', $allItemsToTransfer)->update(['order_id' => $destOrder->id]);
+            // 3. Processamento dos Itens (com suporte a Fracionamento/Split de Quantidade)
+            foreach ($mainItems as $item) {
+                $requestedQty = isset($transferQuantities[$item->id]) ? (float) $transferQuantities[$item->id] : (float) $item->quantity;
+                $currentQty = (float) $item->quantity;
 
-            // 4. Recalcula a comanda de origem
+                // Captura subitens (combos)
+                $childItems = OrderItem::where('order_id', $sourceOrder->id)
+                    ->where('parent_item_id', $item->id)
+                    ->lockForUpdate()
+                    ->get();
+
+                // Transferência Integral
+                if ($requestedQty >= $currentQty || $requestedQty <= 0) {
+                    $item->update(['order_id' => $destOrder->id]);
+                    foreach ($childItems as $child) {
+                        $child->update(['order_id' => $destOrder->id]);
+                    }
+                }
+                // Transferência Parcial (Split)
+                else {
+                    $remainingQty = $currentQty - $requestedQty;
+                    $item->update([
+                        'quantity'    => $remainingQty,
+                        'total_price' => round($remainingQty * (float) $item->unit_price, 2)
+                    ]);
+
+                    // Clona o item com a quantidade fracionada para o destino
+                    $newItem = $item->replicate(['id', 'created_at', 'updated_at']);
+                    $newItem->order_id = $destOrder->id;
+                    $newItem->quantity = $requestedQty;
+                    $newItem->total_price = round($requestedQty * (float) $item->unit_price, 2);
+                    $newItem->save();
+
+                    // Replica modificadores vinculados
+                    foreach ($item->modifiers as $mod) {
+                        $newMod = $mod->replicate(['id', 'order_item_id']);
+                        $newMod->order_item_id = $newItem->id;
+                        $newMod->quantity = round(((float)$mod->quantity / $currentQty) * $requestedQty, 4);
+                        $newMod->save();
+                    }
+
+                    // Fraciona e transfere os subitens
+                    foreach ($childItems as $child) {
+                        $childQty = (float) $child->quantity;
+                        $childUnitRatio = $currentQty > 0 ? ($childQty / $currentQty) : 1;
+                        $newChildQty = round($childUnitRatio * $requestedQty, 4);
+                        $remChildQty = round($childQty - $newChildQty, 4);
+
+                        $child->update(['quantity' => $remChildQty]);
+
+                        $newChild = $child->replicate(['id', 'created_at', 'updated_at']);
+                        $newChild->order_id = $destOrder->id;
+                        $newChild->parent_item_id = $newItem->id;
+                        $newChild->quantity = $newChildQty;
+                        $newChild->save();
+
+                        foreach ($child->modifiers as $cMod) {
+                            $newCMod = $cMod->replicate(['id', 'order_item_id']);
+                            $newCMod->order_item_id = $newChild->id;
+                            $newCMod->save();
+                        }
+                    }
+                }
+            }
+
+            // 4. Recalcula os totais de Origem
             $this->recalculateOrderTotals($sourceOrder);
 
-            // Verifica itens ativos restantes
             $remainingActiveItems = $sourceOrder->items()
                 ->where('status', '!=', 'cancelled')
                 ->count();
 
             if ($remainingActiveItems === 0) {
-                // Comanda de origem agora recebe o status elegante de transferência
                 $sourceOrder->update([
                     'status' => 'transferred',
                     'notes'  => trim(($sourceOrder->notes ? $sourceOrder->notes . ' | ' : '') . "Itens transferidos para {$destOrder->customer_name} (#{$destOrder->id})"),
                 ]);
 
-                // Libera a mesa física de origem
                 $this->freeTableIfEmpty($sourceOrder);
             }
 
-            // 5. Recalcula a comanda de destino herdando a taxa de serviço se aplicável
+            // 5. Recalcula os totais de Destino
             $this->recalculateOrderTotals($destOrder, $sourceOrder);
-
-            // Garante que a mesa de destino fique marcada como ocupada
             $this->occupyDestinationTable($destOrder);
 
-            // 6. Transmissão em tempo real
+            // 6. Notificação WebSockets
             try {
                 broadcast(new OrderUpdated($sourceOrder->fresh(['items', 'payments'])));
                 broadcast(new OrderUpdated($destOrder->fresh(['items', 'payments'])));
@@ -95,12 +143,12 @@ class OrderTransferService
     {
         $subtotal = (float) $order->items()
             ->where('status', '!=', 'cancelled')
+            ->whereNull('parent_item_id')
             ->sum('total_price');
 
         $deliveryFee = (float) ($order->delivery_fee ?? 0);
         $discount    = (float) ($order->discount ?? 0);
 
-        // Calcula taxa de serviço proporcional ou herdada
         $serviceFee = 0.00;
         $setting = CompanySetting::getCached() ?? CompanySetting::first();
         $hasServiceTax = (bool) ($setting?->has_service_tax ?? false);
@@ -133,7 +181,6 @@ class OrderTransferService
         if ($data['destination_type'] === 'table') {
             $intent = $data['destination_order_intent'] ?? null;
 
-            // Se o usuário selecionou uma comanda específica existente
             if (is_numeric($intent)) {
                 $destOrder = Order::lockForUpdate()->findOrFail((int) $intent);
 
@@ -144,7 +191,6 @@ class OrderTransferService
                 return $destOrder;
             }
 
-            // Resolução da mesa de destino por ID ou Nome
             $tableId = $data['destination_dining_table_id'] ?? ($data['destination_table_id'] ?? null);
             $tableName = $data['destination_table_name'] ?? null;
 
@@ -162,14 +208,13 @@ class OrderTransferService
             $tableId = $table->id;
             $tableName = $table->name;
 
-            // Se NÃO for criar uma subconta isolada, reaproveita a comanda ativa existente
             if ($intent !== 'new_subaccount') {
                 $existingActiveOrder = Order::where(function ($q) use ($table) {
                         $q->where('dining_table_id', $table->id)
                           ->orWhere('table_number', $table->name);
                     })
                     ->where('id', '!=', $sourceOrder->id)
-                    ->whereNotIn('status', ['closed', 'cancelled', 'merged', 'completed'])
+                    ->whereNotIn('status', ['closed', 'cancelled', 'merged', 'completed', 'transferred'])
                     ->latest('id')
                     ->lockForUpdate()
                     ->first();
@@ -179,7 +224,6 @@ class OrderTransferService
                 }
             }
 
-            // Cria a comanda preservando o turno de caixa (cash_shift_id)
             $customerName = ($intent === 'new_subaccount' && !empty($data['new_subaccount_name']))
                 ? trim($data['new_subaccount_name'])
                 : "Mesa " . $tableName;
@@ -226,21 +270,21 @@ class OrderTransferService
 
         if (!$table) return;
 
-        $hasOtherActive = Order::where(function ($q) use ($table) {
-                $q->where('dining_table_id', $table->id)
-                  ->orWhere('table_number', $table->name);
-            })
-            ->where('id', '!=', $sourceOrder->id)
-            ->whereNotIn('status', ['closed', 'cancelled', 'merged', 'completed'])
-            ->exists();
-
-        if (!$hasOtherActive) {
-            $table->update(['status' => 'available']);
-
-            try {
-                broadcast(new DiningTableUpdated($table->fresh()));
-            } catch (\Throwable $e) {}
+        // Se existirem outros pedidos ativos no grupo de mesas unidas, não altera
+        if ($table->hasActiveOrdersInGroup($sourceOrder->id)) {
+            return;
         }
+
+        // Se o grupo inteiro estiver sem pedidos, liberta todas as mesas do grupo
+        $groupTableIds = $table->getGroupTableIds();
+        DiningTable::whereIn('id', $groupTableIds)->update(['status' => 'available']);
+
+        DB::afterCommit(function () use ($groupTableIds) {
+            foreach ($groupTableIds as $id) {
+                $t = DiningTable::find($id);
+                if ($t) broadcast(new DiningTableUpdated($t));
+            }
+        });
     }
 
     private function occupyDestinationTable(Order $destOrder): void
@@ -251,12 +295,17 @@ class OrderTransferService
             ?? ($destOrder->dining_table_id ? DiningTable::find($destOrder->dining_table_id) : null)
             ?? (!empty($destOrder->table_number) ? DiningTable::where('name', $destOrder->table_number)->first() : null);
 
-        if ($table && $table->status !== 'occupied') {
-            $table->update(['status' => 'occupied']);
+        if (!$table) return;
 
-            try {
-                broadcast(new DiningTableUpdated($table->fresh()));
-            } catch (\Throwable $e) {}
-        }
+        // Ocupa a mesa e todas as mesas que estiverem agrupadas com ela
+        $groupTableIds = $table->getGroupTableIds();
+        DiningTable::whereIn('id', $groupTableIds)->where('status', '!=', 'occupied')->update(['status' => 'occupied']);
+
+        DB::afterCommit(function () use ($groupTableIds) {
+            foreach ($groupTableIds as $id) {
+                $t = DiningTable::find($id);
+                if ($t) broadcast(new DiningTableUpdated($t));
+            }
+        });
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services\Purchases;
 
+use App\Events\CatalogUpdated;
 use App\Models\GoodsReceiptItem;
 use App\Models\GoodsReceipt;
 use App\Models\PersonalPurchase;
@@ -10,6 +11,7 @@ use App\Models\ProductCostHistory;
 use App\Models\CompanyAsset;
 use App\Services\Catalog\InventoryService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 class InvoiceItemProcessor
@@ -20,7 +22,7 @@ class InvoiceItemProcessor
             return null;
         }
 
-        $locations = DB::table('product_storage_location as psl')
+        $locations = DB::table('product_storage_locations as psl')
             ->join('storage_locations as sl', 'sl.id', '=', 'psl.storage_location_id')
             ->where('psl.product_id', $product->id)
             ->whereNull('sl.deleted_at')
@@ -31,7 +33,7 @@ class InvoiceItemProcessor
         $storageLoc = $locations->firstWhere('location_type', 'storage');
         $displayLoc = $locations->firstWhere('location_type', 'display');
 
-        // 🚀 CENÁRIO 1: Possui Armazenamento e Exposição -> Vai 100% para o Armazenamento
+        // CENÁRIO 1: Possui Armazenamento e Exposição -> Vai 100% para o Armazenamento
         if ($storageLoc && $displayLoc) {
             return (int) $storageLoc->storage_location_id;
         }
@@ -41,7 +43,7 @@ class InvoiceItemProcessor
             return (int) $storageLoc->storage_location_id;
         }
 
-        // CENÁRIO 3: Possui apenas exposição com local de reposição de origem (source_location_id)
+        // CENÁRIO 3: Possui apenas exposição com local de reposição de origem
         if ($displayLoc && !empty($displayLoc->source_location_id)) {
             $sourceId = (int) $displayLoc->source_location_id;
             DB::table('product_storage_locations')->updateOrInsert(
@@ -51,7 +53,7 @@ class InvoiceItemProcessor
             return $sourceId;
         }
 
-        // CENÁRIO 4: Revenda sem storage explícito -> Vincula ao Estoque de Armazenamento padrão (ex: Seco 1)
+        // CENÁRIO 4: Revenda sem storage explícito -> Vincula ao Estoque de Armazenamento padrão
         $isResale = $product->type === 'resale' || (class_exists(\App\Enums\ProductType::class) && $product->type === \App\Enums\ProductType::RESALE->value);
         if ($isResale) {
             $defaultStorage = DB::table('storage_locations')
@@ -159,18 +161,18 @@ class InvoiceItemProcessor
         // 🚀 ROTA 1: USO PESSOAL
         if ($destination === 'personal') {
             PersonalPurchase::create([
-                'nfe_key'    => $invoiceKey,
-                'supplier_id'=> $supplierId,
-                'xml_name'   => $item['xml_name'],
-                'quantity'   => $processQty,
-                'unit_cost'  => $invoiceCost,
-                'total_cost' => round($processQty * $invoiceCost, 4),
-                'auto_approve' => (bool) $autoApprove,
+                'nfe_key'     => $invoiceKey,
+                'supplier_id' => $supplierId,
+                'xml_name'    => $item['xml_name'],
+                'quantity'    => $processQty,
+                'unit_cost'   => $invoiceCost,
+                'total_cost'  => round($processQty * $invoiceCost, 4),
+                'auto_approve'=> (bool) $autoApprove,
             ]);
             return;
         }
 
-        // 🚀 ROTA 2: PATRIMÔNIO / ATIVO IMOBILIZADO (Não toca no Kardex!)
+        // 🚀 ROTA 2: PATRIMÔNIO / ATIVO IMOBILIZADO
         if ($destination === 'asset') {
             CompanyAsset::create([
                 'name'             => !empty($item['asset_name']) ? $item['asset_name'] : $item['xml_name'],
@@ -208,7 +210,8 @@ class InvoiceItemProcessor
                     $delta = round($actualQty - $receiptQty, 4);
 
                     if ($delta > 0) {
-                        $targetLocationId = $this->resolveStorageLocationForProcurement($product); $inventoryService->addStock($product->fresh(), $delta, 'nfe_reconcile_surplus', null, $targetLocationId);
+                        $targetLocationId = $this->resolveStorageLocationForProcurement($product);
+                        $inventoryService->addStock($product->fresh(), $delta, 'nfe_reconcile_surplus', null, $targetLocationId);
                     } elseif ($delta < 0) {
                         $inventoryService->deductStock($product->fresh(), abs($delta));
                     }
@@ -232,8 +235,11 @@ class InvoiceItemProcessor
                 }
             } else {
                 $targetLocationId = $this->resolveStorageLocationForProcurement($product);
-            $inventoryService->addStock($product->fresh(), $actualQty, 'nfe_import', null, $targetLocationId);
+                $inventoryService->addStock($product->fresh(), $actualQty, 'nfe_import', null, $targetLocationId);
             }
+
+            // 📡 Transmite a atualização do catálogo aos clientes conectados
+            $this->dispatchCatalogUpdated();
         }
 
         ProductCostHistory::create([
@@ -321,7 +327,7 @@ class InvoiceItemProcessor
                     continue;
                 }
 
-                // Efeito dominó para itens idênticos
+                // Efeito dominó para itens idênticos na mesma nota
                 if (!$receiptItemId && isset($item['xml_name']) && (string)$item['xml_name'] === $targetXmlName) {
                     $duplicateItemData = array_merge($itemData, [
                         'xml_qty'  => (float) ($item['available_qty'] ?? $item['xml_qty'] ?? 0),
@@ -339,6 +345,35 @@ class InvoiceItemProcessor
                 'updated_items'        => $items,
                 'auto_processed_count' => $autoProcessedCount,
             ];
+        });
+    }
+
+    /**
+     * 📡 Transmite a atualização aos terminais (PDV, Cardápio, Team App) após commit do banco.
+     */
+    protected function dispatchCatalogUpdated(): void
+    {
+        $tenantId = function_exists('tenant') && tenant('id')
+            ? tenant('id')
+            : (tenancy()->initialized ? tenancy()->tenant?->id : null);
+
+        if (!$tenantId) {
+            return;
+        }
+
+        // Evita múltiplos broadcasts redundantes dentro da mesma requisição/transação
+        $lockKey = 'catalog_updated_dispatched_' . $tenantId;
+        if (app()->bound($lockKey)) {
+            return;
+        }
+        app()->instance($lockKey, true);
+
+        DB::afterCommit(function () use ($tenantId) {
+            try {
+                broadcast(new CatalogUpdated($tenantId));
+            } catch (\Throwable $e) {
+                Log::warning("Falha ao transmitir CatalogUpdated pós-NFe: " . $e->getMessage());
+            }
         });
     }
 }

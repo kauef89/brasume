@@ -168,7 +168,7 @@ class MealAllowanceService
                 $parts = explode(' ', trim($attendee->name));
                 $shortName = count($parts) > 1 ? $parts[0] . ' ' . mb_substr($parts[1], 0, 1) . '.' : $parts[0];
 
-                // 4. Criação da comanda
+                // 4. Criação da comanda da equipe
                 $order = Order::create([
                     'type'                   => 'counter',
                     'status'                 => 'closed',
@@ -183,11 +183,12 @@ class MealAllowanceService
                     ]] : null,
                     'source'                 => 'team_app',
                     'customer_name'          => 'Lanche: ' . $shortName,
-                    'customer_id'            => $employeeId,
+                    'customer_id'            => null, // 👈 NULL para não colidir com a tabela customers
+                    'employee_id'            => $employeeId, // 👈 O colaborador que está comendo o lanche
+                    'cashier_id'             => $operator->id ?? null, // 👈 O usuário/operador que lançou no app
                     'subtotal'               => $newSlotTotal,
                     'total'                  => $newSlotTotal,
                     'cash_shift_id'          => $activeShift->id,
-                    'employee_id'            => $operator->employee_id ?? null,
                 ]);
 
                 // 5. Pagamento interno
