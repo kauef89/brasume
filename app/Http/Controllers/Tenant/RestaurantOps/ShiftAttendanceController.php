@@ -23,9 +23,6 @@ class ShiftAttendanceController extends Controller
         return back()->with('success', 'Equipe atualizada com sucesso!');
     }
 
-    /**
-     * 🚀 Retorna os detalhes de diária, consumo e valor líquido para o modal de pagamento
-     */
     public function payoutDetails(int $userId, ShiftAttendanceService $service)
     {
         try {
@@ -44,7 +41,10 @@ class ShiftAttendanceController extends Controller
             'gross_rate'           => 'nullable|numeric|min:0',
             'consumption_deducted' => 'nullable|numeric|min:0',
             'payment_method'       => 'required|string|in:cash,bank,accumulate',
-            'bank_account_id'      => 'nullable|integer|exists:bank_accounts,id'
+            'bank_account_id'      => 'nullable|integer|exists:bank_accounts,id',
+            'shift_date_label'     => 'nullable|string',
+            'settled_items'        => 'nullable|array',
+            'rolled_items'         => 'nullable|array',
         ]);
 
         try {
@@ -52,7 +52,7 @@ class ShiftAttendanceController extends Controller
 
             $isAccumulated = $data['payment_method'] === 'accumulate' || (float) $data['amount'] <= 0.00;
             $msg = $isAccumulated
-                ? 'Diária acumulada no extrato do colaborador com sucesso.'
+                ? 'Valores postergados e acumulados no saldo do colaborador.'
                 : 'Diária liquidada e recibo emitido com sucesso!';
 
             return back()->with('success', $msg);

@@ -2,65 +2,77 @@
 
 namespace App\Livewire;
 
+use App\Models\Employee;
 use App\Models\OrderItem;
+use App\Models\Customer;
+use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Widgets\TableWidget as BaseWidget;
 use Illuminate\Support\Facades\DB;
 
 class EmployeeConsumptions extends BaseWidget
 {
-    public $record;
-
-    protected int | string | array $columnSpan = 'full';
+    public ?Employee $record = null;
 
     public function table(Table $table): Table
     {
+        $cleanCpf = preg_replace('/\D/', '', $this->record->cpf ?? '');
+        $phone = $this->record->phone;
+        $name = $this->record->name;
+
+        // Resolve os IDs de cliente vinculados a este colaborador
+        $customerIds = Customer::where(function ($q) use ($cleanCpf, $phone) {
+                if (!empty($cleanCpf)) $q->where('cpf', $cleanCpf);
+                if (!empty($phone)) $q->orWhere('phone', $phone);
+            })
+            ->pluck('id')
+            ->toArray();
+
         return $table
             ->query(
                 OrderItem::query()
-                    ->whereIn('order_id', function ($query) {
+                    ->whereIn('order_id', function ($query) use ($customerIds, $name) {
                         $query->select('orders.id')
-                              ->from('orders')
-                              ->where('orders.employee_id', $this->record->id)
-                              ->where(function ($sub) {
-                                  // 1. Pagamentos registrados no modelo novo
-                                  $sub->whereExists(function ($pQuery) {
-                                      $pQuery->select(DB::raw(1))
-                                             ->from('payments')
-                                             ->join('payment_methods', 'payments.payment_method_id', '=', 'payment_methods.id')
-                                             ->whereColumn('payments.order_id', 'orders.id')
-                                             ->where('payment_methods.engine_type', 'internal');
-                                  })
-                                  // 2. Fallback para registros legados
-                                  ->orWhereExists(function ($opQuery) {
-                                      $opQuery->select(DB::raw(1))
-                                              ->from('order_payments')
-                                              ->whereColumn('order_payments.order_id', 'orders.id')
-                                              ->where('order_payments.payment_method', 'internal_consumption');
-                                  });
-                              });
+                            ->from('orders')
+                            ->where(function ($q) use ($customerIds, $name) {
+                                if (!empty($customerIds)) {
+                                    $q->whereIn('orders.customer_id', $customerIds);
+                                }
+                                $q->orWhere('orders.customer_name', 'like', "Lanche: {$name}%")
+                                  ->orWhere('orders.customer_name', 'like', "%{$name}%");
+                            })
+                            ->where(function ($sub) {
+                                $sub->whereExists(function ($pQuery) {
+                                    $pQuery->select(DB::raw(1))
+                                        ->from('payments')
+                                        ->join('payment_methods', 'payments.payment_method_id', '=', 'payment_methods.id')
+                                        ->whereColumn('payments.order_id', 'orders.id')
+                                        ->whereIn('payment_methods.engine_type', ['internal', 'allowance']);
+                                })
+                                ->orWhere('orders.source', 'team_app');
+                            });
                     })
             )
-            ->heading('Histórico de Consumo')
             ->columns([
-                TextColumn::make('created_at')
+                Tables\Columns\TextColumn::make('created_at')
                     ->label('Data / Hora')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
-
-                TextColumn::make('product_name')
+                Tables\Columns\TextColumn::make('order.id')
+                    ->label('Pedido')
+                    ->formatStateUsing(fn ($state) => "#{$state}"),
+                Tables\Columns\TextColumn::make('product_name')
                     ->label('Item Consumido')
                     ->searchable(),
-
-                TextColumn::make('quantity')
+                Tables\Columns\TextColumn::make('quantity')
                     ->label('Qtd')
-                    ->numeric(),
-
-                TextColumn::make('total_price')
-                    ->label('Valor Total')
+                    ->alignCenter(),
+                Tables\Columns\TextColumn::make('total_price')
+                    ->label('Valor')
                     ->money('BRL')
                     ->sortable(),
+                Tables\Columns\TextColumn::make('order.customer_name')
+                    ->label('Identificação na Comanda'),
             ])
             ->defaultSort('created_at', 'desc');
     }

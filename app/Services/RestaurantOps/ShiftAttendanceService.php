@@ -3,19 +3,18 @@
 namespace App\Services\RestaurantOps;
 
 use App\Enums\AccountingCategory;
-
 use App\Enums\EmploymentType;
 use App\Enums\PaymentCycle;
 use App\Models\User;
 use App\Models\Employee;
 use App\Models\CashShift;
-use App\Models\Order;
 use App\Models\BankAccount;
 use App\Models\AccountPayable;
 use App\Models\Transaction;
 use App\Models\Printer;
 use App\Services\Printing\Documents\FreelancerReceipt;
 use App\Services\Printing\PrintDispatcher;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -25,6 +24,20 @@ class ShiftAttendanceService
     public function __construct(
         protected PrintDispatcher $printDispatcher
     ) {}
+
+    /**
+     * Formata qualquer data no padrão canônico humanizado: "DOM - 23/07"
+     */
+    public function formatShiftDate($datetime): string
+    {
+        $date = Carbon::parse($datetime);
+        $days = [
+            0 => 'DOM', 1 => 'SEG', 2 => 'TER', 3 => 'QUA',
+            4 => 'QUI', 5 => 'SEX', 6 => 'SAB'
+        ];
+        $dayName = $days[$date->dayOfWeek] ?? 'DIA';
+        return "{$dayName} - {$date->format('d/m')}";
+    }
 
     public function getShiftUsersData(): array
     {
@@ -174,68 +187,61 @@ class ShiftAttendanceService
     }
 
     /**
-     * 🚀 PONTE DE CONSUMO: Calcula o consumo do colaborador durante o turno aberto
+     * Calcula e categoriza os consumos do turno por data e blocos
      */
     public function getFreelancerShiftConsumption(User $user, CashShift $shift): array
     {
-        $employee = $user->employee;
+        $employee = $user->employee ?? Employee::find($user->employee_id);
         $shiftStart = $shift->opened_at;
+        $shiftDateLabel = $this->formatShiftDate($shiftStart);
 
-        // 1. Localiza o cliente vinculado ao usuário ou colaborador
-        $customer = $user->customer;
-        if (!$customer && $employee) {
-            $customer = \App\Models\Customer::where('phone', $employee->phone)
-                ->orWhere('cpf', $employee->cpf)
-                ->first();
-        }
-
-        // 2. Busca pedidos com consumo interno ou vinculados ao perfil
-        $orders = Order::where('created_at', '>=', $shiftStart)
-            ->whereNotIn('status', ['cancelled'])
-            ->where(function ($q) use ($user, $customer) {
-                $q->where(function ($sub) use ($user) {
-                    $sub->where('employee_id', $user->id)
-                        ->where(function ($w) {
-                            $w->where('customer_name', 'like', '%Consumo Interno%')
-                              ->orWhere('payment_intent_status', 'internal')
-                              ->orWhere('payment_intent_methods', 'like', '%internal%');
-                        });
-                });
-
-                if ($customer) {
-                    $q->orWhere('customer_id', $customer->id);
-                }
-            })
-            ->get();
-
-        $ordersTotal = (float) $orders->sum('total');
-
-        // 3. Débitos avulsos na conta corrente durante o turno
         $ledgerDebits = 0.0;
+        $items = [];
+
         if ($employee) {
-            $ledgerDebits = (float) $employee->ledgers()
+            $debitEntries = $employee->ledgers()
                 ->where('created_at', '>=', $shiftStart)
                 ->where('type', 'debit')
-                ->where('description', 'like', '%Consumo%')
-                ->sum('amount');
+                ->where('description', 'not like', '%Liquidação%')
+                ->get();
+
+            $ledgerDebits = (float) $debitEntries->sum('amount');
+
+            foreach ($debitEntries as $entry) {
+                $desc = $entry->description;
+                $isExcedente = str_contains(mb_strtolower($desc), 'excedente');
+                $category = $isExcedente ? 'excedente' : 'balcao';
+                $categoryLabel = $isExcedente ? 'Excedente de Lanche' : 'Consumo Balcão';
+
+                $cleanTitle = preg_replace('/\(Turno\s*#\d+\)/i', '', $desc);
+                $cleanTitle = trim(preg_replace('/\s+/', ' ', $cleanTitle));
+
+                $items[] = [
+                    'id'             => 'ledger_' . $entry->id,
+                    'ledger_id'      => $entry->id,
+                    'type'           => 'consumption',
+                    'category'       => $category,
+                    'category_label' => $categoryLabel,
+                    'title'          => $cleanTitle,
+                    'amount'         => (float) $entry->amount,
+                    'time'           => $entry->created_at->format('H:i'),
+                    'date_label'     => $shiftDateLabel,
+                    'selected'       => true,
+                ];
+            }
         }
 
-        $totalConsumption = round($ordersTotal + $ledgerDebits, 2);
-
         return [
-            'total'          => $totalConsumption,
-            'orders_count'   => $orders->count(),
-            'orders'         => $orders->map(fn($o) => [
-                'id'    => $o->id,
-                'total' => (float) $o->total,
-                'time'  => $o->created_at->format('H:i')
-            ])->toArray(),
-            'ledger_debits'  => $ledgerDebits,
+            'total'         => round($ledgerDebits, 2),
+            'ledger_debits' => round($ledgerDebits, 2),
+            'orders_count'  => count($items),
+            'items'         => $items,
+            'date_label'    => $shiftDateLabel,
         ];
     }
 
     /**
-     * Retorna a radiografia financeira completa para o modal de liquidação
+     * Retorna a radiografia completa com os blocos categorizados para o modal Vue
      */
     public function getFreelancerPayoutDetails(int $userId, ?CashShift $shift = null): array
     {
@@ -246,6 +252,8 @@ class ShiftAttendanceService
 
         $user = User::with('employee')->findOrFail($userId);
         $employee = $user->employee;
+
+        $shiftDateLabel = $this->formatShiftDate($shift->opened_at);
 
         $attendeePivot = $shift->attendees()->where('users.id', $userId)->first()?->pivot;
         $grossRate = (float) ($attendeePivot?->daily_rate ?: ($employee?->base_remuneration ?? 0));
@@ -259,6 +267,18 @@ class ShiftAttendanceService
         $previousBalance = $latestLedger ? (float) $latestLedger->balance : 0.00;
         $totalDue = round($previousBalance + $netAmount, 2);
 
+        $serviceItem = [
+            'id'             => 'service_shift_' . $shift->id,
+            'type'           => 'service',
+            'category'       => 'services',
+            'category_label' => 'Serviços / Diária',
+            'title'          => "Diária de Trabalho",
+            'amount'         => $grossRate,
+            'time'           => $shift->opened_at->format('H:i'),
+            'date_label'     => $shiftDateLabel,
+            'selected'       => true,
+        ];
+
         return [
             'user' => [
                 'id'           => $user->id,
@@ -266,19 +286,21 @@ class ShiftAttendanceService
                 'pix_key_type' => $employee?->pix_key_type,
                 'pix_key'      => $employee?->pix_key,
             ],
+            'shift_date_label'    => $shiftDateLabel,
+            'service_item'        => $serviceItem,
             'previous_balance'    => $previousBalance,
             'ledger_history'      => $employee ? $employee->ledgers()->latest('id')->take(30)->get()->toArray() : [],
             'gross_rate'          => $grossRate,
             'consumption_amount'  => $consumptionAmount,
             'consumption_details' => $consumptionData,
-            'net_amount'          => $netAmount, // Líquido SÓ de hoje
-            'total_due'           => $totalDue,  // Saldo + Hoje
+            'net_amount'          => $netAmount,
+            'total_due'           => $totalDue,
             'is_paid'             => (bool) ($attendeePivot?->account_payable_id),
         ];
     }
 
     /**
-     * 🚀 Liquidação oficial do freelancer com saída bancária/caixa, extrato de RH e impressão
+     * Liquidação oficial com discriminação de itens liquidados e rolados
      */
     public function payFreelancer(array $data, User $operator): void
     {
@@ -295,33 +317,40 @@ class ShiftAttendanceService
         }
 
         $payoutDetails = $this->getFreelancerPayoutDetails($user->id, $shift);
+        $shiftDateLabel = $data['shift_date_label'] ?? $payoutDetails['shift_date_label'];
+
         $grossRate = (float) ($data['gross_rate'] ?? $payoutDetails['gross_rate']);
         $consumptionAmount = (float) ($data['consumption_deducted'] ?? $payoutDetails['consumption_amount']);
-        $netAmount = (float) max(0, round($grossRate - $consumptionAmount, 2)); // O que ele gerou hoje
+        $paidAmount = isset($data['amount']) ? (float) $data['amount'] : (float) ($payoutDetails['total_due'] ?? 0);
 
-        // O valor efetivamente pago pelo operador (Pode ser maior, menor ou igual ao total_due)
-        $paidAmount = isset($data['amount']) ? (float) $data['amount'] : (float) ($payoutDetails['total_due'] ?? $netAmount);
-
-        $paymentMethod = $data['payment_method']; // 'cash' ou 'bank'
+        $paymentMethod = $data['payment_method'];
         $bankAccountId = !empty($data['bank_account_id']) ? (int) $data['bank_account_id'] : null;
 
         $bankAccount = $bankAccountId ? BankAccount::find($bankAccountId) : null;
-        $paymentMethodLabel = $paymentMethod === 'accumulate' ? 'Acumulado no Saldo (Sem repasse)' : ($paymentMethod === 'cash' ? 'Dinheiro (Gaveta)' : 'PIX (' . ($bankAccount?->name ?? 'Banco') . ')');
+        $paymentMethodLabel = $paymentMethod === 'accumulate'
+            ? 'Acumulado no Saldo (Sem repasse)'
+            : ($paymentMethod === 'cash' ? 'Dinheiro (Gaveta)' : 'PIX (' . ($bankAccount?->name ?? 'Banco') . ')');
+
+        $settledItems = $data['settled_items'] ?? [];
+        $rolledItems = $data['rolled_items'] ?? [];
+
+        $remainingBalanceAfter = 0.0;
 
         DB::transaction(function () use (
-            $data, $user, $employee, $shift, $operator,
-            $grossRate, $consumptionAmount, $netAmount, $paidAmount,
-            $paymentMethod, $bankAccountId, $paymentMethodLabel
+            $data, $user, $employee, $shift, $operator, $shiftDateLabel,
+            $grossRate, $consumptionAmount, $paidAmount,
+            $paymentMethod, $bankAccountId, $paymentMethodLabel,
+            &$remainingBalanceAfter
         ) {
-            $desc = "Diária Turno #{$shift->id} - {$user->name}";
+            $desc = "Diária {$shiftDateLabel} - {$user->name}";
             if ($consumptionAmount > 0) {
                 $desc .= " (Bruto: R$ {$grossRate} - Consumo: R$ {$consumptionAmount})";
             }
             if ($paidAmount <= 0) {
-                $desc = "Acúmulo de Saldo (Fechamento de Turno #{$shift->id}) - {$user->name}";
+                $desc = "Acúmulo de Saldo ({$shiftDateLabel}) - {$user->name}";
             }
 
-            // 1. Cria o Contas a Pagar já liquidado (a baixa bancária/gaveta é registrada na tabela transactions)
+            // 1. Contas a Pagar
             $payable = AccountPayable::create([
                 'employee_id'            => $employee->id,
                 'description'            => $desc,
@@ -332,82 +361,73 @@ class ShiftAttendanceService
                 'accounting_category'    => AccountingCategory::PAYROLL->value,
                 'accounting_subcategory' => 'freelancers',
                 'paid_by'                => 'company',
-                'observations'           => "Liquidado via {$paymentMethodLabel} no Turno #{$shift->id}",
+                'observations'           => "Liquidado via {$paymentMethodLabel} - Turno {$shiftDateLabel}",
             ]);
 
-            // 2. Sangria no Caixa se pago em dinheiro da gaveta
+            // 2. Sangria de gaveta
             if ($paymentMethod === 'cash' && $paidAmount > 0) {
                 Transaction::create([
                     'cash_shift_id'   => $shift->id,
                     'bank_account_id' => $shift->bank_account_id,
                     'type'            => 'out',
                     'category'        => 'cash_out',
-                    'amount'                 => $paidAmount,
+                    'amount'          => $paidAmount,
                     'description'     => "Sangria: Diária Freelancer - {$user->name}",
                     'operator_name'   => $operator->name ?? 'Sistema',
                     'transaction_date'=> now(),
                 ]);
             }
 
-            // 3. Transação bancária se pago via PIX/Banco fora da gaveta
+            // 3. Saída Bancária
             if ($paymentMethod === 'bank' && $bankAccountId && $paidAmount > 0) {
                 Transaction::create([
                     'cash_shift_id'   => null,
                     'bank_account_id' => $bankAccountId,
                     'type'            => 'out',
                     'category'        => 'bank_out',
-                    'amount'                 => $paidAmount,
+                    'amount'          => $paidAmount,
                     'description'     => "PIX Diária Freelancer - {$user->name}",
                     'operator_name'   => $operator->name ?? 'Sistema',
                     'transaction_date'=> now(),
                 ]);
             }
 
-            // 4. Conciliação completa na conta-corrente do colaborador (EmployeeLedger)
+            // 4. Conciliação na conta-corrente (EmployeeLedger)
             $latestLedger = $employee->ledgers()->latest('id')->first();
             $balance = $latestLedger ? (float) $latestLedger->balance : 0.00;
 
-            // Crédito da diária
+            // Crédito da diária do turno identificado por data
             $employee->ledgers()->create([
                 'type'        => 'credit',
-                'description' => "Diária de Trabalho (Turno #{$shift->id})",
+                'description' => "Diária de Trabalho ({$shiftDateLabel})",
                 'amount'      => $grossRate,
                 'balance'     => $balance + $grossRate,
             ]);
             $balance += $grossRate;
 
-            // Débito do consumo abatido
-            if ($consumptionAmount > 0) {
-                $employee->ledgers()->create([
-                    'type'        => 'debit',
-                    'description' => "Abatimento de Consumo Interno (Turno #{$shift->id})",
-                    'amount'      => $consumptionAmount,
-                    'balance'     => $balance - $consumptionAmount,
-                ]);
-                $balance -= $consumptionAmount;
-            }
-
-            // Débito do valor pago
+            // Débito do valor efetivamente pago
             if ($paidAmount > 0) {
                 $employee->ledgers()->create([
                     'type'        => 'debit',
                     'description' => "Liquidação Diária ({$paymentMethodLabel})",
-                    'amount'                 => $paidAmount,
-                    'balance'      => $balance - $paidAmount,
+                    'amount'      => $paidAmount,
+                    'balance'     => $balance - $paidAmount,
                 ]);
+                $balance -= $paidAmount;
             }
 
-            // 5. Atualiza o status na escala do turno
+            $remainingBalanceAfter = round($balance, 2);
+
+            // 5. Atualização da presença
             $shift->attendees()->updateExistingPivot($user->id, [
                 'account_payable_id' => $payable->id,
                 'daily_rate'         => $grossRate
             ]);
         });
 
-        // 🚀 6. IMPRESSÃO AUTOMÁTICA DO COMPROVATIVO TÉRMICO
-        // Suprime a impressão se a diária for apenas acumulada em saldo ou sem liquidação financeira imediata
-        if ($paymentMethod === 'accumulate' || $paidAmount <= 0.00) {
-            Log::info("ℹ️ [ShiftAttendance] Diária acumulada para [{$user->name}]. Impressão de recibo suprimida.");
+        // 6. Impressão Térmica Justificada em Blocos
+        if ($paymentMethod === 'accumulate' && $paidAmount <= 0.00 && empty($settledItems)) {
+            Log::info("ℹ️ Diária acumulada para [{$user->name}]. Impressão suprimida.");
             return;
         }
 
@@ -417,26 +437,27 @@ class ShiftAttendanceService
 
             if ($cashierPrinter) {
                 $receipt = new FreelancerReceipt(
-                    freelancerName: $user->name,
-                    netAmount: $netAmount,
+                    freelancerName: $employee->name,
+                    netAmount: $paidAmount,
                     grossAmount: $grossRate,
                     consumptionAmount: $consumptionAmount,
                     paymentMethod: $paymentMethodLabel,
-                    operatorName: $operator->name ?? 'Caixa',
-                    pixKey: $employee->pix_key
+                    operatorName: auth()->user()?->name ?? 'Caixa',
+                    pixKey: $employee->pix_key,
+                    shiftDateLabel: $shiftDateLabel,
+                    settledItems: $settledItems,
+                    rolledItems: $rolledItems,
+                    remainingBalance: $remainingBalanceAfter
                 );
 
                 $this->printDispatcher->dispatch($cashierPrinter, $receipt);
-                Log::info("🖨️ [ShiftAttendance] Recibo de freelancer impresso com sucesso para [{$user->name}].");
+                Log::info("🖨️ Recibo estruturado impresso para [{$user->name}].");
             }
         } catch (\Throwable $e) {
-            Log::warning("⚠️ [ShiftAttendance] Falha ao imprimir recibo de freelancer: " . $e->getMessage());
+            Log::warning("⚠️ Falha ao imprimir recibo estruturado: " . $e->getMessage());
         }
     }
 
-    /**
-     * 🚀 TRAVA DO CAIXA: Localiza freelancers presentes com diária pendente de pagamento
-     */
     public function getPendingDailyFreelancers(CashShift $shift): Collection
     {
         return $shift->attendees()

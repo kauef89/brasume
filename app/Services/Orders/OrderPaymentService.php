@@ -111,7 +111,7 @@ class OrderPaymentService
                     }
                 }
 
-                // Débito em carteira de colaborador (Consumo Interno)
+                // Débito em carteira de colaborador (Compras de Balcão / Pessoais)
                 $isInternal = $paymentMethod && ($paymentMethod->engine_type === PaymentEngineType::INTERNAL || $paymentMethod->engine_type?->value === 'internal');
                 if ($isInternal) {
                     $cleanCpf = preg_replace('/\D/', '', $order->customer->cpf ?? '');
@@ -131,7 +131,7 @@ class OrderPaymentService
 
                     $employee->ledgers()->create([
                         'type'        => 'debit',
-                        'description' => "Consumo Interno - Pedido #{$order->id}",
+                        'description' => "Consumo Balcão - Pedido #{$order->id}",
                         'amount'      => $payment['amount'],
                         'balance'     => $currentBalance - (float) $payment['amount']
                     ]);

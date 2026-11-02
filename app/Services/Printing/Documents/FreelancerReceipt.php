@@ -15,7 +15,10 @@ class FreelancerReceipt
      * @param string $paymentMethod
      * @param string $operatorName
      * @param string|null $pixKey
-     * @param array $ledgerItems Array de consumos, ex: [['description' => '1X REFRI', 'amount' => 5.0], ...]
+     * @param string $shiftDateLabel Ex: "DOM - 01/11"
+     * @param array $settledItems Itens pagos/descontados neste fechamento
+     * @param array $rolledItems Itens adiados para o próximo turno
+     * @param float $remainingBalance Saldo restante em conta após o acerto
      */
     public function __construct(
         public string $freelancerName,
@@ -25,7 +28,10 @@ class FreelancerReceipt
         public string $paymentMethod = 'Dinheiro',
         public string $operatorName = 'Caixa',
         public ?string $pixKey = null,
-        public array $ledgerItems = []
+        public string $shiftDateLabel = '',
+        public array $settledItems = [],
+        public array $rolledItems = [],
+        public float $remainingBalance = 0.0
     ) {}
 
     public function getJobType(): string
@@ -33,27 +39,26 @@ class FreelancerReceipt
         return 'freelancer_receipt';
     }
 
-    /**
-     * Remove acentos e converte para CAIXA ALTA (Uppercase).
-     */
     protected function cleanText(string $text): string
     {
         return mb_strtoupper(Str::ascii($text));
     }
 
-    /**
-     * Cria uma linha justificada com o texto à esquerda e o valor (com R$) alinhado à direita.
-     * Considera bobinas de 48 colunas de largura.
-     */
     protected function justifyLine(string $leftText, float $amount, int $width = 48, bool $isNegative = false): string
     {
-        $left = $this->cleanText($leftText);
         $amountStr = number_format(abs($amount), 2, ',', '.');
         $right = ($isNegative ? '(-) R$ ' : 'R$ ') . str_pad($amountStr, 6, ' ', STR_PAD_LEFT);
 
-        $spaceCount = max(1, $width - mb_strlen($left) - mb_strlen($right));
+        $maxLeftLength = max(10, $width - mb_strlen($right) - 1);
+        $cleanLeft = $this->cleanText($leftText);
 
-        return $left . str_repeat(' ', $spaceCount) . $right;
+        if (mb_strlen($cleanLeft) > $maxLeftLength) {
+            $cleanLeft = mb_substr($cleanLeft, 0, $maxLeftLength - 1) . '.';
+        }
+
+        $spaceCount = max(1, $width - mb_strlen($cleanLeft) - mb_strlen($right));
+
+        return $cleanLeft . str_repeat(' ', $spaceCount) . $right;
     }
 
     public function build(): array
@@ -72,49 +77,88 @@ class FreelancerReceipt
             $b->text($this->cleanText('CHAVE PIX: ' . $this->pixKey));
         }
 
+        if (!empty($this->shiftDateLabel)) {
+            $b->text($this->cleanText('TURNO REFERENCIA: ' . $this->shiftDateLabel), bold: true);
+        }
+
         // ==========================================
-        // EXTRATO DO DIA (DETALHAMENTO DE CONSUMO)
+        // 1. ITENS LIQUIDADOS NESTE ACERTO
         // ==========================================
         $b->divider();
+        $b->text($this->cleanText('>>> ITENS LIQUIDADOS NESTE ACERTO <<<'), bold: true);
 
-        if (!empty($this->ledgerItems)) {
-            $b->text($this->cleanText('EXTRATO DE CONSUMO INTERNO:'), bold: true);
-            foreach ($this->ledgerItems as $item) {
-                // Filtra lançamentos zerados ou descrições de lanche da equipa (vale-alimentação)
-                if (
-                    $item['amount'] > 0 &&
-                    !str_contains(mb_strtolower($item['description']), 'lanche da equipa') &&
-                    !str_contains(mb_strtolower($item['description']), 'vale alimentação')
-                ) {
-                    $b->text($this->justifyLine($item['description'], (float) $item['amount']));
+        if (!empty($this->settledItems)) {
+            $services = array_filter($this->settledItems, fn($i) => ($i['category'] ?? '') === 'services');
+            $excedentes = array_filter($this->settledItems, fn($i) => ($i['category'] ?? '') === 'excedente');
+            $balcao = array_filter($this->settledItems, fn($i) => ($i['category'] ?? '') === 'balcao');
+
+            if (!empty($services)) {
+                $b->text($this->cleanText('-- SERVICOS / DIARIAS --'));
+                foreach ($services as $item) {
+                    $b->text($this->justifyLine($item['title'], (float) $item['amount']));
                 }
             }
+
+            if (!empty($excedentes)) {
+                $b->text($this->cleanText('-- EXCEDENTE DE LANCHE --'));
+                foreach ($excedentes as $item) {
+                    $time = !empty($item['time']) ? "[{$item['time']}] " : '';
+                    $b->text($this->justifyLine($time . $item['title'], (float) $item['amount'], 48, true));
+                }
+            }
+
+            if (!empty($balcao)) {
+                $b->text($this->cleanText('-- CONSUMO BALCAO / PESSOAL --'));
+                foreach ($balcao as $item) {
+                    $time = !empty($item['time']) ? "[{$item['time']}] " : '';
+                    $b->text($this->justifyLine($time . $item['title'], (float) $item['amount'], 48, true));
+                }
+            }
+        } else {
+            $b->text($this->cleanText('(NENHUM VALOR FINANCEIRO BAIXADO HOJE)'));
+        }
+
+        // ==========================================
+        // 2. ITENS ROLADOS PARA O FUTURO (SE HOUVER)
+        // ==========================================
+        if (!empty($this->rolledItems)) {
             $b->divider();
+            $b->text($this->cleanText('>>> ITENS ROLADOS P/ O PROXIMO TURNO <<<'), bold: true);
+
+            foreach ($this->rolledItems as $item) {
+                $time = !empty($item['time']) ? "[{$item['time']}] " : '';
+                $isCredit = ($item['type'] ?? '') === 'service' || ($item['category'] ?? '') === 'services';
+                $prefix = $isCredit ? '(+) ' : '(-) ';
+                $b->text($this->justifyLine($prefix . $time . $item['title'], (float) $item['amount'], 48, !$isCredit));
+            }
         }
 
         // ==========================================
-        // FECHAMENTO FINANCEIRO JUSTIFICADO
+        // 3. FECHAMENTO FINANCEIRO JUSTIFICADO
         // ==========================================
-        $gross = $this->grossAmount > 0 ? $this->grossAmount : $this->netAmount;
-
+        $b->divider();
         $b->alignLeft()
-          ->text($this->justifyLine('DIARIA BRUTA:', $gross));
+            ->text($this->justifyLine('TOTAL PAGO AGORA:', $this->netAmount), bold: true)
+            ->text($this->cleanText('FORMA DE PAGAMENTO: ' . $this->paymentMethod));
 
-        if ($this->consumptionAmount > 0) {
-            $b->text($this->justifyLine('CONSUMO DO TURNO:', $this->consumptionAmount, 48, true));
+        if (abs($this->remainingBalance) > 0.01) {
+            $balLabel = $this->remainingBalance > 0
+                ? 'CREDITO P/ PROXIMO TURNO:'
+                : 'DEBITO P/ PROXIMO TURNO:';
+            $b->text($this->justifyLine($balLabel, abs($this->remainingBalance), 48, $this->remainingBalance < 0));
+        } else {
+            $b->text($this->cleanText('SALDO REMANESCENTE: R$ 0,00 (CONTA ZERADA)'));
         }
 
-        $b->text($this->justifyLine('(=) VALOR LIQUIDO:', $this->netAmount), bold: true)
-          ->text($this->cleanText('FORMA DE PAGAMENTO: ' . $this->paymentMethod))
-          ->divider()
-          ->space()
-          ->text($this->cleanText('DECLARO QUE RECEBI OS VALORES ACIMA ESPECIFICADOS, DANDO PLENA E GERAL QUITACAO PELOS SERVICOS PRESTADOS NO RESPECTIVO TURNO.'))
-          ->space()
-          ->space()
-          ->alignCenter()
-          ->text('____________________________________')
-          ->text($this->cleanText($this->freelancerName))
-          ->cut();
+        $b->divider()
+            ->space()
+            ->text($this->cleanText('DECLARO QUE CONFERI E RECEBI OS VALORES ESPECIFICADOS ACIMA, DANDO QUITACAO DOS ITENS LIQUIDADOS.'))
+            ->space()
+            ->space()
+            ->alignCenter()
+            ->text('____________________________________')
+            ->text($this->cleanText($this->freelancerName))
+            ->cut();
 
         return $b->get();
     }

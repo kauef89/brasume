@@ -25,9 +25,10 @@
         <!-- CORPO SCROLLÁVEL -->
         <div class="flex-1 overflow-y-auto p-6 hide-scrollbar flex flex-col gap-6">
 
-            <!-- ABA 1: LIQUIDAÇÃO -->
+            <!-- ABA 1: LIQUIDAÇÃO EM BLOCOS -->
             <template v-if="activeTab === 'payment'">
                 <div class="bg-surface-3 p-4 rounded-2xl flex flex-col gap-3 shrink-0">
+                    <!-- DADOS DO COLABORADOR -->
                     <div class="flex items-center justify-between">
                         <div class="flex flex-col">
                             <span class="micro-label text-[10px] uppercase font-bold text-surface-muted">Colaborador</span>
@@ -36,55 +37,198 @@
                                 PIX ({{ payoutData.user.pix_key_type || 'Chave' }}): <strong>{{ payoutData.user.pix_key }}</strong>
                             </span>
                         </div>
+
+                        <!-- BADGE DE TURNO POR DATA -->
+                        <div class="flex flex-col items-end">
+                            <span class="text-[10px] font-black uppercase tracking-wider text-surface-muted">Turno</span>
+                            <span class="px-3 py-1 rounded-lg bg-surface-1 border border-surface-border font-black text-xs text-primary-500 shadow-xs">
+                                {{ shiftDateLabel }}
+                            </span>
+                        </div>
                     </div>
 
-                    <div class="pt-3 border-t border-surface-border/60 flex flex-col gap-2">
-                        <!-- SALDO ANTERIOR -->
-                        <div class="flex items-center justify-between text-xs">
-                            <span class="text-surface-muted font-bold uppercase">Saldo Anterior (Pendente)</span>
-                            <span class="font-black text-surface-text">{{ $formatCurrency(payoutData.previous_balance || 0) }}</span>
-                        </div>
+                    <!-- PRESETS DE AÇÃO RÁPIDA -->
+                    <div class="pt-2 border-t border-surface-border/60 flex items-center gap-2">
+                        <button
+                            type="button"
+                            @click="applyPreset('all')"
+                            class="flex-1 py-1.5 px-2 rounded-lg font-black text-[10px] uppercase tracking-wider transition-colors border outline-none cursor-pointer"
+                            :class="activePreset === 'all' ? 'bg-primary-500 text-white border-primary-500' : 'bg-surface-1 text-surface-muted hover:text-surface-text border-surface-border'"
+                        >
+                            Liquidar Tudo
+                        </button>
+                        <button
+                            type="button"
+                            @click="applyPreset('full_rate')"
+                            class="flex-1 py-1.5 px-2 rounded-lg font-black text-[10px] uppercase tracking-wider transition-colors border outline-none cursor-pointer"
+                            :class="activePreset === 'full_rate' ? 'bg-primary-500 text-white border-primary-500' : 'bg-surface-1 text-surface-muted hover:text-surface-text border-surface-border'"
+                        >
+                            Diária Cheia (Rolar Consumo)
+                        </button>
+                        <button
+                            type="button"
+                            @click="applyPreset('roll_all')"
+                            class="flex-1 py-1.5 px-2 rounded-lg font-black text-[10px] uppercase tracking-wider transition-colors border outline-none cursor-pointer"
+                            :class="activePreset === 'roll_all' ? 'bg-primary-500 text-white border-primary-500' : 'bg-surface-1 text-surface-muted hover:text-surface-text border-surface-border'"
+                        >
+                            Rolar Tudo
+                        </button>
+                    </div>
 
-                        <!-- AJUSTE DA DIÁRIA DE HOJE -->
-                        <div class="flex items-center justify-between text-xs mt-1">
-                            <span class="text-surface-muted font-bold uppercase">Diária do Turno Atual</span>
-                            <div class="relative w-28">
-                                <span class="absolute left-2 top-1/2 -translate-y-1/2 text-surface-muted text-[10px] font-bold">R$</span>
-                                <input type="number" v-model.number="localGrossRate" class="w-full h-7 pl-6 pr-2 text-right font-black text-xs bg-surface-1 border border-surface-border rounded outline-none focus:border-primary-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                    <!-- BLOCOS DE CONFERÊNCIA POR TURNO -->
+                    <div class="flex flex-col gap-3 pt-2">
+                        <!-- 1. BLOCO: SERVIÇOS / DIÁRIA -->
+                        <div class="bg-surface-1/80 border border-surface-border/70 rounded-xl p-3 flex flex-col gap-2 shadow-xs">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] font-black uppercase tracking-wider text-primary-600 dark:text-primary-400 flex items-center gap-1.5">
+                                    <i class="pi pi-briefcase text-xs"></i> 1. Serviços e Honorários
+                                </span>
+                                <span class="text-[10px] font-bold text-surface-muted">Turno {{ shiftDateLabel }}</span>
+                            </div>
+
+                            <div class="flex items-center justify-between p-2 rounded-lg bg-surface-2/60 border border-surface-border/50">
+                                <label class="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        v-model="serviceItem.selected"
+                                        class="w-4 h-4 rounded text-primary-500 focus:ring-0 cursor-pointer"
+                                    />
+                                    <span class="text-xs font-bold text-surface-text">{{ serviceItem.title }}</span>
+                                </label>
+
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-black text-success-500">
+                                        + {{ $formatCurrency(serviceItem.amount) }}
+                                    </span>
+                                    <span
+                                        class="text-[9px] font-black uppercase px-2 py-0.5 rounded"
+                                        :class="serviceItem.selected ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-purple-500/10 text-purple-500 border border-purple-500/20'"
+                                    >
+                                        {{ serviceItem.selected ? 'Pagar Hoje' : 'Rolada' }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- CONSUMO NO TURNO -->
-                        <div class="flex items-center justify-between text-xs">
-                            <span class="font-bold uppercase" :class="payoutData.consumption_amount > 0 ? 'text-danger-500' : 'text-surface-muted'">(-) Consumo Interno</span>
-                            <span class="font-black" :class="payoutData.consumption_amount > 0 ? 'text-danger-500' : 'text-surface-text'">{{ $formatCurrency(payoutData.consumption_amount) }}</span>
+                        <!-- 2. BLOCO: EXCEDENTE DE LANCHE (SE HOUVER) -->
+                        <div v-if="excedenteItems.length > 0" class="bg-surface-1/80 border border-surface-border/70 rounded-xl p-3 flex flex-col gap-2 shadow-xs">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] font-black uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
+                                    <i class="pi pi-sparkles text-xs"></i> 2. Excedente de Lanche da Equipe
+                                </span>
+                                <span class="text-[9px] text-surface-muted font-bold">Ultrapassou teto de benefício</span>
+                            </div>
+
+                            <div
+                                v-for="item in excedenteItems"
+                                :key="item.id"
+                                class="flex items-center justify-between p-2 rounded-lg bg-surface-2/60 border border-surface-border/50"
+                            >
+                                <label class="flex items-center gap-2 cursor-pointer select-none min-w-0">
+                                    <input
+                                        type="checkbox"
+                                        v-model="item.selected"
+                                        class="w-4 h-4 rounded text-amber-500 focus:ring-0 cursor-pointer"
+                                    />
+                                    <span class="text-xs font-medium text-surface-text truncate max-w-[180px]">
+                                        <span class="text-[9px] font-bold text-surface-muted mr-1">[{{ item.time }}]</span>
+                                        {{ item.title }}
+                                    </span>
+                                </label>
+
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="text-xs font-black text-danger-500">
+                                        - {{ $formatCurrency(item.amount) }}
+                                    </span>
+                                    <span
+                                        class="text-[9px] font-black uppercase px-2 py-0.5 rounded cursor-pointer select-none"
+                                        :class="item.selected ? 'bg-danger-500/10 text-danger-500 border border-danger-500/20' : 'bg-purple-500/10 text-purple-500 border border-purple-500/20'"
+                                        @click="item.selected = !item.selected"
+                                    >
+                                        {{ item.selected ? 'Descontar' : 'Rolar' }}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                        <div v-if="payoutData.consumption_details?.orders_count > 0" class="text-[10px] bg-danger-500/10 text-danger-400 p-1.5 rounded font-medium mt-1">
-                            <i class="pi pi-info-circle mr-1"></i> {{ payoutData.consumption_details.orders_count }} comanda(s) abatida(s).
+
+                        <!-- 3. BLOCO: CONSUMO BALCÃO / PESSOAL (SE HOUVER) -->
+                        <div v-if="balcaoItems.length > 0" class="bg-surface-1/80 border border-surface-border/70 rounded-xl p-3 flex flex-col gap-2 shadow-xs">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] font-black uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
+                                    <i class="pi pi-shopping-bag text-xs"></i> 3. Consumo Balcão (Itens Pessoais)
+                                </span>
+                                <span class="text-[9px] text-surface-muted font-bold">Compras avulsas / Saída</span>
+                            </div>
+
+                            <div
+                                v-for="item in balcaoItems"
+                                :key="item.id"
+                                class="flex items-center justify-between p-2 rounded-lg bg-surface-2/60 border border-surface-border/50"
+                            >
+                                <label class="flex items-center gap-2 cursor-pointer select-none min-w-0">
+                                    <input
+                                        type="checkbox"
+                                        v-model="item.selected"
+                                        class="w-4 h-4 rounded text-rose-500 focus:ring-0 cursor-pointer"
+                                    />
+                                    <span class="text-xs font-medium text-surface-text truncate max-w-[180px]">
+                                        <span class="text-[9px] font-bold text-surface-muted mr-1">[{{ item.time }}]</span>
+                                        {{ item.title }}
+                                    </span>
+                                </label>
+
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="text-xs font-black text-danger-500">
+                                        - {{ $formatCurrency(item.amount) }}
+                                    </span>
+                                    <span
+                                        class="text-[9px] font-black uppercase px-2 py-0.5 rounded cursor-pointer select-none"
+                                        :class="item.selected ? 'bg-danger-500/10 text-danger-500 border border-danger-500/20' : 'bg-purple-500/10 text-purple-500 border border-purple-500/20'"
+                                        @click="item.selected = !item.selected"
+                                    >
+                                        {{ item.selected ? 'Descontar' : 'Rolar' }}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- TOTAL DEVIDO VS VALOR A PAGAR -->
-                    <div class="pt-3 border-t border-surface-border flex flex-col gap-3">
-                        <div class="flex items-center justify-between">
-                            <span class="text-[10px] font-black uppercase tracking-wider text-surface-muted">Saldo Total Devido</span>
-                            <span class="text-lg font-black text-surface-text">{{ $formatCurrency(totalDue) }}</span>
+                    <!-- SALDO ANTERIOR PENDENTE -->
+                    <div v-if="payoutData.previous_balance !== 0" class="p-3 bg-surface-1 rounded-xl border border-surface-border flex items-center justify-between text-xs">
+                        <span class="font-bold uppercase text-surface-muted">Saldo de Turnos Anteriores</span>
+                        <span class="font-black" :class="payoutData.previous_balance >= 0 ? 'text-success-500' : 'text-danger-500'">
+                            {{ payoutData.previous_balance >= 0 ? '+' : '' }} {{ $formatCurrency(payoutData.previous_balance) }}
+                        </span>
+                    </div>
+
+                    <!-- TOTALIZADORES: A PAGAR AGORA VS ROLADO P/ O FUTURO -->
+                    <div class="pt-3 border-t border-surface-border flex flex-col gap-2.5">
+                        <div class="flex items-center justify-between bg-surface-1 p-2.5 rounded-xl border border-surface-border text-xs">
+                            <span class="font-bold text-surface-muted uppercase text-[10px]">Saldo Rolado para Próximo Turno:</span>
+                            <span class="font-black" :class="rolledBalance >= 0 ? 'text-purple-500' : 'text-amber-500'">
+                                {{ rolledBalance >= 0 ? '+' : '' }} {{ $formatCurrency(rolledBalance) }}
+                            </span>
                         </div>
 
                         <div class="flex items-center justify-between bg-primary-500/10 p-3 rounded-xl border border-primary-500/20">
-                            <label class="text-[11px] font-black text-primary-700 dark:text-primary-400 uppercase tracking-wider">Valor a Pagar Agora</label>
+                            <label class="text-[11px] font-black text-primary-700 dark:text-primary-400 uppercase tracking-wider">
+                                Valor a Pagar Agora
+                            </label>
                             <div class="flex items-center gap-2">
-                                <button v-if="localPaidAmount !== totalDue" @click="localPaidAmount = totalDue" class="text-[9px] font-bold uppercase bg-primary-500/20 text-primary-700 dark:text-primary-300 px-2 py-1 rounded cursor-pointer border-none outline-none hover:bg-primary-500/30">Total</button>
-                                <div class="relative w-28">
-                                    <span class="absolute left-2 top-1/2 -translate-y-1/2 text-primary-500 text-[10px] font-bold">R$</span>
-                                    <input type="number" v-model.number="localPaidAmount" class="w-full h-8 pl-6 pr-2 text-right font-black text-sm bg-surface-1 border border-primary-500/30 rounded-lg outline-none focus:border-primary-500 text-primary-700 dark:text-primary-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                <div class="relative w-32">
+                                    <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-primary-500 text-xs font-bold">R$</span>
+                                    <input
+                                        type="number"
+                                        v-model.number="localPaidAmount"
+                                        class="w-full h-8 pl-8 pr-2 text-right font-black text-sm bg-surface-1 border border-primary-500/30 rounded-lg outline-none focus:border-primary-500 text-primary-700 dark:text-primary-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- PASSO 1: ESCOLHA DA ORIGEM -->
+                <!-- PASSO 1: SELEÇÃO DA ORIGEM / GAVETA OU PIX -->
                 <div v-if="step === 'method'" class="flex-1 flex flex-col animate-in fade-in slide-in-from-left-4 duration-300">
                     <p class="text-xs font-bold uppercase tracking-wider text-surface-muted text-center my-2">
                         {{ localPaidAmount === 0 ? 'Ação de Fechamento:' : 'Selecione a fonte do pagamento:' }}
@@ -95,7 +239,7 @@
                             <SelectableCard @select="step = 'bank'" color="success" icon="pi-building-columns" title="Conta Bancária / PIX" subtitle="Pagamento feito pela empresa" />
                         </template>
                         <template v-else>
-                            <SelectableCard @select="selectMethod('accumulate')" color="purple" icon="pi-history" title="Acumular Dívida no Saldo" subtitle="Rolar a dívida e não realizar pagamentos hoje" />
+                            <SelectableCard @select="selectMethod('accumulate')" color="purple" icon="pi-history" title="Acumular no Saldo do Colaborador" subtitle="Rolar valores e não realizar saídas do caixa hoje" />
                         </template>
                     </div>
                 </div>
@@ -163,13 +307,13 @@ const emit = defineEmits(['cancel', 'confirm']);
 
 const activeTab = ref('payment');
 const step = ref('method');
+const activePreset = ref('all');
 
 const tabOptions = [
     { label: 'Liquidação', value: 'payment', icon: 'pi-money-bill' },
     { label: 'Extrato', value: 'ledger', icon: 'pi-list' }
 ];
 
-const localGrossRate = ref(0);
 const localPaidAmount = ref(0);
 
 const payoutData = ref({
@@ -181,35 +325,139 @@ const payoutData = ref({
     user: {}
 });
 
-const totalDue = computed(() => {
-    const prev = payoutData.value.previous_balance || 0;
-    const gross = localGrossRate.value || 0;
-    const cons = payoutData.value.consumption_amount || 0;
-    return Math.max(0, prev + gross - cons);
+const shiftDateLabel = ref('');
+const serviceItem = ref({
+    title: 'Diária de Trabalho',
+    amount: 0,
+    selected: true,
+    category: 'services'
+});
+const rawConsumptionItems = ref([]);
+
+// Itens categorizados
+const excedenteItems = computed(() => {
+    return rawConsumptionItems.value.filter(i => i.category === 'excedente');
 });
 
+const balcaoItems = computed(() => {
+    return rawConsumptionItems.value.filter(i => i.category === 'balcao');
+});
+
+// Itens selecionados para liquidação AGORA
+const settledItems = computed(() => {
+    const list = [];
+    if (serviceItem.value.selected && serviceItem.value.amount > 0) {
+        list.push({ ...serviceItem.value });
+    }
+    rawConsumptionItems.value.forEach(item => {
+        if (item.selected) {
+            list.push({ ...item });
+        }
+    });
+    return list;
+});
+
+// Itens que serão ROLADOS para o próximo turno
+const rolledItems = computed(() => {
+    const list = [];
+    if (!serviceItem.value.selected && serviceItem.value.amount > 0) {
+        list.push({ ...serviceItem.value, title: `${serviceItem.value.title} (Rolada)` });
+    }
+    rawConsumptionItems.value.forEach(item => {
+        if (!item.selected) {
+            list.push({ ...item, title: `${item.title} (Rolado)` });
+        }
+    });
+    return list;
+});
+
+// Cálculo em tempo real do que deve ser pago agora
+const calculatedNow = computed(() => {
+    const serviceAmt = serviceItem.value.selected ? (serviceItem.value.amount || 0) : 0;
+    const consAmt = rawConsumptionItems.value
+        .filter(i => i.selected)
+        .reduce((sum, i) => sum + (i.amount || 0), 0);
+
+    const prev = payoutData.value.previous_balance || 0;
+    return Math.max(0, prev + serviceAmt - consAmt);
+});
+
+// Saldo rolado para a próxima vez
+const rolledBalance = computed(() => {
+    const rolledServices = !serviceItem.value.selected ? (serviceItem.value.amount || 0) : 0;
+    const rolledConsumptions = rawConsumptionItems.value
+        .filter(i => !i.selected)
+        .reduce((sum, i) => sum + (i.amount || 0), 0);
+
+    return rolledServices - rolledConsumptions;
+});
+
+// Presets de Ação Rápida
+const applyPreset = (preset) => {
+    activePreset.value = preset;
+    if (preset === 'all') {
+        serviceItem.value.selected = true;
+        rawConsumptionItems.value.forEach(i => i.selected = true);
+    } else if (preset === 'full_rate') {
+        serviceItem.value.selected = true;
+        rawConsumptionItems.value.forEach(i => i.selected = false);
+    } else if (preset === 'roll_all') {
+        serviceItem.value.selected = false;
+        rawConsumptionItems.value.forEach(i => i.selected = false);
+    }
+    localPaidAmount.value = calculatedNow.value;
+};
+
+// Sincroniza inputs
 watch(() => props.payoutDetails, (newVal) => {
     if (newVal && Object.keys(newVal).length > 0) {
         payoutData.value = newVal;
-        localGrossRate.value = newVal.gross_rate || 0;
+        shiftDateLabel.value = newVal.shift_date_label || '';
 
-        const calcTotal = (newVal.previous_balance || 0) + (newVal.gross_rate || 0) - (newVal.consumption_amount || 0);
-        localPaidAmount.value = Math.max(0, calcTotal);
+        serviceItem.value = {
+            id: newVal.service_item?.id || 'service_rate',
+            title: newVal.service_item?.title || 'Diária de Trabalho',
+            amount: Number(newVal.service_item?.amount ?? newVal.gross_rate ?? 0),
+            selected: true,
+            category: 'services',
+            type: 'service'
+        };
+
+        const consItems = newVal.consumption_details?.items || [];
+        rawConsumptionItems.value = consItems.map(item => ({
+            ...item,
+            amount: Number(item.amount || 0),
+            selected: true
+        }));
+
+        localPaidAmount.value = calculatedNow.value;
     }
 }, { immediate: true, deep: true });
+
+watch(calculatedNow, (val) => {
+    localPaidAmount.value = val;
+});
 
 onMounted(() => {
     step.value = 'method';
     activeTab.value = 'payment';
+    activePreset.value = 'all';
 });
 
 const selectMethod = (method, bankAccountId = null) => {
+    const deductedConsumption = rawConsumptionItems.value
+        .filter(i => i.selected)
+        .reduce((sum, i) => sum + i.amount, 0);
+
     emit('confirm', {
         method,
         bankAccountId,
         amount: localPaidAmount.value,
-        gross_rate: localGrossRate.value,
-        consumption_deducted: payoutData.value.consumption_amount
+        gross_rate: serviceItem.value.selected ? serviceItem.value.amount : 0,
+        consumption_deducted: deductedConsumption,
+        shift_date_label: shiftDateLabel.value,
+        settled_items: settledItems.value,
+        rolled_items: rolledItems.value
     });
 };
 

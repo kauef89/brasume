@@ -9,7 +9,6 @@ use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Services\Catalog\InventoryService;
 use App\Services\RestaurantOps\KitchenDispatchService;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -37,14 +36,26 @@ class MealAllowanceService
             ->with(['employee'])
             ->get()
             ->map(function ($attendee) use ($shiftMealOrders) {
-                $employeeId = $attendee->employee_id ?? $attendee->employee?->id;
+                $employee = $attendee->employee;
+                $employeeId = $employee?->id ?? ($attendee->employee_id ?? $attendee->id);
                 $userId = $attendee->id;
 
-                $myOrders = $shiftMealOrders->filter(function ($order) use ($attendee, $employeeId, $userId) {
-                    $isMatchEmp = $employeeId && (int)$order->customer_id === (int)$employeeId;
-                    $isMatchUser = (int)$order->customer_id === (int)$userId;
-                    $isMatchName = str_contains($order->customer_name ?? '', $attendee->name);
-                    return $isMatchEmp || $isMatchUser || $isMatchName;
+                $candidateIds = array_unique(array_filter([
+                    $employeeId,
+                    $userId,
+                    $attendee->employee_id ?? null,
+                    $attendee->employee?->id ?? null,
+                ]));
+
+                $firstName = explode(' ', trim($attendee->name))[0];
+
+                $myOrders = $shiftMealOrders->filter(function ($order) use ($candidateIds, $attendee, $firstName) {
+                    $isMatchEmp = in_array((int)$order->employee_id, $candidateIds, true);
+                    $isMatchCust = in_array((int)$order->customer_id, $candidateIds, true);
+                    $isMatchName = str_contains($order->customer_name ?? '', $attendee->name)
+                        || str_contains($order->customer_name ?? '', "Lanche: {$firstName}");
+
+                    return $isMatchEmp || $isMatchCust || $isMatchName;
                 });
 
                 $consumedItems = $myOrders->flatMap(function ($order) {
@@ -86,7 +97,7 @@ class MealAllowanceService
     }
 
     /**
-     * Processa a gravação de lanches em lote com cálculo de excedente e despacho operacional.
+     * Processa a gravação de lanches em lote com cálculo cumulativo de benefício e despacho.
      */
     public function processBatch(array $slots, CashShift $activeShift, $operator, CompanySetting $settings): void
     {
@@ -107,30 +118,60 @@ class MealAllowanceService
                 $attendee = $attendees->firstWhere('id', $slot['attendee_id']);
                 if (!$attendee) continue;
 
-                $employeeId = $attendee->employee_id ?? $attendee->id;
+                $employee = $attendee->employee;
+                $employeeId = $employee?->id ?? ($attendee->employee_id ?? $attendee->id);
+                $userId = $attendee->id;
 
-                // 1. Total consumido no turno
-                $alreadySpent = (float) Order::where('cash_shift_id', $activeShift->id)
+                $candidateIds = array_unique(array_filter([
+                    $employeeId,
+                    $userId,
+                    $attendee->employee_id ?? null,
+                    $attendee->employee?->id ?? null,
+                ]));
+
+                $firstName = explode(' ', trim($attendee->name))[0];
+
+                // 1. Busca todos os pedidos anteriores deste colaborador no turno ativo
+                $previousOrders = Order::where('cash_shift_id', $activeShift->id)
                     ->where('source', 'team_app')
                     ->whereNotIn('status', ['cancelled'])
-                    ->where(function ($q) use ($attendee, $employeeId) {
-                        $q->where('customer_id', $employeeId)
-                          ->orWhere('customer_id', $attendee->id)
+                    ->where(function ($q) use ($candidateIds, $attendee, $firstName) {
+                        $q->whereIn('employee_id', $candidateIds)
+                          ->orWhereIn('customer_id', $candidateIds)
+                          ->orWhere('customer_name', 'like', "Lanche: {$attendee->name}%")
+                          ->orWhere('customer_name', 'like', "Lanche: {$firstName}%")
                           ->orWhere('customer_name', 'like', "%{$attendee->name}%");
                     })
-                    ->sum('total');
+                    ->get();
 
-                // 2. Teto do colaborador
+                $previousOrdersTotal = (float) $previousOrders->sum('total');
+
+                // 2. Busca quanto já foi debitado como excedente no extrato do colaborador neste turno
+                $previousExcessTotal = 0.0;
+                if ($employee) {
+                    $previousExcessTotal = (float) $employee->ledgers()
+                        ->where('created_at', '>=', $activeShift->opened_at)
+                        ->where('type', 'debit')
+                        ->where(function ($q) use ($activeShift) {
+                            $q->where('description', 'like', "%Turno #{$activeShift->id}%")
+                              ->orWhere('description', 'like', '%Excedente Lanche%');
+                        })
+                        ->sum('amount');
+                }
+
+                // 3. Teto individual ou global do colaborador
                 $cap = $globalCap;
-                $indivCap = (float) ($attendee->employee?->meal_allowance ?? $attendee->employee?->food_allowance_amount ?? 0);
+                $indivCap = (float) ($employee?->meal_allowance ?? $employee?->food_allowance_amount ?? 0);
                 if ($settings->allowance_scope === 'individual' && $indivCap > 0) {
                     $cap = $indivCap;
                 }
 
-                $remainingCap = max(0, $cap - $alreadySpent);
+                // Saldo restante real do benefício para este turno
+                $alreadySpentAllowance = min($cap, max(0.0, round($previousOrdersTotal - $previousExcessTotal, 2)));
+                $remainingCap = max(0.0, round($cap - $alreadySpentAllowance, 2));
 
-                // 3. Montagem e precificação dos itens
-                $newSlotTotal = 0;
+                // 4. Montagem e precificação dos itens solicitados (qualquer item do cardápio liberado)
+                $newSlotTotal = 0.0;
                 $itemsToCreate = [];
 
                 foreach ($slot['items'] as $itemData) {
@@ -144,7 +185,7 @@ class MealAllowanceService
                     $extraPrice = (float) ($itemData['extra_price'] ?? 0);
                     $finalUnitPrice = $basePrice + $extraPrice;
                     $qty = (float) ($itemData['qty'] ?? 1);
-                    $itemTotal = $finalUnitPrice * $qty;
+                    $itemTotal = round($finalUnitPrice * $qty, 2);
 
                     $newSlotTotal += $itemTotal;
 
@@ -159,16 +200,18 @@ class MealAllowanceService
                     ];
                 }
 
-                $excess = max(0, $newSlotTotal - $remainingCap);
+                // 5. O saldo de benefício restante abate a comanda; o excedente vira débito em folha/diária
+                $allowanceCovered = min($remainingCap, $newSlotTotal);
+                $excess = round($newSlotTotal - $allowanceCovered, 2);
 
                 if ($excess > 0 && !$allowTab) {
-                    throw new \DomainException("{$attendee->name} já utilizou R$ " . number_format($alreadySpent, 2, ',', '.') . " de benefício. O novo pedido gera R$ " . number_format($excess, 2, ',', '.') . " de excedente não autorizado.");
+                    throw new \DomainException("{$attendee->name} já utilizou R$ " . number_format($alreadySpentAllowance, 2, ',', '.') . " de benefício. O novo pedido gera R$ " . number_format($excess, 2, ',', '.') . " de excedente não autorizado.");
                 }
 
                 $parts = explode(' ', trim($attendee->name));
                 $shortName = count($parts) > 1 ? $parts[0] . ' ' . mb_substr($parts[1], 0, 1) . '.' : $parts[0];
 
-                // 4. Criação da comanda da equipe
+                // 6. Criação da comanda da equipe
                 $order = Order::create([
                     'type'                   => 'counter',
                     'status'                 => 'closed',
@@ -183,15 +226,15 @@ class MealAllowanceService
                     ]] : null,
                     'source'                 => 'team_app',
                     'customer_name'          => 'Lanche: ' . $shortName,
-                    'customer_id'            => null, // 👈 NULL para não colidir com a tabela customers
-                    'employee_id'            => $employeeId, // 👈 O colaborador que está comendo o lanche
-                    'cashier_id'             => $operator->id ?? null, // 👈 O usuário/operador que lançou no app
+                    'customer_id'            => null,
+                    'employee_id'            => $employeeId,
+                    'cashier_id'             => $operator->id ?? null,
                     'subtotal'               => $newSlotTotal,
                     'total'                  => $newSlotTotal,
                     'cash_shift_id'          => $activeShift->id,
                 ]);
 
-                // 5. Pagamento interno
+                // 7. Registro do pagamento interno
                 $order->payments()->create([
                     'payment_method_id' => $internalPaymentMethod?->id,
                     'method'            => $internalPaymentMethod?->name ?? 'Consumo Interno',
@@ -202,7 +245,7 @@ class MealAllowanceService
                     'cashier_id'        => $operator->id ?? null,
                 ]);
 
-                // 6. Itens e modificadores
+                // 8. Gravação dos itens e adicionais
                 foreach ($itemsToCreate as $it) {
                     $orderItem = $order->items()->create([
                         'product_id'        => $it['product']->id,
@@ -231,11 +274,11 @@ class MealAllowanceService
                     }
                 }
 
-                // 7. Débito em folha
-                if ($excess > 0 && $allowTab && $attendee->employee) {
-                    $latestLedger = $attendee->employee->ledgers()->latest('id')->first();
+                // 9. Lançamento do débito em folha quando houver excedente
+                if ($excess > 0 && $allowTab && $employee) {
+                    $latestLedger = $employee->ledgers()->latest('id')->first();
                     $bal = $latestLedger ? (float) $latestLedger->balance : 0.00;
-                    $attendee->employee->ledgers()->create([
+                    $employee->ledgers()->create([
                         'type'        => 'debit',
                         'description' => "Excedente Lanche (Turno #{$activeShift->id})",
                         'amount'      => $excess,
@@ -243,14 +286,14 @@ class MealAllowanceService
                     ]);
                 }
 
-                // 8. Baixa de estoque
+                // 10. Baixa de estoque
                 try {
                     $this->inventoryService->deductOrderStock($order);
                 } catch (\Throwable $invErr) {
                     Log::warning("Aviso estoque lanche: " . $invErr->getMessage());
                 }
 
-                // 9. Cozinha e WebSockets
+                // 11. Despacho operacional para cozinha e WebSockets
                 try {
                     $this->kitchenDispatchService->dispatchNewItems($order->fresh());
                     broadcast(new \App\Events\OrderUpdated($order->fresh()));
