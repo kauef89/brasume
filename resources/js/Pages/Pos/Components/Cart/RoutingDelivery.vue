@@ -10,12 +10,13 @@
                 />
             </div>
 
-            <!-- 1. PESQUISAR CLIENTE EXISTENTE -->
-            <DeliveryCustomerSearch
+            <!-- 1. PESQUISAR CLIENTE EXISTENTE (COMPONENTE UNIFICADO) -->
+            <CustomerSearch
                 v-if="activeSubTab === 'search'"
-                :customers="customers"
-                @select="handleCustomerSelected"
-                @go-to-new="handleGoToNew"
+                order-type="delivery"
+                :initial-customers="customers"
+                @customer-selected="handleCustomerSelected"
+                @create-new="handleGoToNew"
             />
 
             <!-- 2. CADASTRO RÁPIDO -->
@@ -59,7 +60,7 @@ import { ref, computed } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 
 import SegmentedControl from "@/Components/UI/SegmentedControl.vue";
-import DeliveryCustomerSearch from "@/Pages/Pos/Components/Cart/Delivery/DeliveryCustomerSearch.vue";
+import CustomerSearch from "@/Pages/Pos/Components/Cart/CustomerSearch.vue";
 import DeliveryCustomerQuick from "@/Pages/Pos/Components/Cart/Delivery/DeliveryCustomerQuick.vue";
 import DeliveryCustomerNew from "@/Pages/Pos/Components/Cart/Delivery/DeliveryCustomerNew.vue";
 import DeliveryAddressList from "@/Pages/Pos/Components/Cart/Delivery/DeliveryAddressList.vue";
@@ -101,7 +102,7 @@ const handleCustomerSelected = (c) => {
     emit('update:customer', c);
     emit('customer-selected', c);
 
-    if (c.addresses && c.addresses.length > 0) {
+    if (c?.addresses && c.addresses.length > 0) {
         emit('update:address', c.addresses[0]);
     } else {
         emit('update:address', null);

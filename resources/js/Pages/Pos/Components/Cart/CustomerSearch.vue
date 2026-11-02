@@ -11,9 +11,17 @@
                         {{ getInitials(typeof selectedCustomer === 'string' ? selectedCustomer : selectedCustomer.name) }}
                     </div>
                     <div class="flex flex-col">
-                        <span class="font-medium text-primary-700 dark:text-primary-300 leading-tight">
-                            {{ abbreviateName(typeof selectedCustomer === 'string' ? selectedCustomer : selectedCustomer.name) }}
-                        </span>
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-primary-700 dark:text-primary-300 leading-tight">
+                                {{ abbreviateName(typeof selectedCustomer === 'string' ? selectedCustomer : selectedCustomer.name) }}
+                            </span>
+                            <span v-if="selectedCustomer.employee_id || selectedCustomer.is_employee" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                                Colaborador
+                            </span>
+                            <span v-if="selectedCustomer.supplier_id || selectedCustomer.is_convenio" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                                Convênio
+                            </span>
+                        </div>
                         <span class="text-xs font-medium uppercase text-primary-500/70">
                             {{ typeof selectedCustomer === 'string' ? 'Identificador Avulso' : (formatPhone(selectedCustomer.phone) || 'Cliente Cadastrado') }}
                         </span>
@@ -46,7 +54,7 @@
                     :value="query"
                     @input="handleInputEvent"
                     type="text"
-                    class="w-full pl-11 pr-4 py-3.5 bg-transparent border-none outline-none text-sm text-surface-text placeholder:text-surface-muted/50 "
+                    class="w-full pl-11 pr-4 py-3.5 bg-transparent border-none outline-none text-sm text-surface-text placeholder:text-surface-muted/50"
                     :placeholder="orderType === 'counter' ? 'Identificar cliente...' : 'Buscar cliente (Nome, Tel, CPF)...'"
                     @focus="showDropdown = true"
                     @keyup.enter="orderType === 'counter' && query.trim().length > 0 ? useSimpleId() : null"
@@ -62,7 +70,15 @@
                         class="px-5 py-3 hover:bg-surface-3 cursor-pointer flex items-center justify-between transition-colors border-b border-surface-border/5"
                         @click="selectCustomer(customer)">
                         <div class="flex flex-col">
-                            <span class="font-medium text-surface-text text-sm">{{ customer.name }}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-surface-text text-sm">{{ customer.name }}</span>
+                                <span v-if="customer.employee_id || customer.is_employee" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                                    Colaborador
+                                </span>
+                                <span v-if="customer.supplier_id || customer.is_convenio" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                                    Convênio
+                                </span>
+                            </div>
                             <div class="flex gap-4 mt-0.5">
                                 <span v-if="customer.phone" class="text-xs font-medium text-surface-muted uppercase flex items-center gap-1">
                                     <i class="pi pi-phone text-xs"></i>
@@ -106,7 +122,7 @@
 import { onMounted, onUnmounted, watch, ref } from "vue";
 import { formatPhone, abbreviateName } from "@/Utils/formatters";
 import { useCustomerSearch } from "@/Pages/Customer/Composables/useCustomerSearch";
-import { getInitials } from "@/Utils/formatters.js"
+import { getInitials } from "@/Utils/formatters.js";
 
 const props = defineProps({
     modelValue: { type: [Object, Number, String], default: null },
@@ -133,7 +149,6 @@ onMounted(() => {
 });
 onUnmounted(() => document.removeEventListener("click", handleClickOutside));
 
-// 🚀 O GATILHO NATIVO ANTI-BUGS
 const handleInputEvent = (event) => {
     query.value = event.target.value;
     showDropdown.value = true;
@@ -146,7 +161,7 @@ const selectCustomer = (customer) => {
     query.value = "";
     emit("update:modelValue", customer);
     emit("customer-selected", customer);
-    emit("selected", customer); // 🚀 Alias retrocompatível
+    emit("selected", customer);
 };
 
 const useSimpleId = () => {
@@ -156,7 +171,7 @@ const useSimpleId = () => {
     query.value = "";
     emit("update:modelValue", simpleName);
     emit("customer-selected", simpleName);
-    emit("selected", simpleName); // 🚀 Alias retrocompatível
+    emit("selected", simpleName);
 };
 
 const clearSelection = () => {

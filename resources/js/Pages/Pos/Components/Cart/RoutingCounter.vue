@@ -10,12 +10,13 @@
                 />
             </div>
 
-            <!-- 1. PESQUISAR CLIENTE EXISTENTE -->
-            <DeliveryCustomerSearch
+            <!-- 1. PESQUISAR CLIENTE EXISTENTE (COMPONENTE UNIFICADO) -->
+            <CustomerSearch
                 v-if="!isSimpleMode && activeSubTab === 'search'"
-                :customers="customers"
-                @select="handleCustomerSelected"
-                @go-to-new="handleGoToNew"
+                order-type="counter"
+                :initial-customers="customers"
+                @customer-selected="handleCustomerSelected"
+                @create-new="handleGoToNew"
             />
 
             <!-- 2. CADASTRO RÁPIDO (WhatsApp Opcional no Balcão) -->
@@ -56,14 +57,22 @@
             </div>
 
             <div class="flex items-center gap-3">
-                <div class="w-12 h-12 rounded-2xl bg-primary-500/10 text-primary-500 flex items-center justify-center font-black text-lg border border-primary-500/20 shrink-0">
-                    {{ currentCustomer.name ? currentCustomer.name.charAt(0).toUpperCase() : 'B' }}
+                <div class="w-12 h-12 rounded-2xl bg-primary-500/10 text-primary-500 flex items-center justify-center font-black text-sm border border-primary-500/20 shrink-0">
+                    {{ getInitials(currentCustomer.name) }}
                 </div>
 
                 <div class="flex flex-col min-w-0 flex-1">
-                    <span class="font-black text-sm text-surface-text truncate">
-                        {{ currentCustomer.name || 'Cliente Balcão' }}
-                    </span>
+                    <div class="flex items-center gap-2">
+                        <span class="font-black text-sm text-surface-text truncate">
+                            {{ currentCustomer.name || 'Cliente Balcão' }}
+                        </span>
+                        <span v-if="currentCustomer.employee_id || currentCustomer.is_employee" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                            Colaborador
+                        </span>
+                        <span v-if="currentCustomer.supplier_id || currentCustomer.is_convenio" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                            Convênio
+                        </span>
+                    </div>
                     <span class="text-xs text-surface-muted truncate flex items-center gap-1 mt-0.5">
                         <template v-if="currentCustomer.phone">
                             <i class="pi pi-whatsapp text-emerald-500 text-[10px]"></i>
@@ -109,9 +118,10 @@ import { ref, computed } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 
 import SegmentedControl from "@/Components/UI/SegmentedControl.vue";
-import DeliveryCustomerSearch from "@/Pages/Pos/Components/Cart/Delivery/DeliveryCustomerSearch.vue";
+import CustomerSearch from "@/Pages/Pos/Components/Cart/CustomerSearch.vue";
 import DeliveryCustomerQuick from "@/Pages/Pos/Components/Cart/Delivery/DeliveryCustomerQuick.vue";
 import DeliveryCustomerNew from "@/Pages/Pos/Components/Cart/Delivery/DeliveryCustomerNew.vue";
+import { formatPhone, getInitials } from "@/Utils/formatters";
 
 const props = defineProps({
     modelValue: [Object, String],
@@ -154,19 +164,16 @@ const currentCustomer = computed(() => {
     return null;
 });
 
-const formatPhone = (phone) => {
-    if (!phone) return '';
-    const p = String(phone).replace(/\D/g, '');
-    if (p.length === 11) return p.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-    if (p.length === 10) return p.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-    return phone;
-};
-
 const handleCustomerSelected = (c) => {
     emit('update:modelValue', c);
     emit('update:customer', c);
     emit('customer-selected', c);
-    emit('apply', { customer: c, address: null, identifier: c?.name || '' });
+    const identifier = typeof c === 'string' ? c : (c?.name || '');
+    emit('apply', {
+        customer: typeof c === 'object' ? c : null,
+        address: null,
+        identifier: identifier || 'Balcão'
+    });
 };
 
 const handleGoToNew = (name) => {
@@ -184,6 +191,10 @@ const handleChangeCustomer = () => {
 };
 
 const handleConfirm = () => {
-    emit('apply', { customer: currentCustomer.value, address: null, identifier: currentCustomer.value?.name || 'Balcão' });
+    emit('apply', {
+        customer: currentCustomer.value,
+        address: null,
+        identifier: currentCustomer.value?.name || 'Balcão'
+    });
 };
 </script>

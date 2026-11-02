@@ -103,6 +103,11 @@ class OrderBillController extends Controller
             $validated['customer_name'] ?? null
         );
 
-        return back()->with('success', 'Cliente vinculado ao pedido.');
+        $order->load(['customer', 'customer.employee', 'customer.supplier']);
+
+        return back()->with([
+            'success' => 'Cliente vinculado ao pedido.',
+            'order'   => $order,
+        ]);
     }
 }

@@ -150,6 +150,7 @@
               :coupon-code="appliedCheckoutCoupon"
               @close="isLinkCustomerModalVisible = false"
               @create-new="openNewCustomerModal"
+              @linked="handleCustomerLinked"
           />
       </Transition>
 
@@ -191,7 +192,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch , onBeforeUnmount } from "vue";
+import { ref, computed, onMounted, watch, onBeforeUnmount } from "vue";
 import { router, usePage } from "@inertiajs/vue3";
 import { useToast } from "primevue/usetoast";
 import Button from "primevue/button";
@@ -226,29 +227,38 @@ const toast = useToast();
 const page = usePage();
 
 const isMounted = ref(false);
+const linkedCustomerOverride = ref(null);
+
+watch(() => props.order?.id, () => {
+    linkedCustomerOverride.value = null;
+});
 
 const liveOrder = computed(() => {
     const base = props.order || {};
     const list = page.props.initialOrders || page.props.orders || [];
     const fromList = list.find(o => o.id === base.id);
 
-    if (!fromList) return base;
-
     const items = (base.items && base.items.length > 0)
         ? base.items.map(bItem => {
-            const uItem = fromList.items?.find(fi => fi.id === bItem.id);
+            const uItem = fromList?.items?.find(fi => fi.id === bItem.id);
             return uItem ? { ...bItem, ...uItem } : bItem;
         })
-        : (fromList.items || []);
+        : (fromList?.items || []);
 
-    const payments = Array.isArray(base.payments) ? base.payments : (fromList.payments || []);
+    const payments = Array.isArray(base.payments) ? base.payments : (fromList?.payments || []);
+
+    const resolvedCustomer = linkedCustomerOverride.value || base.customer || fromList?.customer;
+    const resolvedCustomerName = linkedCustomerOverride.value?.name || base.customer_name || fromList?.customer_name;
+    const resolvedCustomerId = linkedCustomerOverride.value?.id || base.customer_id || fromList?.customer_id;
 
     return {
         ...base,
         ...fromList,
-        customer: base.customer || fromList.customer,
-        address: base.address || fromList.address,
-        diningTable: base.diningTable || fromList.diningTable,
+        customer: resolvedCustomer,
+        customer_name: resolvedCustomerName,
+        customer_id: resolvedCustomerId,
+        address: base.address || fromList?.address,
+        diningTable: base.diningTable || fromList?.diningTable,
         items,
         payments
     };
@@ -524,6 +534,19 @@ const openNewCustomerModal = (initialName = "") => {
     newCustomerInitialName.value = typeof initialName === 'string' ? initialName : "";
     isLinkCustomerModalVisible.value = false;
     isNewCustomerModalVisible.value = true;
+};
+
+const handleCustomerLinked = (selectedCustomer) => {
+    if (selectedCustomer) {
+        linkedCustomerOverride.value = typeof selectedCustomer === 'object'
+            ? selectedCustomer
+            : { name: selectedCustomer };
+
+        if (selectedCustomer.cpf) {
+            customerDocument.value = selectedCustomer.cpf;
+        }
+    }
+    isLinkCustomerModalVisible.value = false;
 };
 
 const handleSaveNewCustomer = (customerData) => {

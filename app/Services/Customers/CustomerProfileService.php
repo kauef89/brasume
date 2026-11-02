@@ -22,7 +22,16 @@ class CustomerProfileService
                   ->orWhere('cpf', 'like', "%{$onlyNumbers}%");
         }
 
-        return $query->take(10)->get(['id', 'name', 'phone', 'cpf']);
+        return $query->take(10)->get([
+            'id',
+            'name',
+            'phone',
+            'cpf',
+            'email',
+            'employee_id',
+            'supplier_id',
+            'loyalty_points',
+        ]);
     }
 
     public function addAddress(Customer|int $customerOrId, array $data): Address

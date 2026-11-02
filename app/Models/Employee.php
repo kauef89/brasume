@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Enums\EmploymentType;
 use App\Enums\PaymentCycle;
+use App\Observers\EmployeeObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -11,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
+#[ObservedBy([EmployeeObserver::class])]
 class Employee extends Model
 {
     use HasFactory, SoftDeletes;
@@ -34,7 +37,7 @@ class Employee extends Model
     ];
 
     /**
-     * 🛡️ Retorna o cargo oficial (job_title) ou infere pelo tipo de contratação.
+     * Retorna o cargo oficial (job_title) ou infere pelo tipo de contratação.
      */
     public function getRoleAttribute(): string
     {
@@ -57,7 +60,7 @@ class Employee extends Model
     }
 
     /**
-     * 🥪 Ponte de compatibilidade para leitura do teto de vale-alimentação.
+     * Ponte de compatibilidade para leitura do teto de vale-alimentação.
      */
     public function getMealAllowanceAttribute(): float
     {
@@ -65,7 +68,15 @@ class Employee extends Model
     }
 
     /**
-     * Utilizador de sistema autenticável vinculado a este perfil de colaborador
+     * Cliente correspondente no PDV para compras e consumo interno.
+     */
+    public function customer(): HasOne
+    {
+        return $this->hasOne(Customer::class);
+    }
+
+    /**
+     * Usuário autenticável vinculado ao colaborador.
      */
     public function user(): HasOne
     {

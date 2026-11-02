@@ -19,6 +19,21 @@ class Customer extends Model
 
     protected $guarded = [];
 
+    protected $appends = [
+        'is_employee',
+        'is_convenio',
+    ];
+
+    public function getIsEmployeeAttribute(): bool
+    {
+        return !empty($this->employee_id);
+    }
+
+    public function getIsConvenioAttribute(): bool
+    {
+        return !empty($this->supplier_id);
+    }
+
     protected function cpf(): Attribute
     {
         return Attribute::make(
@@ -53,13 +68,13 @@ class Customer extends Model
         return $this->hasMany(Coupon::class);
     }
 
-    // 🏢 CONVÉNIO: Empresa / Fornecedor conveniado ao qual o cliente pertence
+    // Convênio: Empresa / Fornecedor conveniado ao qual o cliente pertence
     public function supplier()
     {
         return $this->belongsTo(Supplier::class);
     }
 
-    // 👷 RH: Cadastro de funcionário correspondente ao cliente
+    // RH: Cadastro de funcionário correspondente ao cliente
     public function employee()
     {
         return $this->belongsTo(Employee::class);
