@@ -22,4 +22,16 @@ class ScheduleSlot extends Model
     {
         return $this->hasMany(EmployeeSchedule::class, 'schedule_slot_id');
     }
+
+    /**
+     * Identifica se este slot de escala tem atribuição de Operador de Caixa
+     */
+    public function isCashierSlot(): bool
+    {
+        $roles = $this->allowed_roles ?? [];
+
+        return in_array('cashier', $roles, true)
+            || in_array('pos', $roles, true)
+            || str_contains(mb_strtolower((string) $this->name), 'caixa');
+    }
 }

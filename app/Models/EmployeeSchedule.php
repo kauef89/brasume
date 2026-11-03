@@ -35,4 +35,20 @@ class EmployeeSchedule extends Model
     {
         return $this->belongsTo(AccountPayable::class, 'payable_id');
     }
+
+    /**
+     * Determina se este registro de escala confere função de Caixa ao colaborador
+     */
+    public function isCashierSchedule(): bool
+    {
+        if ($this->is_day_off) {
+            return false;
+        }
+
+        if (in_array(mb_strtolower((string) $this->assigned_role), ['caixa', 'cashier', 'pos'], true)) {
+            return true;
+        }
+
+        return $this->slot?->isCashierSlot() ?? false;
+    }
 }

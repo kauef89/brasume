@@ -57,3 +57,7 @@ Schedule::command('tenants:run store:notify-opening')
 Schedule::call(function () {
     (new SystemHeartbeatJob)->handle();
 })->everyMinute();
+
+// Dispara notas e dados de DP para a contabilidade
+Schedule::command('accounting:send-monthly')
+    ->monthlyOn(1, '08:00');

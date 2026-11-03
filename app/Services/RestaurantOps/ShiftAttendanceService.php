@@ -41,17 +41,22 @@ class ShiftAttendanceService
 
     public function getShiftUsersData(): array
     {
-        $hojeInt = now()->dayOfWeek;
-        $mapaDias = [
-            0 => 'dom', 1 => 'seg', 2 => 'ter', 3 => 'qua',
-            4 => 'qui', 5 => 'sex', 6 => 'sab'
-        ];
-        $hojeString = $mapaDias[$hojeInt];
+        $today = now()->toDateString();
+
+        // 1. Carrega as escalas registradas para a data de hoje com o slot associado
+        $todaySchedules = \App\Models\EmployeeSchedule::with('slot')
+            ->whereDate('date', $today)
+            ->get()
+            ->keyBy('employee_id');
 
         $roleMap = [
-            'admin' => 'Administrador', 'manager' => 'Gerente',
-            'pos' => 'Caixa', 'waiter' => 'Garçom',
-            'driver' => 'Motoboy', 'kitchen' => 'Cozinha'
+            'admin'   => 'Administrador',
+            'manager' => 'Gerente',
+            'pos'     => 'Caixa',
+            'cashier' => 'Caixa',
+            'waiter'  => 'Garçom',
+            'driver'  => 'Motoboy',
+            'kitchen' => 'Cozinha',
         ];
 
         return User::with(['employee', 'roles'])
@@ -60,11 +65,12 @@ class ShiftAttendanceService
                 $query->where('is_active', true);
             })
             ->get()
-            ->map(function ($u) use ($hojeString, $roleMap) {
+            ->map(function ($u) use ($todaySchedules, $roleMap) {
                 $emp = $u->employee;
-                $isScheduled = false;
                 $dailyRate = 0;
                 $isFreelancer = false;
+                $isScheduled = false;
+                $suggestedRole = null;
 
                 if ($emp) {
                     $dailyRate = (float) ($emp->base_remuneration ?? 0);
@@ -74,7 +80,17 @@ class ShiftAttendanceService
                         EmploymentType::FREELANCER,
                     ], true);
 
-                    if (!empty($emp->work_days)) {
+                    // 2. Se houver escala cadastrada para hoje
+                    if ($todaySchedules->has($emp->id)) {
+                        $schedule = $todaySchedules->get($emp->id);
+                        if (!$schedule->is_day_off) {
+                            $isScheduled = true;
+                            // Função sugerida: prioriza a função do slot ou o papel atribuído
+                            $suggestedRole = $schedule->assigned_role ?? $schedule->slot?->allowed_roles[0] ?? null;
+                        }
+                    } elseif (!empty($emp->work_days)) {
+                        // Fallback: se não montou a escala semanal, usa os dias fixos da semana
+                        $hojeString = ['dom','seg','ter','qua','qui','sex','sab'][now()->dayOfWeek];
                         $workDays = is_string($emp->work_days) ? json_decode($emp->work_days, true) : $emp->work_days;
                         $isScheduled = is_array($workDays) && in_array($hojeString, $workDays);
                     }
@@ -98,11 +114,13 @@ class ShiftAttendanceService
                     'available_roles' => $availableRoles,
                     'employment_type' => $isFreelancer ? 'freelancer' : 'clt',
                     'is_scheduled'    => $isScheduled,
+                    'assigned_role'   => $suggestedRole ?? ($availableRoles[0]['value'] ?? 'waiter'),
                     'default_rate'    => $dailyRate,
                     'daily_rate'      => $dailyRate,
                 ];
             })
-            ->sortBy('name')
+            // Colaboradores escalados para hoje aparecem no topo da lista
+            ->sortByDesc('is_scheduled')
             ->values()
             ->toArray();
     }
