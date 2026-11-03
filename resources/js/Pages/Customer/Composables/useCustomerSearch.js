@@ -9,45 +9,53 @@ export function useCustomerSearch(initialCustomers) {
     const showDropdown = ref(false);
 
     const executeSearch = debounce(async (searchTerm) => {
-        if (!searchTerm || searchTerm.length < 2) {
+        const term = (searchTerm || "").trim();
+        if (term.length < 2) {
             results.value = [];
+            isLoading.value = false;
             return;
         }
 
         isLoading.value = true;
-        const lowerQuery = searchTerm.toLowerCase();
-        const cleanQuery = searchTerm.replace(/\D/g, "");
 
-        // 1. 🚀 Busca Local Instantânea (Zero Delay) com Barreira de Ativação
-        let localResults = (initialCustomers || []).filter((c) => {
-            // Se o cliente foi explicitamente desativado no Filament, ignora e barra no front-end
-            if (c.is_active === false || c.is_active === 0) return false;
-
-            const matchName = c.name?.toLowerCase().includes(lowerQuery);
-            const matchPhone = c.phone?.replace(/\D/g, "").includes(cleanQuery);
-            return matchName || (cleanQuery && matchPhone);
-        });
-
-        if (localResults.length > 0) {
-            results.value = localResults.slice(0, 5);
-            isLoading.value = false;
-            return;
-        }
-
-        // 2. Busca na API se não achar localmente (Ajustado para capturar apenas registros ativos)
         try {
-            const response = await axios.get(route('api.customers.search'), { params: { q: searchTerm } });
+            // Sempre busca na API oficial para trazer vínculos reais (employee_id, supplier_id)
+            const searchUrl = typeof route === 'function' && route().has('api.customers.search')
+                ? route('api.customers.search')
+                : (typeof route === 'function' && route().has('operations.customers.search')
+                    ? route('operations.customers.search')
+                    : '/api/customers/search');
 
-            // 🚀 Proteção extra: Filtra também os resultados que venham da chamada assíncrona da API
+            const response = await axios.get(searchUrl, { params: { q: term } });
             const activeApiResults = (response.data || []).filter(c => c.is_active !== false && c.is_active !== 0);
 
-            results.value = activeApiResults.slice(0, 5);
+            if (activeApiResults.length > 0) {
+                results.value = activeApiResults.slice(0, 10);
+            } else {
+                // Fallback local se a API não encontrar nenhum registro
+                const lowerQuery = term.toLowerCase();
+                const cleanQuery = term.replace(/\D/g, "");
+                results.value = (initialCustomers || []).filter((c) => {
+                    if (c.is_active === false || c.is_active === 0) return false;
+                    const matchName = c.name?.toLowerCase().includes(lowerQuery);
+                    const matchPhone = c.phone?.replace(/\D/g, "").includes(cleanQuery);
+                    return matchName || (cleanQuery && matchPhone);
+                }).slice(0, 5);
+            }
         } catch (error) {
-            results.value = [];
+            // Em caso de falha de conexão, recorre ao cache local
+            const lowerQuery = term.toLowerCase();
+            const cleanQuery = term.replace(/\D/g, "");
+            results.value = (initialCustomers || []).filter((c) => {
+                if (c.is_active === false || c.is_active === 0) return false;
+                const matchName = c.name?.toLowerCase().includes(lowerQuery);
+                const matchPhone = c.phone?.replace(/\D/g, "").includes(cleanQuery);
+                return matchName || (cleanQuery && matchPhone);
+            }).slice(0, 5);
         } finally {
             isLoading.value = false;
         }
-    }, 300);
+    }, 250);
 
     return { query, results, isLoading, showDropdown, executeSearch };
 }

@@ -6,6 +6,8 @@ use App\Filament\Traits\HasGlobalSearch;
 use App\Filament\Resources\Employees\Pages;
 use App\Filament\Resources\Employees\Schemas\EmployeeForm;
 use App\Filament\Resources\Employees\Tables\EmployeeTable;
+use App\Filament\Resources\Employees\RelationManagers\LedgersRelationManager;
+use App\Filament\Resources\Employees\RelationManagers\PayslipsRelationManager;
 use App\Models\Employee;
 use App\Livewire\EmployeeConsumptions;
 use Filament\Schemas\Schema;
@@ -107,8 +109,8 @@ class EmployeeResource extends Resource
     public static function getRelations(): array
     {
         return [
-            // A nossa "Mesa de Operações Financeiras" do colaborador fica aqui embaixo
-            \App\Filament\Resources\Employees\RelationManagers\LedgersRelationManager::class,
+            LedgersRelationManager::class,
+            PayslipsRelationManager::class,
         ];
     }
 

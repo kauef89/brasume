@@ -15,10 +15,17 @@
                             <span class="font-medium text-primary-700 dark:text-primary-300 leading-tight">
                                 {{ abbreviateName(typeof selectedCustomer === 'string' ? selectedCustomer : selectedCustomer.name) }}
                             </span>
-                            <span v-if="selectedCustomer.employee_id || selectedCustomer.is_employee" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                                Colaborador
+                            <span
+                                v-if="selectedCustomer.employee_id || selectedCustomer.is_employee"
+                                class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                            >
+                                Equipe
                             </span>
-                            <span v-if="selectedCustomer.supplier_id || selectedCustomer.is_convenio" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                            <span
+                                v-if="selectedCustomer.supplier_id || selectedCustomer.is_convenio"
+                                class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 cursor-help"
+                                :title="selectedCustomer.supplier?.name ? `Empresa: ${selectedCustomer.supplier.name}` : 'Convênio PJ'"
+                            >
                                 Convênio
                             </span>
                         </div>
@@ -72,10 +79,17 @@
                         <div class="flex flex-col">
                             <div class="flex items-center gap-2">
                                 <span class="font-medium text-surface-text text-sm">{{ customer.name }}</span>
-                                <span v-if="customer.employee_id || customer.is_employee" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                                    Colaborador
+                                <span
+                                    v-if="customer.employee_id || customer.is_employee"
+                                    class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                                >
+                                    Equipe
                                 </span>
-                                <span v-if="customer.supplier_id || customer.is_convenio" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                                <span
+                                    v-if="customer.supplier_id || customer.is_convenio"
+                                    class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 cursor-help"
+                                    :title="customer.supplier?.name ? `Empresa: ${customer.supplier.name}` : 'Convênio PJ'"
+                                >
                                     Convênio
                                 </span>
                             </div>
@@ -120,9 +134,8 @@
 
 <script setup>
 import { onMounted, onUnmounted, watch, ref } from "vue";
-import { formatPhone, abbreviateName } from "@/Utils/formatters";
+import { formatPhone, abbreviateName, getInitials } from "@/Utils/formatters";
 import { useCustomerSearch } from "@/Pages/Customer/Composables/useCustomerSearch";
-import { getInitials } from "@/Utils/formatters.js";
 
 const props = defineProps({
     modelValue: { type: [Object, Number, String], default: null },

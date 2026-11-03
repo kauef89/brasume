@@ -81,6 +81,7 @@
 
 <script setup>
 import { computed } from "vue";
+import { usePage } from "@inertiajs/vue3";
 import PaymentStagingArea from "@/Components/UI/PaymentStagingArea.vue";
 import { formatCurrency } from "@/Utils/formatters";
 import { usePaymentFormatting } from "@/Pages/Shared/Composables/usePaymentFormatting";
@@ -113,6 +114,7 @@ const emit = defineEmits([
     "view-pix"
 ]);
 
+const page = usePage();
 const { getPaymentIcon } = usePaymentFormatting();
 
 const isTableServiceAvailable = computed(() => props.order?.type === 'table' && Boolean(props.companySettings?.has_service_tax));
@@ -125,13 +127,24 @@ const goToCashier = () => {
 
 const isLoyaltyActive = computed(() => props.companySettings?.loyalty_is_active && props.companySettings?.loyalty_reward_type === 'cashback');
 
-const activeCustomer = computed(() => props.order?.customer || null);
+// Resolução com fallback caso order.customer venha descarregado
+const activeCustomer = computed(() => {
+    if (props.order?.customer && typeof props.order.customer === 'object') {
+        return props.order.customer;
+    }
+    const customerId = props.order?.customer_id;
+    if (customerId) {
+        const list = page.props.initialCustomers || page.props.customers || [];
+        const found = list.find(c => c.id === customerId);
+        if (found) return found;
+    }
+    return null;
+});
 
-// 🔍 IDENTIFICAÇÃO CONDICIONAL DE CLIENTE
 const isCustomerLinkedToSupplier = computed(() => {
     const c = activeCustomer.value;
     if (!c) return false;
-    return Boolean(c.supplier_id || c.supplier);
+    return Boolean(c.supplier_id || c.supplier || c.is_convenio);
 });
 
 const isCustomerAnEmployee = computed(() => {
@@ -150,21 +163,20 @@ const customerBalanceReais = computed(() => {
 const mappedMethods = computed(() => {
     const rawList = props.paymentMethods || [];
 
-    // 🛡️ REGRAS DE VISIBILIDADE DAS FORMAS DE PAGAMENTO
     const eligibleMethods = rawList.filter(m => {
         const engine = typeof m.engine_type === 'object' ? m.engine_type?.value : m.engine_type;
 
-        // 1. Vale-alimentação nunca aparece no checkout normal (restrito ao lanche da equipa)
+        // 1. Vale-alimentação nunca aparece no checkout normal
         if (engine === 'allowance') {
             return false;
         }
 
-        // 2. Convénio: exige cliente vinculado a um fornecedor / empresa conveniada
+        // 2. Convênio / Faturado: exige cliente com vínculo de fornecedor
         if (engine === 'customer_credit') {
             return isCustomerLinkedToSupplier.value;
         }
 
-        // 3. Consumo Interno: exige que o cliente seja um colaborador
+        // 3. Consumo Interno: exige cliente colaborador
         if (engine === 'internal') {
             return isCustomerAnEmployee.value;
         }

@@ -66,10 +66,17 @@
                         <span class="font-black text-sm text-surface-text truncate">
                             {{ currentCustomer.name || 'Cliente Balcão' }}
                         </span>
-                        <span v-if="currentCustomer.employee_id || currentCustomer.is_employee" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                            Colaborador
+                        <span
+                            v-if="currentCustomer.employee_id || currentCustomer.is_employee"
+                            class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                        >
+                            Equipe
                         </span>
-                        <span v-if="currentCustomer.supplier_id || currentCustomer.is_convenio" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                        <span
+                            v-if="currentCustomer.supplier_id || currentCustomer.is_convenio"
+                            class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 cursor-help"
+                            :title="currentCustomer.supplier?.name ? `Empresa: ${currentCustomer.supplier.name}` : 'Convênio PJ'"
+                        >
                             Convênio
                         </span>
                     </div>

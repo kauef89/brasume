@@ -22,55 +22,56 @@ class CustomerProfileService
                   ->orWhere('cpf', 'like', "%{$onlyNumbers}%");
         }
 
-        return $query->take(10)->get([
-            'id',
-            'name',
-            'phone',
-            'cpf',
-            'email',
-            'employee_id',
-            'supplier_id',
-            'loyalty_points',
-        ]);
+        return $query->with('supplier:id,name')
+            ->take(10)
+            ->get([
+                'id',
+                'name',
+                'phone',
+                'cpf',
+                'email',
+                'employee_id',
+                'supplier_id',
+                'loyalty_points',
+                'is_active',
+            ]);
     }
 
     public function addAddress(Customer|int $customerOrId, array $data): Address
-        {
-            $customerId = $customerOrId instanceof Customer ? $customerOrId->id : $customerOrId;
+    {
+        $customerId = $customerOrId instanceof Customer ? $customerOrId->id : $customerOrId;
 
-            // 🚀 1. TRATAMENTO DO BAIRRO (Prioriza o ID para não perder a taxa de entrega!)
-            if (!empty($data['neighborhood_id'])) {
-                $neighborhood = Neighborhood::findOrFail($data['neighborhood_id']);
-            } else {
-                $neighborhood = Neighborhood::firstOrCreate(
-                    ['name' => trim($data['neighborhood'])],
-                    ['delivery_fee' => 0.00]
-                );
-            }
-
-            // 🚀 2. TRATAMENTO DA RUA (Prioriza o ID)
-            if (!empty($data['street_id'])) {
-                $street = Street::findOrFail($data['street_id']);
-            } else {
-                $street = Street::firstOrCreate(
-                    ['name' => trim($data['street'])],
-                    ['zip_code' => $data['zipcode'] ?? null]
-                );
-            }
-
-            $number = isset($data['noNumber']) && $data['noNumber'] ? 'S/N' : ($data['number'] ?? 'S/N');
-
-            return Address::create([
-                'customer_id' => $customerId,
-                'nickname' => $data['nickname'] ?? 'Casa',
-                'street_id' => $street->id,
-                'neighborhood_id' => $neighborhood->id,
-                'number' => $number,
-                'no_number' => $data['noNumber'] ?? false,
-                'complement' => $data['complement'] ?? null,
-                'is_active' => true,
-            ]);
+        if (!empty($data['neighborhood_id'])) {
+            $neighborhood = Neighborhood::findOrFail($data['neighborhood_id']);
+        } else {
+            $neighborhood = Neighborhood::firstOrCreate(
+                ['name' => trim($data['neighborhood'])],
+                ['delivery_fee' => 0.00]
+            );
         }
+
+        if (!empty($data['street_id'])) {
+            $street = Street::findOrFail($data['street_id']);
+        } else {
+            $street = Street::firstOrCreate(
+                ['name' => trim($data['street'])],
+                ['zip_code' => $data['zipcode'] ?? null]
+            );
+        }
+
+        $number = isset($data['noNumber']) && $data['noNumber'] ? 'S/N' : ($data['number'] ?? 'S/N');
+
+        return Address::create([
+            'customer_id'     => $customerId,
+            'nickname'        => $data['nickname'] ?? 'Casa',
+            'street_id'       => $street->id,
+            'neighborhood_id' => $neighborhood->id,
+            'number'          => $number,
+            'no_number'       => $data['noNumber'] ?? false,
+            'complement'      => $data['complement'] ?? null,
+            'is_active'       => true,
+        ]);
+    }
 
     public function updateAddress(Customer $customer, int $addressId, array $data): void
     {
