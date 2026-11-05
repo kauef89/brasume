@@ -2,6 +2,8 @@
 
 namespace App\Services\RestaurantOps;
 
+use App\Enums\EmployeeRole;
+
 use App\Models\Order;
 use App\Models\User;
 use App\Models\CashShift;
@@ -215,7 +217,7 @@ class OperationsDashboardService
                 // 🛵 DISPARO PUSH: Notifica todos os motoboys que há entrega pronta no balcão
                 if ($order->type === 'delivery') {
                     try {
-                        $drivers = User::whereHas('roles', fn($q) => $q->whereIn('name', ['driver', 'motoboy', 'entregador']))->get();
+                        $drivers = User::whereHas('roles', fn($q) => $q->whereIn('name', [EmployeeRole::DRIVER->value]))->get();
                         if ($drivers->isNotEmpty()) {
                             Notification::send($drivers, new OrderReadyForDeliveryNotification($order));
                         }
@@ -260,7 +262,7 @@ class OperationsDashboardService
     public function getManagerShiftSummary(?User $user): ?array
     {
         // Garante que só quem é da diretoria/gerência veja os dados
-        if (!$user || !$user->hasAnyRole(['admin', 'gerente', 'manager', 'owner'])) return null;
+        if (!$user || !$user->hasAnyRole([EmployeeRole::ADMIN->value, EmployeeRole::MANAGER->value])) return null;
 
         // Pega o turno aberto... ou, se estiver fechado, pega o último turno!
         $shift = CashShift::where('status', 'open')->latest('opened_at')->first()

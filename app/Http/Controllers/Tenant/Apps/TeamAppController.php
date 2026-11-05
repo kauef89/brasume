@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Tenant\Apps;
 
+use App\Enums\EmployeeRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Team\TeamOrderSubmitRequest;
 use App\Models\CashShift;
@@ -32,7 +33,7 @@ class TeamAppController extends Controller
         $isDriver = false;
         if ($user) {
             $userRoles = method_exists($user, 'getRoleNames') ? $user->getRoleNames()->toArray() : [$user->role ?? ''];
-            $isDriver = in_array('driver', $userRoles, true) || in_array('motoboy', $userRoles, true);
+            $isDriver = in_array(EmployeeRole::DRIVER->value, $userRoles, true);
         }
 
         $defaultTabFallback = $isDriver ? 'driver' : 'menu';
@@ -44,15 +45,18 @@ class TeamAppController extends Controller
         $canManageDevices = false;
         if ($user) {
             $userRoles = method_exists($user, 'getRoleNames') ? $user->getRoleNames()->toArray() : [$user->role ?? ''];
-            $isManager = in_array('admin', $userRoles, true) || in_array('manager', $userRoles, true);
+
+            // Gestores (Admin ou Gerente)
+            $isManager = in_array(EmployeeRole::ADMIN->value, $userRoles, true)
+                || in_array(EmployeeRole::MANAGER->value, $userRoles, true);
 
             // 1. Operador com presença registrada como caixa no turno em andamento
             $isShiftCashier = false;
             if ($activeShift) {
                 $attendance = $activeShift->attendees()->where('users.id', $user->id)->first();
                 if ($attendance) {
-                    $role = mb_strtolower((string) ($attendance->pivot->assigned_role ?? ''));
-                    $isShiftCashier = in_array($role, ['caixa', 'cashier', 'pos'], true);
+                    $assignedRole = (string) ($attendance->pivot->assigned_role ?? '');
+                    $isShiftCashier = $assignedRole === EmployeeRole::CASHIER->value;
                 }
             }
 
@@ -65,7 +69,11 @@ class TeamAppController extends Controller
                     ->where('is_day_off', false)
                     ->first();
 
-                $isScheduledCashier = $todaySchedule?->isCashierSchedule() ?? false;
+                if ($todaySchedule) {
+                    $slotRoles = (array) ($todaySchedule->slot?->allowed_roles ?? []);
+                    $isScheduledCashier = $todaySchedule->assigned_role === EmployeeRole::CASHIER->value
+                        || in_array(EmployeeRole::CASHIER->value, $slotRoles, true);
+                }
             }
 
             $canManageDevices = $isManager || $isShiftCashier || $isScheduledCashier;

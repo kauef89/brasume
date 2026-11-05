@@ -12,10 +12,10 @@
                 </div>
                 <div>
                     <h2 class="text-xl font-black text-surface-text leading-tight">
-                        {{ isOpenMode ? 'Abertura de Caixa' : 'Fechamento de Caixa' }}
+                        {{ isOpenMode ? 'Abertura de Caixa' : 'Fecho de Caixa' }}
                     </h2>
                     <p class="text-xs font-medium text-surface-muted">
-                        {{ isOpenMode ? 'Informe as cédulas e moedas do fundo de troco.' : 'Realize a contagem do dinheiro físico presente na gaveta.' }}
+                        {{ isOpenMode ? 'Informe as cédulas e moedas do fundo de troco inicial.' : 'Realize a contagem do dinheiro físico e a conferência das fitas dos terminais.' }}
                     </p>
                 </div>
                 <button
@@ -30,7 +30,7 @@
                 </button>
             </div>
 
-            <!-- AVISO DE CONTAGEM CEGA (APENAS FECHAMENTO EM MODO FUNCIONÁRIO) -->
+            <!-- AVISO DE CONTAGEM CEGA (APENAS FECHO EM MODO COLABORADOR) -->
             <div
                 v-if="!isOpenMode && companySettings.cash_management_mode === 'employee'"
                 class="bg-purple-500/10 border border-purple-500/20 p-4 rounded-2xl flex items-start gap-3.5"
@@ -43,144 +43,143 @@
                         Contagem Cega Ativada
                     </p>
                     <p class="text-[11px] font-medium text-purple-800/80 dark:text-purple-300/80 leading-relaxed">
-                        O saldo esperado pelo sistema está oculto. Diferenças acima da tolerância bloquearão o encerramento e exigirão autorização gerencial.
+                        O saldo esperado pelo sistema está oculto. Diferenças injustificadas acima da tolerância exigirão autorização gerencial.
                     </p>
                 </div>
             </div>
 
-            <!-- 1. MODO TOTALIZADOR SIMPLES -->
-            <div v-if="companySettings.cash_opening_mode === 'total'" class="flex flex-col items-center py-8">
-                <label class="text-xs font-black text-surface-muted uppercase tracking-widest mb-3 text-center">
-                    {{ isOpenMode ? 'Fundo de Troco Inicial' : 'Valor Total em Gaveta' }}
-                </label>
-                <div class="relative w-full max-w-sm">
-                    <span class="absolute left-5 top-1/2 -translate-y-1/2 text-xl font-black text-surface-muted z-10">R$</span>
-                    <InputNumber
-                        v-model="simpleTotal"
-                        autocomplete="off"
-                        mode="decimal"
-                        :minFractionDigits="2"
-                        class="w-full text-3xl font-black [&>input]:text-center [&>input]:pl-12 [&>input]:h-16 rounded-2xl bg-surface-1 border-surface-border focus:border-primary-500 transition-colors shadow-inner"
+            <!-- GRADE PRINCIPAL: LADO A LADO NO FECHO (DINHEIRO + TERMINAIS) -->
+            <div :class="[!isOpenMode ? 'grid grid-cols-1 xl:grid-cols-12 gap-6 items-start' : 'flex flex-col gap-6']">
+
+                <!-- COLUNA 1: GAVETA FÍSICA (CÉDULAS & MOEDAS) -->
+                <div :class="[!isOpenMode ? 'xl:col-span-7 flex flex-col gap-6' : 'flex flex-col gap-6']">
+
+                    <!-- MODO TOTALIZADOR SIMPLES -->
+                    <div v-if="companySettings.cash_opening_mode === 'total'" class="flex flex-col items-center py-6 bg-surface-1 p-6 rounded-3xl border border-surface-border/50 shadow-xs">
+                        <label class="text-xs font-black text-surface-muted uppercase tracking-widest mb-3 text-center">
+                            {{ isOpenMode ? 'Fundo de Troco Inicial' : 'Valor Total em Dinheiro na Gaveta' }}
+                        </label>
+                        <div class="relative w-full max-w-sm">
+                            <span class="absolute left-5 top-1/2 -translate-y-1/2 text-xl font-black text-surface-muted z-10">R$</span>
+                            <InputNumber
+                                v-model="simpleTotal"
+                                autocomplete="off"
+                                mode="decimal"
+                                :minFractionDigits="2"
+                                class="w-full text-3xl font-black [&>input]:text-center [&>input]:pl-12 [&>input]:h-16 rounded-2xl bg-surface-2 border-surface-border focus:border-primary-500 transition-colors shadow-inner"
+                            />
+                        </div>
+
+                        <!-- RETENÇÃO MANUAL DE MOEDAS -->
+                        <div
+                            v-if="!isOpenMode && companySettings.carry_over_mode === 'coins_only'"
+                            class="mt-6 w-full max-w-sm p-4 bg-primary-500/5 rounded-2xl border border-primary-500/20 text-center"
+                        >
+                            <label class="block text-[10px] font-black text-primary-smart uppercase tracking-wider mb-2 text-center">
+                                Quanto deste valor ficará retido para o próximo turno?
+                            </label>
+                            <div class="relative max-w-xs mx-auto">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-primary-500/50 z-10">R$</span>
+                                <InputNumber
+                                    v-model="retainedCoins"
+                                    autocomplete="off"
+                                    mode="decimal"
+                                    :minFractionDigits="2"
+                                    :max="simpleTotal"
+                                    class="w-full text-lg font-black [&>input]:text-center [&>input]:pl-8 [&>input]:h-11 rounded-xl bg-surface-2 border-transparent focus:border-primary-500"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MODO CONTAGEM DETALHADA COM STEPPERS -->
+                    <template v-else>
+                        <!-- Seção de Cédulas -->
+                        <div class="flex flex-col gap-3">
+                            <span class="text-xs font-black text-surface-muted uppercase tracking-widest">Cédulas</span>
+                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                                <div
+                                    v-for="(val, key) in moneyValues.bills"
+                                    :key="key"
+                                    class="flex flex-col items-center bg-surface-1 p-2 rounded-2xl border border-surface-border/40 shadow-xs"
+                                >
+                                    <span class="text-xs font-black text-surface-muted mb-1">{{ $formatCurrency(val) }}</span>
+                                    <button
+                                        type="button"
+                                        tabindex="-1"
+                                        @click="stepIncrement(key)"
+                                        class="w-full h-7 rounded-xl bg-surface-2 hover:bg-surface-3 active:scale-95 text-surface-muted hover:text-surface-text flex items-center justify-center transition-all cursor-pointer mb-1 border-none"
+                                    >
+                                        <i class="pi pi-plus text-[10px] font-bold"></i>
+                                    </button>
+                                    <InputNumber
+                                        :ref="el => setInputRef(el, getIndex(key))"
+                                        v-model="counts[key]"
+                                        :min="0"
+                                        autocomplete="off"
+                                        @keydown="handleKeydown($event, getIndex(key))"
+                                        class="w-full [&>input]:w-full [&>input]:h-9 [&>input]:text-center [&>input]:px-1 [&>input]:text-xs [&>input]:font-black bg-surface-2 rounded-xl border-transparent focus:border-primary-500"
+                                    />
+                                    <button
+                                        type="button"
+                                        tabindex="-1"
+                                        @click="stepDecrement(key)"
+                                        :disabled="!counts[key] || counts[key] <= 0"
+                                        class="w-full h-7 rounded-xl bg-surface-2 hover:bg-surface-3 active:scale-95 text-surface-muted hover:text-surface-text flex items-center justify-center transition-all cursor-pointer mt-1 border-none disabled:opacity-20 disabled:cursor-not-allowed"
+                                    >
+                                        <i class="pi pi-minus text-[10px] font-bold"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Seção de Moedas -->
+                        <div class="flex flex-col gap-3">
+                            <span class="text-xs font-black text-surface-muted uppercase tracking-widest">Moedas</span>
+                            <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                                <div
+                                    v-for="(val, key) in moneyValues.coins"
+                                    :key="key"
+                                    class="flex flex-col items-center bg-surface-1 p-2 rounded-2xl border border-surface-border/40 shadow-xs"
+                                >
+                                    <span class="text-xs font-black text-surface-muted mb-1">{{ $formatCurrency(val) }}</span>
+                                    <button
+                                        type="button"
+                                        tabindex="-1"
+                                        @click="stepIncrement(key)"
+                                        class="w-full h-7 rounded-xl bg-surface-2 hover:bg-surface-3 active:scale-95 text-surface-muted hover:text-surface-text flex items-center justify-center transition-all cursor-pointer mb-1 border-none"
+                                    >
+                                        <i class="pi pi-plus text-[10px] font-bold"></i>
+                                    </button>
+                                    <InputNumber
+                                        :ref="el => setInputRef(el, getIndex(key))"
+                                        v-model="counts[key]"
+                                        :min="0"
+                                        autocomplete="off"
+                                        @keydown="handleKeydown($event, getIndex(key))"
+                                        class="w-full [&>input]:w-full [&>input]:h-9 [&>input]:text-center [&>input]:px-1 [&>input]:text-xs [&>input]:font-black bg-surface-2 rounded-xl border-transparent focus:border-primary-500"
+                                    />
+                                    <button
+                                        type="button"
+                                        tabindex="-1"
+                                        @click="stepDecrement(key)"
+                                        :disabled="!counts[key] || counts[key] <= 0"
+                                        class="w-full h-7 rounded-xl bg-surface-2 hover:bg-surface-3 active:scale-95 text-surface-muted hover:text-surface-text flex items-center justify-center transition-all cursor-pointer mt-1 border-none disabled:opacity-20 disabled:cursor-not-allowed"
+                                    >
+                                        <i class="pi pi-minus text-[10px] font-bold"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- COLUNA 2: CONFERÊNCIA DE TERMINAIS APOS (APENAS NO FECHO) -->
+                <div v-if="!isOpenMode" class="xl:col-span-5 flex flex-col gap-4">
+                    <ShiftTerminalSettlement
+                        :devices="devices"
+                        v-model="terminalTotals"
                     />
-                </div>
-
-                <!-- RETENÇÃO MANUAL DE MOEDAS (APENAS FECHAMENTO) -->
-                <div
-                    v-if="!isOpenMode && companySettings.carry_over_mode === 'coins_only'"
-                    class="mt-6 w-full max-w-sm p-4 bg-primary-500/5 rounded-2xl border border-primary-500/20 text-center"
-                >
-                    <label class="block text-[10px] font-black text-primary-smart uppercase tracking-wider mb-2 text-center">
-                        Quanto desse valor ficará retido para o próximo turno?
-                    </label>
-                    <div class="relative max-w-xs mx-auto">
-                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-primary-500/50 z-10">R$</span>
-                        <InputNumber
-                            v-model="retainedCoins"
-                            autocomplete="off"
-                            mode="decimal"
-                            :minFractionDigits="2"
-                            :max="simpleTotal"
-                            class="w-full text-lg font-black [&>input]:text-center [&>input]:pl-8 [&>input]:h-11 rounded-xl bg-surface-1 border-transparent focus:border-primary-500"
-                        />
-                    </div>
-                </div>
-            </div>
-
-            <!-- 2. MODO CONTAGEM DETALHADA COM STEPPERS -->
-            <div v-else class="flex flex-col gap-6">
-
-                <!-- Seção de Cédulas -->
-                <div class="flex flex-col gap-3">
-                    <span class="text-xs font-black text-surface-muted uppercase tracking-widest">
-                        Cédulas
-                    </span>
-
-                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
-                        <div
-                            v-for="(val, key) in moneyValues.bills"
-                            :key="key"
-                            class="flex flex-col items-center bg-surface-1 p-2 rounded-2xl border border-surface-border/40 shadow-xs"
-                        >
-                            <span class="text-xs font-black text-surface-muted mb-1.5">{{ $formatCurrency(val ) }}</span>
-
-                            <button
-                                type="button"
-                                tabindex="-1"
-                                @click="stepIncrement(key)"
-                                class="w-full h-7 rounded-xl bg-surface-2 hover:bg-surface-3 active:scale-95 text-surface-muted hover:text-surface-text flex items-center justify-center transition-all cursor-pointer mb-1 border-none"
-                                title="Adicionar 1 cédula"
-                            >
-                                <i class="pi pi-plus text-[10px] font-bold"></i>
-                            </button>
-
-                            <InputNumber
-                                :ref="el => setInputRef(el, getIndex(key))"
-                                v-model="counts[key]"
-                                :min="0"
-                                autocomplete="off"
-                                @keydown="handleKeydown($event, getIndex(key))"
-                                class="w-full [&>input]:w-full [&>input]:h-9 [&>input]:text-center [&>input]:px-1 [&>input]:text-xs [&>input]:font-black bg-surface-2 rounded-xl border-transparent focus:border-primary-500"
-                            />
-
-                            <button
-                                type="button"
-                                tabindex="-1"
-                                @click="stepDecrement(key)"
-                                :disabled="!counts[key] || counts[key] <= 0"
-                                class="w-full h-7 rounded-xl bg-surface-2 hover:bg-surface-3 active:scale-95 text-surface-muted hover:text-surface-text flex items-center justify-center transition-all cursor-pointer mt-1 border-none disabled:opacity-20 disabled:cursor-not-allowed"
-                                title="Remover 1 cédula"
-                            >
-                                <i class="pi pi-minus text-[10px] font-bold"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Seção de Moedas -->
-                <div class="flex flex-col gap-3">
-                    <span class="text-xs font-black text-surface-muted uppercase tracking-widest">
-                        Moedas
-                    </span>
-
-                    <div class="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
-                        <div
-                            v-for="(val, key) in moneyValues.coins"
-                            :key="key"
-                            class="flex flex-col items-center bg-surface-1 p-2 rounded-2xl border border-surface-border/40 shadow-xs"
-                        >
-                            <span class="text-xs font-black text-surface-muted mb-1.5">{{ $formatCurrency(val) }}</span>
-
-                            <button
-                                type="button"
-                                tabindex="-1"
-                                @click="stepIncrement(key)"
-                                class="w-full h-7 rounded-xl bg-surface-2 hover:bg-surface-3 active:scale-95 text-surface-muted hover:text-surface-text flex items-center justify-center transition-all cursor-pointer mb-1 border-none"
-                                title="Adicionar 1 moeda"
-                            >
-                                <i class="pi pi-plus text-[10px] font-bold"></i>
-                            </button>
-
-                            <InputNumber
-                                :ref="el => setInputRef(el, getIndex(key))"
-                                v-model="counts[key]"
-                                :min="0"
-                                autocomplete="off"
-                                @keydown="handleKeydown($event, getIndex(key))"
-                                class="w-full [&>input]:w-full [&>input]:h-9 [&>input]:text-center [&>input]:px-1 [&>input]:text-xs [&>input]:font-black bg-surface-2 rounded-xl border-transparent focus:border-primary-500"
-                            />
-
-                            <button
-                                type="button"
-                                tabindex="-1"
-                                @click="stepDecrement(key)"
-                                :disabled="!counts[key] || counts[key] <= 0"
-                                class="w-full h-7 rounded-xl bg-surface-2 hover:bg-surface-3 active:scale-95 text-surface-muted hover:text-surface-text flex items-center justify-center transition-all cursor-pointer mt-1 border-none disabled:opacity-20 disabled:cursor-not-allowed"
-                                title="Remover 1 moeda"
-                            >
-                                <i class="pi pi-minus text-[10px] font-bold"></i>
-                            </button>
-                        </div>
-                    </div>
                 </div>
 
             </div>
@@ -191,6 +190,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import InputNumber from 'primevue/inputnumber';
+import ShiftTerminalSettlement from './ShiftTerminalSettlement.vue';
 
 const props = defineProps({
     mode: {
@@ -205,13 +205,16 @@ const props = defineProps({
     expectedTotal: {
         type: Number,
         default: 0
+    },
+    devices: {
+        type: Array,
+        default: () => []
     }
 });
 
 const emit = defineEmits(['update:data', 'submit']);
 
 const isOpenMode = computed(() => props.mode === 'open');
-
 const storageKey = computed(() => `pos_shift_cash_${props.mode}`);
 
 const loadPersistedData = () => {
@@ -228,6 +231,7 @@ const initialSaved = loadPersistedData();
 
 const simpleTotal = ref(initialSaved?.simpleTotal ?? 0);
 const retainedCoins = ref(initialSaved?.retainedCoins ?? 0);
+const terminalTotals = ref({});
 const counts = ref({
     b200: null, b100: null, b50: null, b20: null, b10: null, b5: null, b2: null,
     c1: null, c50: null, c25: null, c10: null, c5: null,
@@ -245,6 +249,7 @@ watch(() => props.mode, () => {
     const saved = loadPersistedData();
     simpleTotal.value = saved?.simpleTotal ?? 0;
     retainedCoins.value = saved?.retainedCoins ?? 0;
+    terminalTotals.value = {};
     counts.value = {
         b200: null, b100: null, b50: null, b20: null, b10: null, b5: null, b2: null,
         c1: null, c50: null, c25: null, c10: null, c5: null,
@@ -252,10 +257,10 @@ watch(() => props.mode, () => {
     };
 });
 
-// Reseta o form: chamável do componente pai
 const resetForm = () => {
     simpleTotal.value = 0;
     retainedCoins.value = 0;
+    terminalTotals.value = {};
     Object.keys(counts.value).forEach(key => {
         counts.value[key] = null;
     });
@@ -264,16 +269,12 @@ const resetForm = () => {
     } catch (e) {}
 };
 
-defineExpose({
-    resetForm
-});
+defineExpose({ resetForm });
 
 const moneyValues = {
     bills: { b200: 200, b100: 100, b50: 50, b20: 20, b10: 10, b5: 5, b2: 2 },
     coins: { c1: 1, c50: 0.5, c25: 0.25, c10: 0.1, c5: 0.05 }
 };
-
-const formatMoney = (val) => Number(val || 0).toFixed(2).replace('.', ',');
 
 const stepIncrement = (key) => {
     counts.value[key] = (Number(counts.value[key]) || 0) + 1;
@@ -286,12 +287,8 @@ const stepDecrement = (key) => {
 
 const allKeys = [...Object.keys(moneyValues.bills), ...Object.keys(moneyValues.coins)];
 const inputRefs = ref([]);
-
 const getIndex = (key) => allKeys.indexOf(key);
-
-const setInputRef = (el, index) => {
-    if (el) inputRefs.value[index] = el;
-};
+const setInputRef = (el, index) => { if (el) inputRefs.value[index] = el; };
 
 const focusInput = (index) => {
     const component = inputRefs.value[index];
@@ -337,8 +334,7 @@ const isConfirmDisabled = computed(() => {
     return false;
 });
 
-// Sincroniza em tempo real com o painel lateral da direita
-watch([counts, simpleTotal, retainedCoins, calculatedTotal, coinsTotal, isConfirmDisabled], () => {
+watch([counts, simpleTotal, retainedCoins, calculatedTotal, coinsTotal, terminalTotals, isConfirmDisabled], () => {
     try {
         localStorage.setItem(storageKey.value, JSON.stringify({
             counts: counts.value,
@@ -346,6 +342,7 @@ watch([counts, simpleTotal, retainedCoins, calculatedTotal, coinsTotal, isConfir
             retainedCoins: retainedCoins.value
         }));
     } catch (e) {}
+
     const isDetailed = props.companySettings.cash_opening_mode !== 'total';
     const finalAmount = isDetailed ? calculatedTotal.value : Number(simpleTotal.value || 0);
 
@@ -363,6 +360,7 @@ watch([counts, simpleTotal, retainedCoins, calculatedTotal, coinsTotal, isConfir
         retainedAmount: retainedAmount,
         coinsTotal: coinsTotal.value,
         details: isDetailed ? counts.value : null,
+        terminalTotals: terminalTotals.value,
         isValid: !isConfirmDisabled.value
     });
 }, { deep: true, immediate: true });

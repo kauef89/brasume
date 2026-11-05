@@ -2,6 +2,8 @@
 
 namespace App\Services\Orders;
 
+use App\Enums\EmployeeRole;
+
 use App\Models\Order;
 use App\Models\User;
 use App\Models\Address;
@@ -194,7 +196,7 @@ class OrderLogisticsService
 
         $couriersQuery = User::with('employee:id,phone')
             ->whereHas('roles', function ($q) {
-                $q->whereIn('name', ['driver', 'motoboy', 'entregador']);
+                $q->whereIn('name', [EmployeeRole::DRIVER->value]);
             })
             ->where('is_active', true);
 

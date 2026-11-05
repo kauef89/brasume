@@ -7,6 +7,7 @@ use App\Http\Controllers\Tenant\RestaurantOps\ShiftAttendanceController;
 /*
 |--------------------------------------------------------------------------
 | Rotas de Gestão de Turnos (Shift Domain)
+| Carregadas com auth:team,web SEM o middleware EnsureShiftAttendance
 |--------------------------------------------------------------------------
 */
 Route::prefix('operations')->group(function () {
@@ -19,6 +20,13 @@ Route::prefix('operations')->group(function () {
 
     Route::post('/cashier/close', [CashierController::class, 'close'])
         ->name('operations.cashier.close');
+
+    // 🧠 Diagnóstico Inteligente & Auto-Correção Pré-Fechamento
+    Route::post('/cashier/inspect-discrepancy', [CashierController::class, 'inspectDiscrepancy'])
+        ->name('operations.cashier.inspect-discrepancy');
+
+    Route::post('/cashier/fix-payment-method', [CashierController::class, 'fixPaymentMethod'])
+        ->name('operations.cashier.fix-payment-method');
 
     Route::post('/cashier/transaction', [CashierController::class, 'transaction'])
         ->name('operations.cashier.transaction');
@@ -39,16 +47,14 @@ Route::prefix('operations')->group(function () {
     // ==========================================
     // 👥 3. EQUIPE DO TURNO (Ponto, Escala & Diárias)
     // ==========================================
-    Route::withoutMiddleware([\App\Http\Middleware\EnsureShiftAttendance::class])->group(function () {
-        Route::post('/attendance/sync', [ShiftAttendanceController::class, 'sync'])
-            ->name('operations.attendance.sync');
+    Route::post('/attendance/sync', [ShiftAttendanceController::class, 'sync'])
+        ->name('operations.attendance.sync');
 
-        Route::get('/attendance/payout-details/{user}', [ShiftAttendanceController::class, 'payoutDetails'])
-            ->name('operations.attendance.payout-details');
+    Route::get('/attendance/payout-details/{user}', [ShiftAttendanceController::class, 'payoutDetails'])
+        ->name('operations.attendance.payout-details');
 
-        Route::post('/attendance/pay', [ShiftAttendanceController::class, 'payFreelancer'])
-            ->name('operations.attendance.pay');
-    });
+    Route::post('/attendance/pay', [ShiftAttendanceController::class, 'payFreelancer'])
+        ->name('operations.attendance.pay');
 
     // ==========================================
     // ↩️ 4. ESTORNOS E AUDITORIA

@@ -29,6 +29,14 @@
 
                 <div class="w-px h-5 bg-surface-border/50 mx-1"></div>
 
+                <!-- 🚀 CONTROLE DE REGIME DE ESCALA (5x2 vs 6x1) -->
+                <SegmentedControl
+                    v-model="scheduleRegime"
+                    :options="regimeOptions"
+                />
+
+                <div class="w-px h-5 bg-surface-border/50 mx-1"></div>
+
                 <PosTeleportButton
                     icon="pi-copy"
                     color="primary"
@@ -98,8 +106,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, onMounted, onBeforeUnmount, provide } from 'vue';
 import PosTeleportButton from '@/Components/UI/PosTeleportButton.vue';
+import SegmentedControl from '@/Components/UI/SegmentedControl.vue';
 import ScheduleDayColumn from './ScheduleDayColumn.vue';
 import ScheduleSidebar from './ScheduleSidebar.vue';
 import { useSchedule } from './Composables/useSchedule';
@@ -117,6 +126,8 @@ const isMounted = ref(false);
 const {
     activeSideTab,
     sideTabOptions,
+    scheduleRegime,
+    regimeOptions,
     employeePool,
     localSlots,
     availableRoles,
@@ -152,6 +163,9 @@ const {
     clonePreviousWeek,
     saveSchedule
 } = useSchedule(props);
+
+// 🚀 Fornece o regime de escala reativamente para todos os filhos (ScheduleCard)
+provide('scheduleRegime', scheduleRegime);
 
 onMounted(() => {
     isMounted.value = true;

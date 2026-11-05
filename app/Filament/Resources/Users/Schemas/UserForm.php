@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Users\Schemas;
 
+use App\Enums\EmployeeRole;
+
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\TextInput;
@@ -55,12 +57,12 @@ class UserForm
                         ->label('Cargos / Nível de Acesso')
                         ->relationship('roles', 'name', fn ($query) => $query->where('guard_name', ['web', 'team']))
                         ->getOptionLabelFromRecordUsing(fn ($record) => match ($record->name) {
-                            'admin'   => '👑 Administrador (Acesso Total)',
-                            'manager' => '📊 Gerente / Gestão',
-                            'pos'     => '🖥️ Operador de Caixa (POS)',
+                            EmployeeRole::ADMIN->value   => '👑 Administrador (Acesso Total)',
+                            EmployeeRole::MANAGER->value => '📊 Gerente / Gestão',
+                            EmployeeRole::CASHIER->value => '🖥️ Operador de Caixa',
                             'kds'     => '🍳 Cozinha / Produção (KDS)',
-                            'waiter'  => '📱 Garçom / Atendimento',
-                            'driver'  => '🛵 Entregador / Motoboy',
+                            EmployeeRole::WAITER->value  => '📱 Garçom / Atendimento',
+                            EmployeeRole::DRIVER->value  => '🛵 Entregador / Motoboy',
                             default   => ucfirst($record->name),
                         })
                         ->multiple()

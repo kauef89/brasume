@@ -28,7 +28,6 @@
 
                 <!-- BOTÕES DE AÇÃO DO TURNO -->
                 <template v-else>
-                    <!-- SUPRIMENTO (ENTRADA) -->
                     <PosTeleportButton
                         icon="pi-arrow-down"
                         color="primary"
@@ -36,7 +35,6 @@
                         @click="openTransactionView('in')"
                     />
 
-                    <!-- SANGRIA (RETIRADA) -->
                     <PosTeleportButton
                         icon="pi-arrow-up"
                         color="primary"
@@ -44,7 +42,6 @@
                         @click="openTransactionView('out')"
                     />
 
-                    <!-- PONTO / EQUIPE DO TURNO -->
                     <PosTeleportButton
                         icon="pi-users"
                         color="primary"
@@ -52,7 +49,6 @@
                         @click="openMidShiftAttendance"
                     />
 
-                    <!-- REEMISSÃO FISCAL EM LOTE -->
                     <PosTeleportButton
                         v-if="companySettings?.is_fiscal_emitter"
                         icon="pi-bolt"
@@ -65,7 +61,6 @@
                         @click="retryFailedFiscal"
                     />
 
-                    <!-- LOJA ONLINE (CUSTOMER APP) -->
                     <PosTeleportButton
                         :icon="isStoreAcceptingOrders ? 'pi-globe' : 'pi-pause-circle'"
                         :color="isStoreAcceptingOrders ? 'primary' : 'warning'"
@@ -74,7 +69,6 @@
                         @click="openOperationalView"
                     />
 
-                    <!-- FECHAR CAIXA FINANCEIRO (Cor: Success) -->
                     <PosTeleportButton
                         icon="pi-lock"
                         color="success"
@@ -98,7 +92,7 @@
                     @action="handleOrderAction"
                 />
 
-                <!-- CONTAGEM DE CAIXA: ABERTURA / FECHAMENTO -->
+                <!-- CONTAGEM DE CAIXA: ABERTURA / FECHO (COM TERMINAIS APOS) -->
                 <ShiftCashForm
                     v-else-if="leftView === 'open_shift' || leftView === 'close_shift'"
                     ref="shiftCashFormRef"
@@ -106,11 +100,12 @@
                     class="w-full h-full"
                     :company-settings="companySettings"
                     :expected-total="expectedInDrawer"
+                    :devices="availableDevices"
                     @update:data="shiftFormData = $event"
                     @submit="triggerSidebarSubmit"
                 />
 
-                <!-- ESCALA E PONTO: GERENCIA EQUIPE E LIQUIDAÇÃO DE FREELANCERS -->
+                <!-- ESCALA E PONTO: GERENCIA EQUIPA E LIQUIDAÇÃO DE FREELANCERS -->
                 <ShiftAttendance
                     v-else-if="leftView === 'attendance'"
                     class="w-full h-full"
@@ -137,6 +132,7 @@
                     :company-settings="companySettings"
                     :amount="shiftFormData.amount"
                     :coins-total="shiftFormData.coinsTotal"
+                    :terminal-totals="shiftFormData.terminalTotals"
                     :is-valid="shiftFormData.isValid"
                     :has-active-shift="Boolean(currentShift)"
                     :has-staged-attendees="stagedAttendees.length > 0"
@@ -152,7 +148,7 @@
                     </div>
                     <h3 class="text-xl font-black mb-1 uppercase tracking-wider text-surface-text">Abertura de Turno</h3>
                     <p class="text-xs text-surface-muted max-w-xs leading-relaxed">
-                        Passo 1: Confirme a equipe presente para liberar o acesso ao sistema. Em seguida, informe o fundo de troco da gaveta.
+                        Passo 1: Confirme a equipa presente para libertar o acesso ao sistema. Em seguida, informe o fundo de troco da gaveta.
                     </p>
                 </div>
 
@@ -186,7 +182,7 @@
                     @confirm="handleTransactionConfirm"
                 />
 
-                <!-- PAINEL DE CONTROLE DA LOJA ONLINE -->
+                <!-- PAINEL DE CONTROLO DA LOJA ONLINE -->
                 <CloseOperationalShift
                     v-else-if="rightView === 'close_operational'"
                     class="w-full h-full"
@@ -217,6 +213,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch } from 'vue';
+import { usePage } from '@inertiajs/vue3';
 import DesktopLayout from '@/Layouts/DesktopLayout.vue';
 
 import CashierFilterPanel from '@/Pages/Pos/Components/Cashier/CashierFilterPanel.vue';
@@ -247,13 +244,19 @@ const props = defineProps({
     users: Array,
     currentAttendees: Array,
     companySettings: Object,
+    devices: Array,
     isActive: {
         type: Boolean,
         default: false
     }
 });
 
+const page = usePage();
 const isTeleportActive = ref(false);
+
+const availableDevices = computed(() => {
+    return props.devices || page.props.devices || page.props.cashierData?.devices || [];
+});
 
 onMounted(() => { isTeleportActive.value = props.isActive; });
 onActivated(() => { isTeleportActive.value = true; });
@@ -271,13 +274,13 @@ const shiftFormData = ref({
     retainedAmount: 0,
     coinsTotal: 0,
     details: null,
+    terminalTotals: {},
     isValid: true
 });
 
 const shiftSidebarRef = ref(null);
 const shiftCashFormRef = ref(null);
 
-// 🚀 1. INICIALIZAÇÃO DE COMPOSABLES PRIMÁRIOS (Antes dos Watchers)
 const {
     showOrders, showTransactions, activeOrderTypes, selectedRows, unifiedHistory,
     dynamicTotal, expectedInDrawer, isAuthModalVisible, authActionType, authItemName,
@@ -309,7 +312,6 @@ const {
     submitCloseShift: submitOperationalCloseShift
 } = useOperationalShift();
 
-// 🚀 2. COMPUTEDS E MÉTODOS DE ESTADO DE VIEW
 const isStoreAcceptingOrders = computed(() => {
     return props.currentShift?.accepting_orders !== false;
 });
@@ -338,7 +340,6 @@ const resetViews = () => {
     }
 };
 
-// 🚀 3. WATCHER DE TURNO
 watch(() => props.currentShift, () => {
     resetViews();
 }, { immediate: true });
@@ -412,7 +413,8 @@ const handleShiftSidebarConfirm = ({ observation }) => {
             amount: shiftFormData.value.amount,
             retained_amount: shiftFormData.value.retainedAmount,
             observation: observation,
-            details: shiftFormData.value.details
+            details: shiftFormData.value.details,
+            terminal_totals: shiftFormData.value.terminalTotals
         }, 'close');
     }
 };

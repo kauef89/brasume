@@ -2,6 +2,8 @@
 
 namespace App\Services\Orders\Handlers;
 
+use App\Enums\EmployeeRole;
+
 use App\Models\Order;
 use App\Models\User;
 use App\Models\Customer;
@@ -26,7 +28,7 @@ class DeliveryOrderHandler
             return null;
         }
 
-        $roles = ['driver', 'motoboy', 'entregador'];
+        $roles = [EmployeeRole::DRIVER->value];
 
         $activeDrivers = $shift->attendees()
             ->wherePivot('status', 'active')

@@ -2,6 +2,8 @@
 
 namespace App\Services\Auth;
 
+use App\Enums\EmployeeRole;
+
 use App\Enums\DeviceType;
 
 use App\Models\Device;
@@ -55,7 +57,7 @@ class RemoteUnlockService
             Cache::put("device_waiting_{$deviceUuid}", true, now()->addMinutes(10));
 
             $managers = User::whereHas('roles', function ($q) {
-                $q->whereIn('name', ['admin', 'gerente', 'manager']);
+                $q->whereIn('name', [EmployeeRole::ADMIN->value, EmployeeRole::MANAGER->value]);
             })->get();
 
             if ($managers->isNotEmpty()) {

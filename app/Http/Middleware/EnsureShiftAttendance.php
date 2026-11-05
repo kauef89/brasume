@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\EmployeeRole;
+
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,7 +21,7 @@ class EnsureShiftAttendance
         }
 
         // 1. BYPASS VIP: Admins e Gerentes não são travados pelo ponto
-        if ($user->hasAnyRole(['admin', 'gerente', 'manager'])) {
+        if ($user->hasAnyRole([EmployeeRole::ADMIN->value, EmployeeRole::MANAGER->value])) {
             return $next($request);
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\EmployeeRole;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,12 +14,12 @@ class EmployeeSchedule extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'date' => 'date',
-        'is_day_off' => 'boolean',
-        'is_extra_shift' => 'boolean',
+        'date'             => 'date',
+        'is_day_off'       => 'boolean',
+        'is_extra_shift'   => 'boolean',
         'schedule_slot_id' => 'integer',
-        'employee_id' => 'integer',
-        'payable_id' => 'integer',
+        'employee_id'      => 'integer',
+        'payable_id'       => 'integer',
     ];
 
     public function slot(): BelongsTo
@@ -45,7 +46,8 @@ class EmployeeSchedule extends Model
             return false;
         }
 
-        if (in_array(mb_strtolower((string) $this->assigned_role), ['caixa', 'cashier', 'pos'], true)) {
+        // Substituição de ['caixa', 'cashier', 'pos'] pelo valor tipado do Enum
+        if ($this->assigned_role === EmployeeRole::CASHIER->value) {
             return true;
         }
 

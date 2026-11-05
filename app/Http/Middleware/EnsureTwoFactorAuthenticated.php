@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\EmployeeRole;
+
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,7 +17,7 @@ class EnsureTwoFactorAuthenticated
         $user = Auth::user();
 
         // Ignora se não for gestor/admin ou se não estiver autenticado
-        if (!$user || !$user->hasAnyRole(['admin', 'manager', 'gerente'])) {
+        if (!$user || !$user->hasAnyRole([EmployeeRole::ADMIN->value, EmployeeRole::MANAGER->value])) {
             return $next($request);
         }
 

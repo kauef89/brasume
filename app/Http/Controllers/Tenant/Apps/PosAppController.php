@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Tenant\Apps;
 
+use App\Enums\EmployeeRole;
 use App\Services\Marketing\CrmService;
 use App\Services\RestaurantOps\ScheduleService;
 
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\CashShift;
+use App\Models\Device;
 use App\Models\Order;
 use App\Models\Printer;
 use App\Models\PrintJob;
@@ -42,8 +44,10 @@ class PosAppController extends Controller
         $data['initialStreets'] = fn () => Street::with('segments.neighborhood')->get();
 
         $data['initialOrders'] = fn () => $opsService->getActiveOrdersDashboard()['initialOrders'] ?? [];
+
+        // 🚀 Busca de entregadores via Enum
         $data['couriers'] = fn () => User::whereHas('roles', function ($q) {
-                $q->whereIn('name', ['driver', 'motoboy', 'entregador']);
+                $q->where('name', EmployeeRole::DRIVER->value);
             })
             ->where('is_active', true)
             ->orderBy('name')
@@ -109,13 +113,28 @@ class PosAppController extends Controller
 
         $data['crmData'] = fn () => app(CrmService::class)->getDashboardData();
 
-        // 🚀 Escala 5x2 (Closures nativas compatíveis)
+        // 🚀 Escala 5x2
         $scheduleStartDate = $request->query('start_date', Carbon::now()->startOfWeek()->format('Y-m-d'));
 
         $data['scheduleStartDate'] = $scheduleStartDate;
         $data['employees'] = fn () => $scheduleService->getWeeklySchedule($scheduleStartDate)['employees'];
         $data['slots'] = fn () => $scheduleService->getWeeklySchedule($scheduleStartDate)['slots'];
         $data['initialSchedules'] = fn () => $scheduleService->getWeeklySchedule($scheduleStartDate)['schedules'];
+
+        // 🔒 Guarda Física do Terminal
+        $deviceUuid = $request->cookie('brasume_device_uuid')
+            ?? $request->header('X-Device-UUID')
+            ?? $request->session()->get('device_uuid');
+
+        $device = $deviceUuid ? Device::where('uuid', $deviceUuid)->first() : null;
+
+        $isDeviceLocked = true;
+        if ($device && $device->status === 'operating' && !$device->is_waiting) {
+            $isDeviceLocked = false;
+        }
+
+        $data['device'] = fn () => $device;
+        $data['initialTerminalLocked'] = $isDeviceLocked;
 
         return Inertia::render('Pos/PosApp', $data);
     }

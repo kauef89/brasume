@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Tenant\Auth;
 
+use App\Enums\EmployeeRole;
+
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -45,7 +47,7 @@ class RemoteUnlockController extends Controller
     {
         $user = auth('team')->user() ?? auth('web')->user();
 
-        if (!$user || !$user->hasAnyRole(['admin', 'gerente', 'manager', 'pos', 'kitchen'])) {
+        if (!$user || !$user->hasAnyRole([EmployeeRole::ADMIN->value, EmployeeRole::MANAGER->value, EmployeeRole::CASHIER->value, EmployeeRole::KITCHEN->value])) {
             // 🚀 Atualizado para a nova rota do WaiterApp
             return redirect()->route('waiter.index', ['tab' => 'menu'])
                              ->withErrors(['acesso' => 'Você não possui permissão para autorizar terminais.']);

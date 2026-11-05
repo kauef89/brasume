@@ -2,21 +2,25 @@
     <div class="flex flex-col h-full w-full relative bg-surface-1 text-surface-text font-sans">
 
         <!-- OVERLAY DE BLOQUEIO INTERNO -->
-        <div v-if="isTerminalLocked" class="fixed inset-0 z-[9999] bg-surface-900/95 backdrop-blur-xl flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
-            <div class="w-24 h-24 bg-surface-800 rounded-full flex items-center justify-center mb-6 shadow-inner border border-surface-700">
-                <i class="pi pi-lock text-5xl text-primary-500"></i>
+        <div v-if="isTerminalLocked" class="fixed inset-0 z-[9999] bg-surface-900/95 backdrop-blur-xl flex flex-col items-center justify-center text-white animate-in fade-in duration-300 p-6 select-none">
+            <div class="w-20 h-20 bg-surface-800 rounded-3xl flex items-center justify-center mb-4 shadow-inner border border-surface-700">
+                <i class="pi pi-lock text-4xl text-primary-500"></i>
             </div>
-            <h2 class="text-3xl font-black mb-2">Terminal Bloqueado</h2>
-            <p class="text-surface-400 font-medium mb-8 text-center max-w-sm">
-                Sessão pausada por segurança. Solicite a liberação do gestor pelo aplicativo para retornar.
+            <h2 class="text-2xl font-black mb-1 tracking-tight text-center">Terminal Bloqueado</h2>
+            <p class="text-surface-400 text-xs font-medium mb-6 text-center max-w-sm leading-relaxed">
+                Sessão pausada por segurança. Solicite a liberação do gestor ou do operador escalado no <strong>TeamApp &gt; Terminais</strong>.
             </p>
 
-            <div class="flex items-center gap-3 text-warning-400 bg-warning-500/10 border border-warning-500/20 px-6 py-3 rounded-full font-bold text-sm tracking-widest uppercase">
+            <div class="flex items-center gap-3 text-warning-400 bg-warning-500/10 border border-warning-500/20 px-5 py-2.5 rounded-full font-black text-xs tracking-widest uppercase mb-8">
                 <i class="pi pi-spinner pi-spin"></i>
-                Radar Ativo
+                Radar de Desbloqueio Ativo
             </div>
 
-            <button @click="handleLogout" class="mt-12 text-xs font-bold text-surface-500 hover:text-white uppercase tracking-widest underline outline-none transition-colors cursor-pointer border-none bg-transparent">
+            <button
+                type="button"
+                @click="handleLogout"
+                class="text-xs font-bold text-surface-500 hover:text-white uppercase tracking-widest underline outline-none transition-colors cursor-pointer border-none bg-transparent"
+            >
                 Trocar de Usuário (Sair)
             </button>
         </div>

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Tenant\RestaurantOps;
 
+use App\Enums\EmployeeRole;
+
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Pos\CloseShiftRequest;
 use App\Http\Requests\Pos\OpenShiftRequest;
@@ -259,7 +261,7 @@ class CashierController extends Controller
 
             if (!$authorized) {
                 $managers = \App\Models\User::whereHas('roles', function ($q) {
-                    $q->whereIn('name', ['admin', 'gerente', 'manager']);
+                    $q->whereIn('name', [EmployeeRole::ADMIN->value, EmployeeRole::MANAGER->value]);
                 })->get();
 
                 foreach ($managers as $manager) {

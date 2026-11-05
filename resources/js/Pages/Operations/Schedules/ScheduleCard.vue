@@ -26,7 +26,7 @@
                 </span>
             </div>
 
-            <!-- TOGGLE DE DIÁRIA EXTRA: Visível apenas se for CLT E dias trabalhados > 5 -->
+            <!-- TOGGLE DE DIÁRIA EXTRA: Visível se CLT e dias trabalhados > limite do regime -->
             <label
                 v-if="canHaveExtraShift && !isDayOff"
                 class="flex items-center gap-1 cursor-pointer shrink-0"
@@ -48,13 +48,13 @@
             <i class="pi pi-moon text-[8px]"></i> Folga Programada
         </div>
         <div v-else-if="isOverworked" class="text-[9px] font-black text-danger-500 flex items-center gap-1">
-            <i class="pi pi-exclamation-triangle text-[8px]"></i> Excedeu 5x2 ({{ daysWorked }}/5 dias)
+            <i class="pi pi-exclamation-triangle text-[8px]"></i> Excedeu {{ regimeLabel }} ({{ daysWorked }}/{{ maxDays }} dias)
         </div>
     </div>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, inject, ref } from 'vue';
 import { abbreviateName } from '@/Utils/formatters';
 
 const props = defineProps({
@@ -63,10 +63,21 @@ const props = defineProps({
     isDayOff: {
         type: Boolean,
         default: false
+    },
+    regime: {
+        type: String,
+        default: null
     }
 });
 
 defineEmits(['remove', 'change']);
+
+// 🚀 Injeção reativa do regime selecionado no ScheduleBoard
+const injectedRegime = inject('scheduleRegime', ref('5x2'));
+const activeRegime = computed(() => props.regime || injectedRegime.value || '5x2');
+
+const maxDays = computed(() => (activeRegime.value === '6x1' ? 6 : 5));
+const regimeLabel = computed(() => (activeRegime.value === '6x1' ? '6x1' : '5x2'));
 
 // Verifica se o regime é CLT
 const isClt = computed(() => {
@@ -74,12 +85,12 @@ const isClt = computed(() => {
     return type.startsWith('clt');
 });
 
-// Apenas exibe o toggle se for CLT e já tiver passado de 5 dias de trabalho na semana
+// Exibe o toggle de diária extra apenas quando excede o teto semanal do regime escolhido
 const canHaveExtraShift = computed(() => {
-    return isClt.value && props.daysWorked > 5;
+    return isClt.value && props.daysWorked > maxDays.value;
 });
 
 const isOverworked = computed(() => {
-    return props.daysWorked > 5;
+    return props.daysWorked > maxDays.value;
 });
 </script>

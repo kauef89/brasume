@@ -2,6 +2,8 @@
 
 namespace App\Services\RestaurantOps;
 
+use App\Enums\EmployeeRole;
+
 use App\Models\User;
 use App\Models\PosAudit;
 use App\Models\CompanySetting;
@@ -54,7 +56,7 @@ class PosSecurityService
                 throw new Exception("PIN inválido ou não encontrado.");
             }
 
-            $isAuthorized = $authorizer->hasAnyRole(['admin', 'manager', 'gerente']);
+            $isAuthorized = $authorizer->hasAnyRole([EmployeeRole::ADMIN->value, EmployeeRole::MANAGER->value]);
 
             if (!$isAuthorized) {
                 try {

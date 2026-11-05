@@ -2,6 +2,8 @@
 
 namespace App\Services\Orders;
 
+use App\Enums\EmployeeRole;
+
 use App\Models\Order;
 use App\Models\Customer;
 use App\Models\User;
@@ -31,7 +33,7 @@ class OrderStatusService
                     $driver->notify(new OrderDispatchedNotification($order));
                 }
             } else {
-                $activeDrivers = ShiftAttendanceService::getActiveShiftStaffByRoles(['driver']);
+                $activeDrivers = ShiftAttendanceService::getActiveShiftStaffByRoles([EmployeeRole::DRIVER->value]);
                 if ($activeDrivers->isNotEmpty()) {
                     Notification::send($activeDrivers, new OrderDispatchedNotification($order));
                 }

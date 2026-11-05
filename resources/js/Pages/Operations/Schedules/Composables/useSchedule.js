@@ -11,6 +11,28 @@ export function useSchedule(props) {
         { label: 'Slots', value: 'slots', icon: 'pi-th-large' }
     ];
 
+    // 🚀 Controle do Regime de Escala (5x2 vs 6x1)
+    const getInitialRegime = () => {
+        try {
+            const saved = localStorage.getItem('pos_schedule_regime');
+            return saved && ['5x2', '6x1'].includes(saved) ? saved : '5x2';
+        } catch (e) {
+            return '5x2';
+        }
+    };
+
+    const scheduleRegime = ref(getInitialRegime());
+    const regimeOptions = [
+        { label: '5x2', value: '5x2' },
+        { label: '6x1', value: '6x1' }
+    ];
+
+    watch(scheduleRegime, (newVal) => {
+        try {
+            localStorage.setItem('pos_schedule_regime', newVal);
+        } catch (e) {}
+    });
+
     const employeePool = ref([]);
     const localSlots = ref([]);
     const availableRoles = ref([]);
@@ -401,6 +423,8 @@ export function useSchedule(props) {
     return {
         activeSideTab,
         sideTabOptions,
+        scheduleRegime,
+        regimeOptions,
         employeePool,
         localSlots,
         availableRoles,

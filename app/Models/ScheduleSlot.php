@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\EmployeeRole;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -13,8 +14,8 @@ class ScheduleSlot extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'capacity' => 'integer',
-        'sort_order' => 'integer',
+        'capacity'      => 'integer',
+        'sort_order'    => 'integer',
         'allowed_roles' => 'array',
     ];
 
@@ -30,8 +31,7 @@ class ScheduleSlot extends Model
     {
         $roles = $this->allowed_roles ?? [];
 
-        return in_array('cashier', $roles, true)
-            || in_array('pos', $roles, true)
-            || str_contains(mb_strtolower((string) $this->name), 'caixa');
+        // Substituição das strings manuais 'cashier', 'pos' e 'caixa' pelo Enum
+        return in_array(EmployeeRole::CASHIER->value, $roles, true);
     }
 }

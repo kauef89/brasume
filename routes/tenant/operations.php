@@ -107,22 +107,6 @@ Route::prefix('operations')->group(function () {
     });
 
     // ==========================================
-    // 💰 CAIXA, TURNO & AUDITORIA (Cashier)
-    // ==========================================
-    Route::prefix('cashier')->controller(CashierController::class)->name('operations.cashier.')->group(function () {
-        // Diagnóstico e Auto-Correção Inteligente de Fechamento
-        Route::post('/inspect-discrepancy', 'inspectDiscrepancy')->name('inspect-discrepancy');
-        Route::post('/fix-payment-method', 'fixPaymentMethod')->name('fix-payment-method');
-
-        // Operações de Turno (Abertura, Fechamento, Sangria e Relatório)
-        Route::post('/open', 'open')->name('open');
-        Route::post('/close', 'close')->name('close');
-        Route::post('/close-operational', 'closeOperationalShift')->name('close-operational');
-        Route::post('/transaction', 'transaction')->name('transaction');
-        Route::post('/print-shift-report/{shift}', 'printShiftReport')->name('print-shift-report');
-    });
-
-    // ==========================================
     // 🗓️ ESCALAS E JORNADAS (Schedules)
     // ==========================================
     Route::prefix('schedules')->controller(ScheduleController::class)->group(function () {
