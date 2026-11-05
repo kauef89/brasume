@@ -21,6 +21,12 @@ class CashShift extends Model
         'closing_balance_expected' => 'decimal:2',
         'closing_balance_actual'   => 'decimal:2',
         'accepting_orders'         => 'boolean',
+        'corrected_errors_count'   => 'integer',
+        'corrected_errors_amount'  => 'decimal:2',
+        'corrected_errors_details' => 'array',
+        'cash_breakage_amount'     => 'decimal:2',
+        'apos_breakage_amount'     => 'decimal:2',
+        'has_breakage'             => 'boolean',
     ];
 
     public function bankAccount(): BelongsTo
@@ -64,9 +70,6 @@ class CashShift extends Model
         return (float) ($this->closing_balance_actual - $this->closing_balance_expected);
     }
 
-    /**
-     * Colaboradores escalados e presentes no turno
-     */
     public function attendees(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'shift_attendances')
@@ -90,17 +93,5 @@ class CashShift extends Model
     public static function current(): ?self
     {
         return static::open()->latest('id')->first();
-    }
-
-    public function dailyPayables(): \Illuminate\Database\Eloquent\Relations\HasManyThrough
-    {
-        return $this->hasManyThrough(
-            AccountPayable::class,
-            ShiftAttendance::class,
-            'cash_shift_id',
-            'id',
-            'id',
-            'account_payable_id'
-        );
     }
 }

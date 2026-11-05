@@ -6,6 +6,8 @@ use App\Models\CashShift;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
+use App\Models\PaymentMethod;
+use App\Models\AcquirerTransaction;
 use App\Models\Transaction;
 use App\Models\BankAccount;
 use App\Models\Printer;
@@ -63,54 +65,246 @@ class ShiftCashierService
         });
     }
 
-    public function validateAndCleanOrdersBeforeClose(): void
+    public function calculateExpectedCash(CashShift $shift): float
     {
-        // 1. Limpeza automática de pedidos vazios ou zerados
-        $abandonedOrders = Order::whereNotIn('status', ['closed', 'cancelled'])
-            ->where(function ($q) {
-                $q->whereDoesntHave('items', fn ($iq) => $iq->where('status', '!=', 'cancelled'))
-                  ->orWhere(fn ($sub) => $sub->where('total', '<=', 0.01)->whereDoesntHave('payments'));
+        $opening = (float) ($shift->opening_balance ?? 0);
+        $openedAt = $shift->opened_at;
+        $closedAt = $shift->closed_at ?? now();
+
+        $moneyMethodIds = PaymentMethod::where('engine_type', 'money')->pluck('id')->all();
+
+        // 1. Vendas em dinheiro (exclui delivery não finalizado)
+        $cashSales = (float) Payment::where('is_paid', true)
+            ->where(function ($q) use ($shift, $openedAt, $closedAt) {
+                $q->where('cash_shift_id', $shift->id)
+                  ->orWhereBetween('created_at', [$openedAt, $closedAt]);
             })
+            ->whereHas('order', function ($q) {
+                $q->where('status', 'closed')
+                  ->orWhere(function ($sub) {
+                      $sub->whereIn('status', ['completed', 'preparing', 'dispatched'])
+                          ->where('type', '!=', 'delivery');
+                  });
+            })
+            ->where(function ($q) use ($moneyMethodIds) {
+                if (!empty($moneyMethodIds)) {
+                    $q->whereIn('payment_method_id', $moneyMethodIds);
+                }
+                $q->orWhere('method', 'LIKE', '%Dinheiro%')
+                  ->orWhere('method', 'LIKE', '%cash%');
+            })
+            ->sum('amount');
+
+        // 2. Transações de gaveta (Suprimentos e Sangrias manuais)
+        $shiftTransactions = Transaction::where('cash_shift_id', $shift->id)
+            ->whereNull('order_id')
             ->get();
 
-        foreach ($abandonedOrders as $abandoned) {
-            $abandoned->update([
-                'status' => 'cancelled',
-                'payment_status' => 'cancelled',
-            ]);
+        $supplies = (float) $shiftTransactions->filter(function ($t) {
+            return $t->category === 'supply'
+                || ($t->type === 'in' && !str_contains(mb_strtolower($t->description ?? ''), 'abertura'));
+        })->sum('amount');
 
-            if ($abandoned->dining_table_id) {
-                $hasOtherActive = Order::where('dining_table_id', $abandoned->dining_table_id)
-                    ->where('id', '!=', $abandoned->id)
-                    ->whereNotIn('status', ['closed', 'cancelled'])
-                    ->exists();
+        $sangrias = (float) $shiftTransactions->filter(function ($t) {
+            return $t->category === 'bleed'
+                || ($t->type === 'out' && !str_contains(mb_strtolower($t->description ?? ''), 'retirada de fechamento'));
+        })->sum('amount');
 
-                if (!$hasOtherActive) {
-                    DiningTable::where('id', $abandoned->dining_table_id)->update(['status' => 'free']);
+        // 3. Trocos devolvidos
+        $changeReturned = (float) Order::where('cash_shift_id', $shift->id)->sum('change_returned');
+
+        return round($opening + $cashSales + $supplies - $sangrias - $changeReturned, 2);
+    }
+
+    /**
+     * 🧠 DIAGNÓSTICO INTELIGENTE PRÉ-FECHO:
+     * Compara o saldo informado com o esperado e identifica se há um erro evidente de meio de pagamento.
+     */
+    public function diagnoseDiscrepancy(CashShift $shift, float $actualCash): array
+    {
+        $expectedCash = $this->calculateExpectedCash($shift);
+        $diff = round($actualCash - $expectedCash, 2);
+
+        if (abs($diff) <= 0.05) {
+            return [
+                'has_discrepancy' => false,
+                'difference'      => 0.00,
+                'expected'        => $expectedCash,
+                'actual'          => $actualCash,
+                'suggestion'      => null,
+            ];
+        }
+
+        $targetAmount = abs($diff);
+        $openedAt = $shift->opened_at;
+        $now = now();
+
+        $suggestion = null;
+
+        // CENÁRIO A: Falta dinheiro em gaveta (Ex: R$ -67,50)
+        // O operador registou como Dinheiro no ecrã, mas o cliente pagou por Maquineta / Cartão / Pix
+        if ($diff < 0) {
+            $candidatePayments = Payment::with(['order', 'paymentMethod'])
+                ->where('cash_shift_id', $shift->id)
+                ->where(function ($q) {
+                    $q->where('method', 'LIKE', '%Dinheiro%')
+                      ->orWhere('method', 'LIKE', '%cash%');
+                })
+                ->whereBetween('amount', [$targetAmount - 0.05, $targetAmount + 0.05])
+                ->latest('id')
+                ->get();
+
+            foreach ($candidatePayments as $payment) {
+                // Procura transação equivalente na adquirente (APOS)
+                $matchingApos = AcquirerTransaction::whereBetween('transaction_date', [$openedAt, $now])
+                    ->whereBetween('gross_amount', [$targetAmount - 0.05, $targetAmount + 0.05])
+                    ->latest('id')
+                    ->first();
+
+                $suggestedMethod = null;
+                $reason = "";
+
+                if ($matchingApos) {
+                    $modality = mb_strtolower((string) $matchingApos->modality);
+                    $isDebit = str_contains($modality, 'deb');
+                    $isCredit = str_contains($modality, 'cred');
+                    $isPix = str_contains($modality, 'pix');
+
+                    $targetEngine = $isPix ? 'pix_machine' : ($isDebit ? 'manual' : 'manual');
+                    $suggestedMethod = PaymentMethod::where('is_active', true)
+                        ->where(function ($q) use ($isDebit, $isCredit, $isPix) {
+                            if ($isDebit) $q->where('name', 'LIKE', '%Débito%');
+                            elseif ($isCredit) $q->where('name', 'LIKE', '%Crédito%');
+                            elseif ($isPix) $q->where('name', 'LIKE', '%Pix%');
+                        })
+                        ->first() ?? PaymentMethod::find(5);
+
+                    $reason = "Identificada transação de R$ " . number_format($matchingApos->gross_amount, 2, ',', '.') .
+                              " no terminal ({$matchingApos->brand} {$matchingApos->modality}) sem correspondência em gaveta.";
+                } else {
+                    // Sugestão baseada em padrão de Débito/Crédito
+                    $suggestedMethod = PaymentMethod::where('is_active', true)
+                        ->where('name', 'LIKE', '%Débito%')
+                        ->first() ?? PaymentMethod::find(5);
+
+                    $reason = "O Pedido #{$payment->order_id} possui um pagamento de R$ " . number_format($payment->amount, 2, ',', '.') .
+                              " registado como Dinheiro que coincide exatamente com o valor em falta.";
+                }
+
+                if ($suggestedMethod) {
+                    $suggestion = [
+                        'payment_id'            => $payment->id,
+                        'order_id'              => $payment->order_id,
+                        'current_method_name'   => $payment->method,
+                        'suggested_method_id'   => $suggestedMethod->id,
+                        'suggested_method_name' => $suggestedMethod->name,
+                        'amount'                => (float) $payment->amount,
+                        'reason'                => $reason,
+                        'type'                  => 'cash_to_electronic'
+                    ];
+                    break;
                 }
             }
         }
 
-        // 2. Verificação de comandas pendentes de pagamento
-        $blockingOrders = Order::where('cash_shift_id', CashShift::where('status', 'open')->latest('id')->value('id'))
-            ->whereNotIn('status', ['closed', 'cancelled'])
-            ->whereHas('items', fn ($iq) => $iq->where('status', '!=', 'cancelled'))
-            ->where('payment_status', '!=', 'paid')
-            ->get();
+        // CENÁRIO B: Sobra dinheiro em gaveta (Ex: R$ +67,50)
+        // O cliente pagou em notas, mas o operador clicou em Débito/Pix no POS
+        elseif ($diff > 0) {
+            $candidatePayments = Payment::with(['order', 'paymentMethod'])
+                ->where('cash_shift_id', $shift->id)
+                ->where(function ($q) {
+                    $q->where('method', 'NOT LIKE', '%Dinheiro%')
+                      ->where('method', 'NOT LIKE', '%cash%');
+                })
+                ->whereBetween('amount', [$targetAmount - 0.05, $targetAmount + 0.05])
+                ->latest('id')
+                ->get();
 
-        if ($blockingOrders->isNotEmpty()) {
-            $tableNumbers = $blockingOrders->where('type', 'table')->pluck('table_number')->filter()->unique()->join(', ');
-            $otherCounts = $blockingOrders->where('type', '!=', 'table')->count();
+            $cashMethod = PaymentMethod::where('engine_type', 'money')->first() ?? PaymentMethod::find(1);
 
-            $details = [];
-            if ($tableNumbers) $details[] = "Mesa(s): {$tableNumbers}";
-            if ($otherCounts > 0) $details[] = "{$otherCounts} pedido(s) balcão/delivery";
-
-            $detailMsg = !empty($details) ? ' (' . implode(' | ', $details) . ')' : '';
-            $msg = "Não é possível fechar o caixa com pedidos em aberto{$detailMsg}. Finalize ou cancele as contas pendentes.";
-
-            throw ValidationException::withMessages(['shift' => $msg]);
+            foreach ($candidatePayments as $payment) {
+                $suggestion = [
+                    'payment_id'            => $payment->id,
+                    'order_id'              => $payment->order_id,
+                    'current_method_name'   => $payment->method,
+                    'suggested_method_id'   => $cashMethod->id,
+                    'suggested_method_name' => $cashMethod->name,
+                    'amount'                => (float) $payment->amount,
+                    'reason'                => "O Pedido #{$payment->order_id} foi registado como '{$payment->method}', mas há um excedente físico idêntico na gaveta.",
+                    'type'                  => 'electronic_to_cash'
+                ];
+                break;
+            }
         }
+
+        return [
+            'has_discrepancy' => true,
+            'difference'      => $diff,
+            'expected'        => $expectedCash,
+            'actual'          => $actualCash,
+            'suggestion'      => $suggestion,
+        ];
+    }
+
+    /**
+     * 🔧 APLICA A CORREÇÃO DE FORMA DE PAGAMENTO E REGISTA A FALHA OPERACIONAL NO TURNO
+     */
+    public function applyDiscrepancyCorrection(CashShift $shift, int $paymentId, int $newMethodId, string $operatorName): array
+    {
+        return DB::transaction(function () use ($shift, $paymentId, $newMethodId, $operatorName) {
+            $payment = Payment::with('order')->findOrFail($paymentId);
+            $newMethod = PaymentMethod::findOrFail($newMethodId);
+
+            $oldMethodName = $payment->method;
+            $amount = (float) $payment->amount;
+
+            // 1. Atualiza o Pagamento
+            $payment->update([
+                'payment_method_id' => $newMethod->id,
+                'method'            => $newMethod->name,
+            ]);
+
+            // 2. Atualiza a Transação Contábil
+            $trans = Transaction::where('payment_id', $payment->id)->first();
+            if ($trans) {
+                $isCash = $newMethod->engine_type === 'money';
+                $destAccount = $newMethod->destination_account_id ?? ($isCash ? 1 : null);
+
+                $trans->update([
+                    'payment_method_id' => $newMethod->id,
+                    'bank_account_id'   => $destAccount,
+                    'description'       => "Pedido #{$payment->order_id} ({$newMethod->name})",
+                ]);
+            }
+
+            // 3. Regista o histórico de erro corrigido no turno (Auditoria de Eficácia)
+            $details = $shift->corrected_errors_details ?? [];
+            $details[] = [
+                'timestamp'        => now()->toDateTimeString(),
+                'payment_id'       => $payment->id,
+                'order_id'         => $payment->order_id,
+                'amount'           => $amount,
+                'from_method'      => $oldMethodName,
+                'to_method'        => $newMethod->name,
+                'operator_at_fix'  => $operatorName,
+            ];
+
+            $shift->increment('corrected_errors_count', 1);
+            $shift->update([
+                'corrected_errors_amount'  => (float) ($shift->corrected_errors_amount + $amount),
+                'corrected_errors_details' => $details,
+            ]);
+
+            Log::warning("⚠️ [Auditoria Turno #{$shift->id}] Erro de meio de pagamento corrigido: Pedido #{$payment->order_id} alterado de '{$oldMethodName}' para '{$newMethod->name}' (R$ {$amount}) por [{$operatorName}].");
+
+            $newExpected = $this->calculateExpectedCash($shift);
+
+            return [
+                'success'      => true,
+                'new_expected' => $newExpected,
+                'message'      => "Pagamento corrigido com sucesso para {$newMethod->name}."
+            ];
+        });
     }
 
     public function closeShift(CashShift $shift, array $data, int $operatorId, string $operatorName): CashShift
@@ -119,53 +313,20 @@ class ShiftCashierService
 
         DB::transaction(function () use ($shift, $data, $operatorId, $operatorName) {
             $actual = round((float) ($data['amount'] ?? 0), 2);
-            $opening = round((float) ($shift->opening_balance ?? 0), 2);
-            $openedAt = $shift->opened_at;
             $closedAt = now();
 
-            // 1. Vendas em dinheiro vivo (compatível com ShiftClosureReport)
-            $moneyMethodIds = \App\Models\PaymentMethod::where('engine_type', 'money')->pluck('id')->all();
-
-            $cashSales = (float) \App\Models\Payment::where('is_paid', true)
-                ->where(function ($q) use ($shift, $openedAt, $closedAt) {
-                    $q->where('cash_shift_id', $shift->id)
-                      ->orWhereBetween('created_at', [$openedAt, $closedAt]);
-                })
-                ->whereHas('order', fn($q) => $q->whereIn('status', ['closed', 'completed', 'dispatched', 'preparing']))
-                ->where(function ($q) use ($moneyMethodIds) {
-                    if (!empty($moneyMethodIds)) {
-                        $q->whereIn('payment_method_id', $moneyMethodIds);
-                    }
-                    $q->orWhere('method', 'LIKE', '%Dinheiro%')
-                      ->orWhere('method', 'LIKE', '%cash%');
-                })
-                ->sum('amount');
-
-            // 2. Suprimentos em dinheiro na gaveta
-            $shiftTransactions = \App\Models\Transaction::where('cash_shift_id', $shift->id)
-                ->whereNull('order_id')
-                ->get();
-
-            $supplies = (float) $shiftTransactions->filter(function ($t) {
-                return $t->category === 'supply'
-                    || ($t->type === 'in' && !str_contains(mb_strtolower($t->description ?? ''), 'abertura'));
-            })->sum('amount');
-
-            // 3. Sangrias realizadas na gaveta
-            $sangrias = (float) $shiftTransactions->filter(function ($t) {
-                return $t->category === 'bleed'
-                    || ($t->type === 'out' && !str_contains(mb_strtolower($t->description ?? ''), 'retirada de fechamento'));
-            })->sum('amount');
-
-            // 4. Saldo esperado estritamente físico
-            $expected = round($opening + $cashSales + $supplies - $sangrias, 2);
+            $expected = $this->calculateExpectedCash($shift);
             $diff = round($actual - $expected, 2);
+
+            $hasBreakage = abs($diff) >= 0.02;
 
             $updatePayload = [
                 'status'                   => 'closed',
                 'closed_at'                => $closedAt,
                 'closing_balance_expected' => $expected,
                 'closing_balance_actual'   => $actual,
+                'cash_breakage_amount'     => $diff,
+                'has_breakage'             => $hasBreakage,
                 'closed_by'                => $operatorId,
                 'notes'                    => $data['notes'] ?? ($data['observation'] ?? null),
                 'accepting_orders'         => false,
@@ -173,15 +334,15 @@ class ShiftCashierService
 
             $shift->update($updatePayload);
 
-            // 5. Ajuste contábil de quebra de caixa no Cofre (#1)
-            if (abs($diff) >= 0.02) {
+            // Ajuste contábil de quebra de caixa no Cofre (#1) apenas se for diferença real não corrigida
+            if ($hasBreakage) {
                 $isShortage = $diff < 0;
                 $amount = abs($diff);
                 $label = $isShortage ? 'Falta' : 'Sobra';
 
-                \App\Models\Transaction::create([
-                    'bank_account_id'  => 1, // Cofre / Gaveta Física
-                    'cash_shift_id'    => null, // Evita recalcular o relatório retroativamente
+                Transaction::create([
+                    'bank_account_id'  => 1,
+                    'cash_shift_id'    => null,
                     'type'             => $isShortage ? 'out' : 'in',
                     'category'         => $isShortage ? 'bleed' : 'supply',
                     'amount'           => $amount,
@@ -190,78 +351,44 @@ class ShiftCashierService
                     'transaction_date' => $closedAt,
                 ]);
 
-                \Illuminate\Support\Facades\Log::warning("⚠️ [ShiftCashierService] Quebra de caixa registrada no Turno #{$shift->id}: {$label} de R$ {$amount} no Cofre (#1).");
+                Log::warning("🚨 [ShiftCashierService] Quebra definitiva registada no Turno #{$shift->id}: {$label} de R$ {$amount}.");
             }
         });
 
         try {
             broadcast(new ShiftClosed($shift));
-        } catch (\Throwable $e) {
-            Log::error("🚨 [ShiftCashierService] Falha ao transmitir evento ShiftClosed: " . $e->getMessage());
-        }
+        } catch (\Throwable $e) {}
 
+        // Impressão térmica com indicação expressa de quebras e correções
         try {
-            $cashierPrinter = Printer::where('is_cashier', true)
-                ->where('is_active', true)
-                ->first()
+            $cashierPrinter = Printer::where('is_cashier', true)->where('is_active', true)->first()
                 ?? Printer::where('is_active', true)->first();
 
             if ($cashierPrinter) {
                 $report = new ShiftClosureReport($shift);
                 $this->printDispatcher->dispatch($cashierPrinter, $report);
-                Log::info("🖨️ [ShiftCashierService] Relatório do Turno #{$shift->id} enviado para a impressora [{$cashierPrinter->name}].");
-            } else {
-                Log::notice("⚠️ [ShiftCashierService] Nenhuma impressora de caixa ativa encontrada para o Turno #{$shift->id}.");
             }
         } catch (\Throwable $e) {
-            Log::warning("⚠️ [ShiftCashierService] Falha ao imprimir relatório de fechamento do Turno #{$shift->id}: " . $e->getMessage());
+            Log::warning("⚠️ Falha ao imprimir relatório de fecho: " . $e->getMessage());
         }
 
         try {
-            $affected = app(\App\Services\RestaurantOps\WmsRestockService::class)->syncPendingConsumptionToShelf($shift->id);
-            Log::info("📦 [WmsRestock] Consumo de prateleira consolidado no Turno #{$shift->id} ({$affected} regras atualizadas).");
-        } catch (\Throwable $e) {
-            Log::error("🚨 [WmsRestock] Falha ao sincronizar reposição no fechamento do Turno #{$shift->id}: " . $e->getMessage());
-        }
-
-        $tenantId = $tenant?->id ?? (function_exists('tenant') && tenant() ? tenant('id') : null);
-        $options = ['--on-shift-close' => true];
-
-        if ($tenantId) {
-            $options['--tenant'] = $tenantId;
-        }
-
-        try {
-            Artisan::call('erp:process-abandoned-carts', $options);
-        } catch (\Throwable $e) {
-            Log::error("🚨 [ShiftCashierService] Falha ao purgar comandas no fechamento do caixa: " . $e->getMessage());
-        } finally {
-            if ($tenant && (!function_exists('tenant') || !tenant())) {
-                tenancy()->initialize($tenant);
-            }
-        }
-
-        Log::info("🏁 [ShiftCashierService] Turno #{$shift->id} fechado pelo operador [{$operatorName}]. Ciclo completo.");
+            app(\App\Services\RestaurantOps\WmsRestockService::class)->syncPendingConsumptionToShelf($shift->id);
+        } catch (\Throwable $e) {}
 
         return $shift;
-    }
-
-    public function closeShiftWithCleanup(CashShift $shift, array $data, int $operatorId, string $operatorName): CashShift
-    {
-        return $this->closeShift($shift, $data, $operatorId, $operatorName);
     }
 
     public function recordTransaction(array $data, string $operatorName): Transaction
     {
         $shift = CashShift::where('status', 'open')->first();
-
         if (!$shift) {
-            throw new \Exception('Nenhum turno aberto para registrar a movimentação.');
+            throw new \Exception('Nenhum turno aberto.');
         }
 
         $typeLabel = $data['type'] === 'out' ? 'Sangria' : 'Suprimento';
 
-        $transaction = Transaction::create([
+        return Transaction::create([
             'cash_shift_id'   => $shift->id,
             'bank_account_id' => $shift->bank_account_id,
             'type'            => $data['type'],
@@ -271,140 +398,5 @@ class ShiftCashierService
             'operator_name'   => $operatorName,
             'transaction_date'=> now(),
         ]);
-
-        Log::info("💸 [ShiftCashierService] Movimentação avulsa ({$data['type']}) de R$ {$data['amount']} registrada no Turno #{$shift->id}.");
-
-        return $transaction;
-    }
-
-    public function authorizeSupervisorPin(string $pin, ?User $currentUser = null): bool
-    {
-        $checkHashOrPlain = function (string $input, ?string $hashCandidate): bool {
-            if (empty($hashCandidate)) return false;
-            if (str_starts_with($hashCandidate, '$2y$') || str_starts_with($hashCandidate, '$2a$') || str_starts_with($hashCandidate, '$2b$')) {
-                try {
-                    return Hash::check($input, $hashCandidate);
-                } catch (\Throwable) {
-                    return false;
-                }
-            }
-            return hash_equals((string) $hashCandidate, (string) $input);
-        };
-
-        if ($currentUser && ($checkHashOrPlain($pin, $currentUser->pin) || $checkHashOrPlain($pin, $currentUser->password))) {
-            return true;
-        }
-
-        $managers = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['admin', 'gerente', 'manager']))->get();
-
-        foreach ($managers as $manager) {
-            if ($checkHashOrPlain($pin, $manager->pin) || $checkHashOrPlain($pin, $manager->password)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public function refundAndCancelOrder(Order $order): void
-    {
-        foreach ($order->payments as $payment) {
-            $this->rollbackPayment($order, $payment->id);
-        }
-
-        $order->update([
-            'status'         => 'cancelled',
-            'payment_status' => 'cancelled',
-        ]);
-    }
-
-    public function rollbackPayment(Order $order, int|string $paymentId): Payment
-    {
-        return DB::transaction(function () use ($order, $paymentId) {
-            /** @var Payment $payment */
-            $payment = $order->payments()->with(['transaction', 'items'])->findOrFail($paymentId);
-
-            try {
-                if ($payment->relationLoaded('transaction') && $payment->transaction) {
-                    $payment->transaction->delete();
-                } else {
-                    Transaction::where('order_id', $order->id)
-                        ->where('payment_id', $payment->id)
-                        ->delete();
-                }
-            } catch (\Throwable $e) {
-                Transaction::where('order_id', $order->id)
-                    ->where('payment_id', $payment->id)
-                    ->delete();
-            }
-
-            if ($payment->items && $payment->items->isNotEmpty()) {
-                foreach ($payment->items as $item) {
-                    $pivotQty = (float) ($item->pivot->quantity ?? 1);
-                    $pivotAmount = (float) ($item->pivot->amount ?? 0);
-
-                    $item->paid_qty = max(0, round((float) ($item->paid_qty ?? 0) - $pivotQty, 4));
-                    $item->save();
-
-                    if ($item->parent_item_id) {
-                        $parent = OrderItem::find($item->parent_item_id);
-                        if ($parent && (float) ($parent->total_price ?? 0) > 0) {
-                            $proportionalDecrease = ($pivotAmount / (float) $parent->total_price) * (float) ($parent->quantity ?? 1);
-                            $parent->paid_qty = max(0, round((float) ($parent->paid_qty ?? 0) - $proportionalDecrease, 4));
-                            $parent->save();
-                        }
-                    }
-
-                    $subItems = OrderItem::where('parent_item_id', $item->id)->get();
-                    if ($subItems->isNotEmpty() && (float) ($item->quantity ?? 1) > 0) {
-                        $ratio = $pivotQty / (float) $item->quantity;
-                        foreach ($subItems as $sub) {
-                            $subDecrease = (float) ($sub->quantity ?? 1) * $ratio;
-                            $sub->paid_qty = max(0, round((float) ($sub->paid_qty ?? 0) - $subDecrease, 4));
-                            $sub->save();
-                        }
-                    }
-                }
-            } else {
-                $remainingPaymentsCount = $order->payments()->where('id', '!=', $payment->id)->count();
-                if ($remainingPaymentsCount === 0) {
-                    $order->items()->update(['paid_qty' => 0]);
-                }
-            }
-
-            if (method_exists($payment, 'items')) {
-                $payment->items()->detach();
-            }
-            $payment->delete();
-
-            $totalPaid = (float) $order->payments()->sum('amount');
-            $totalOrder = (float) $order->total;
-
-            if ($totalPaid <= 0.01) {
-                $order->payment_status = 'pending';
-                if (in_array($order->status, ['closed', 'completed'])) {
-                    $order->status = 'pending';
-                    if (true) {
-                        $order->closed_at = null;
-                    }
-                }
-            } elseif ($totalPaid < ($totalOrder - 0.01)) {
-                $order->payment_status = 'partial';
-                if (in_array($order->status, ['closed', 'completed'])) {
-                    $order->status = 'pending';
-                    if (true) {
-                        $order->closed_at = null;
-                    }
-                }
-            } else {
-                $order->payment_status = 'paid';
-            }
-
-            $order->save();
-
-            Log::info("↩️ [PaymentRollback] Pagamento #{$paymentId} do Pedido #{$order->id} estornado com integridade contábil e proporcional.");
-
-            return $payment;
-        });
     }
 }

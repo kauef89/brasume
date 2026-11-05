@@ -309,4 +309,52 @@ class CashierController extends Controller
             return back()->withErrors(['error' => $e->getMessage()]);
         }
     }
+
+    /**
+     * 🔍 Diagnóstico pré-fecho: inspeciona anomalias antes de fechar o turno
+     */
+    public function inspectDiscrepancy(Request $request, ShiftCashierService $cashierService)
+    {
+        $shift = CashShift::where('status', 'open')->latest('opened_at')->first();
+        if (!$shift) {
+            return response()->json(['error' => 'Nenhum turno aberto.'], 404);
+        }
+
+        $actualCash = (float) $request->input('amount', 0);
+        $diagnostic = $cashierService->diagnoseDiscrepancy($shift, $actualCash);
+
+        return response()->json($diagnostic);
+    }
+
+    /**
+     * 🔧 Aplica a correção do meio de pagamento sugerido
+     */
+    public function fixPaymentMethod(Request $request, ShiftCashierService $cashierService)
+    {
+        $validated = $request->validate([
+            'payment_id' => 'required|integer|exists:payments,id',
+            'new_method_id' => 'required|integer|exists:payment_methods,id',
+        ]);
+
+        $shift = CashShift::where('status', 'open')->latest('opened_at')->first();
+        if (!$shift) {
+            return response()->json(['error' => 'Nenhum turno aberto.'], 404);
+        }
+
+        $operator = $this->getOperator();
+        $operatorName = $operator?->name ?? 'Operador';
+
+        try {
+            $result = $cashierService->applyDiscrepancyCorrection(
+                $shift,
+                (int) $validated['payment_id'],
+                (int) $validated['new_method_id'],
+                $operatorName
+            );
+
+            return response()->json($result);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+    }
 }
