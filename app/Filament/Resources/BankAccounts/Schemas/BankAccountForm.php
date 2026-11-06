@@ -2,29 +2,32 @@
 
 namespace App\Filament\Resources\BankAccounts\Schemas;
 
-
-use App\Enums\BankAccountType;use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Grid;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\CheckboxList;
-use Filament\Schemas\Components\Utilities\Get;
+use App\Enums\BankAccountType;
 use App\Support\BankList;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Validation\Rules\Unique;
+use Filament\Schemas\Schema;
 
 class BankAccountForm
 {
+    protected static function isBankingAccount($type): bool
+    {
+        $val = $type instanceof \BackedEnum ? $type->value : (string) $type;
+        return in_array($val, ['checking', 'savings', 'Conta Corrente', 'Conta Poupança']);
+    }
+
     public static function getFormSchema(): array
     {
         return [
             Tabs::make("Tabs")
                 ->tabs([
-                    // ==========================================
-                    // ABA 1: DETALHES DA CONTA
-                    // ==========================================
                     Tabs\Tab::make("Detalhes da Conta")->schema([
                         Grid::make(3)->schema([
                             TextInput::make("name")
@@ -46,23 +49,11 @@ class BankAccountForm
                                 ->options(BankList::all())
                                 ->searchable()
                                 ->preload()
-                                ->visible(fn(Get $get) => $get("type") !== "vault")
-                                ->columnSpan(1),
-
-                            TextInput::make("agency")
-                                ->label("Agência")
-                                ->placeholder("Ex: 0001")
-                                ->visible(fn(Get $get) => in_array($get("type"), ["checking", "savings"]))
-                                ->columnSpan(1),
-
-                            TextInput::make("account_number")
-                                ->label("Número da Conta")
-                                ->placeholder("Ex: 12345-6")
-                                ->visible(fn(Get $get) => in_array($get("type"), ["checking", "savings"]))
+                                ->visible(fn(Get $get) => ($get("type") instanceof \BackedEnum ? $get("type")->value : $get("type")) !== "vault")
                                 ->columnSpan(1),
 
                             TextInput::make("initial_balance")
-                                ->label(fn(Get $get) => $get("type") === 'credit_card' ? 'Limite do Cartão' : 'Saldo Inicial')
+                                ->label(fn(Get $get) => ($get("type") instanceof \BackedEnum ? $get("type")->value : $get("type")) === 'credit_card' ? 'Limite do Cartão' : 'Saldo Inicial')
                                 ->numeric()
                                 ->prefix('R$')
                                 ->default(0)
@@ -74,13 +65,52 @@ class BankAccountForm
                                 ->inline(false)
                                 ->columnSpan(1),
                         ]),
+
+                        Section::make("Dados Bancários & Convênio CNAB 240")
+                            ->visible(fn(Get $get) => self::isBankingAccount($get("type")))
+                            ->schema([
+                                Grid::make(4)->schema([
+                                    TextInput::make("agency")
+                                        ->label("Agência / Cooperativa")
+                                        ->placeholder("Ex: 2602")
+                                        ->maxLength(5)
+                                        ->required(),
+
+                                    TextInput::make("agency_digit")
+                                        ->label("Dígito Agência")
+                                        ->placeholder("Ex: 0")
+                                        ->maxLength(2)
+                                        ->helperText("Deixe em branco se a agência não possuir dígito."),
+
+                                    TextInput::make("account_number")
+                                        ->label("Conta Corrente")
+                                        ->placeholder("Ex: 38777")
+                                        ->maxLength(12)
+                                        ->required(),
+
+                                    TextInput::make("account_digit")
+                                        ->label("Dígito Conta")
+                                        ->placeholder("Ex: 0")
+                                        ->maxLength(2)
+                                        ->required(),
+                                ]),
+
+                                Grid::make(2)->schema([
+                                    TextInput::make('agreement_number')
+                                        ->label('Código do Convênio (CNAB 240)')
+                                        ->placeholder('Informe o código alfanumérico fornecido pelo banco')
+                                        ->maxLength(20)
+                                        ->helperText('Obrigatório para emissão de Folha (Sicredi / Sicoob).'),
+
+                                    TextInput::make('pix_key')
+                                        ->label('Chave PIX da Conta')
+                                        ->placeholder('Ex: CNPJ ou E-mail da conta'),
+                                ]),
+                            ]),
                     ]),
 
-                    // ==========================================
-                    // ABA 2: TAXAS E RECEBIMENTOS
-                    // ==========================================
                     Tabs\Tab::make("Taxas e Adquirentes")
-                        ->visible(fn(Get $get) => in_array($get("type"), ["checking", "savings"]))
+                        ->visible(fn(Get $get) => self::isBankingAccount($get("type")))
                         ->schema([
                             Section::make("Taxas de Operação")
                                 ->description("Percentuais descontados pela maquininha/adquirente")
@@ -105,7 +135,7 @@ class BankAccountForm
                                 Select::make("anticipation_strategy")
                                     ->label("Estratégia de Antecipação")
                                     ->options([
-                                        "none" => "Não Antecipar (Receber no prazo original)",
+                                        "none"      => "Não Antecipar (Receber no prazo original)",
                                         "automatic" => "Antecipação Automática (Todo dia)",
                                         "scheduled" => "Agendada (Dias específicos da semana)",
                                     ])
@@ -116,7 +146,7 @@ class BankAccountForm
                                     ->label("Dias da semana autorizados")
                                     ->options(['monday' => 'Seg.', 'tuesday' => 'Ter.', 'wednesday' => 'Qua.', 'thursday' => 'Qui.', 'friday' => 'Sex.'])
                                     ->columns(5)
-                                    ->visible(fn(Get $get) => $get("anticipation_strategy") === "scheduled"),
+                                    ->visible(fn(Get $get) => ($get("anticipation_strategy") instanceof \BackedEnum ? $get("anticipation_strategy")->value : $get("anticipation_strategy")) === "scheduled"),
                             ]),
                         ]),
                 ])
@@ -124,8 +154,8 @@ class BankAccountForm
         ];
     }
 
-    public static function configure(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
-        {
-            return $schema->schema(self::getFormSchema());
-        }
+    public static function configure(Schema $schema): Schema
+    {
+        return $schema->schema(self::getFormSchema());
+    }
 }

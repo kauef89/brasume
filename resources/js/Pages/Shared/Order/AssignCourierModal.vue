@@ -16,7 +16,9 @@
 
             <div class="flex flex-col">
                 <h2 class="text-xl font-black text-surface-text leading-tight">Atribuir Entregador</h2>
-                <span v-if="mode === 'inline'" class="text-[10px] font-black uppercase tracking-widest text-primary-500 mt-0.5">Vincular ao Pedido</span>
+                <span v-if="order?.address?.neighborhood" class="text-[10px] font-black uppercase tracking-widest text-primary-500 mt-0.5">
+                    Destino: {{ order.address.neighborhood }}
+                </span>
             </div>
         </div>
 
@@ -31,15 +33,23 @@
             >
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-                         :class="order?.driver_id === courier.id ? 'bg-primary-500 text-white shadow-sm' : 'bg-surface-2 border border-surface-border text-surface-muted'">
+                         :class="(order?.driver_id === courier.id || order?.courier_id === courier.id) ? 'bg-primary-500 text-white shadow-sm' : 'bg-surface-2 border border-surface-border text-surface-muted'">
                         <i class="pi pi-truck text-sm"></i>
                     </div>
-                    <div class="flex flex-col flex-1">
-                        <span class="font-black text-sm text-surface-text">{{ abbreviateName(courier.name) }}</span>
-                        <span v-if="mode === 'inline'" class="text-[10px] font-bold text-surface-muted">{{ courier.phone || 'Sem número' }}</span>
+                    <div class="flex flex-col flex-1 min-w-0">
+                        <span class="font-black text-sm text-surface-text truncate">{{ abbreviateName(courier.name) }}</span>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <span class="text-[10px] font-bold text-surface-muted">
+                                {{ courier.courier_payment_model === 'distance' ? 'Por Km' : (courier.courier_payment_model === 'neighborhood' ? 'Por Bairro' : 'Taxa Fixa') }}
+                            </span>
+                            <span v-if="courier.default_delivery_fee > 0" class="text-[10px] font-black text-success-smart">
+                                R$ {{ Number(courier.default_delivery_fee).toFixed(2).replace('.', ',') }}
+                            </span>
+                        </div>
                     </div>
                 </div>
-                <i v-if="order?.driver_id === courier.id" class="pi pi-check text-primary-500 text-lg"></i>
+
+                <i v-if="order?.driver_id === courier.id || order?.courier_id === courier.id" class="pi pi-check text-primary-500 text-lg"></i>
             </button>
 
             <div v-if="couriers.length === 0" class="text-center p-4 rounded-xl text-xs font-bold"

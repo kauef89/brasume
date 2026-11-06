@@ -4,13 +4,18 @@ namespace App\Http\Controllers\Tenant\Orders;
 
 use App\Http\Controllers\Controller;
 use App\Models\DiningTable;
+use App\Models\Employee;
 use App\Models\Order;
+use App\Services\Orders\CourierSettlementService;
 use App\Services\Orders\OrderLogisticsService;
 use Illuminate\Http\Request;
 
 class OrderLogisticsController extends Controller
 {
-    public function __construct(protected OrderLogisticsService $logisticsService) {}
+    public function __construct(
+        protected OrderLogisticsService $logisticsService,
+        protected CourierSettlementService $courierSettlementService
+    ) {}
 
     public function transform(Order $order, Request $request)
     {
@@ -25,7 +30,6 @@ class OrderLogisticsController extends Controller
             'customer_name'   => 'nullable|string',
         ]);
 
-        // 🚀 Normalização canônica da Mesa
         $tableId = $validated['dining_table_id'] ?? $validated['table_id'] ?? null;
 
         if ($tableId) {
@@ -62,12 +66,29 @@ class OrderLogisticsController extends Controller
     public function assignCourier(Order $order, Request $request)
     {
         $validated = $request->validate([
-            'driver_id' => 'required|integer|exists:users,id',
+            'driver_id'            => 'required|integer|exists:users,id',
+            'delivery_distance_km' => 'nullable|numeric|min:0',
         ]);
 
         try {
-            $this->logisticsService->assignCourier($order, (int) $validated['driver_id']);
-            return back()->with('success', 'Entregador atribuído com sucesso!');
+            $userId = (int) $validated['driver_id'];
+
+            // 1. Atualização via serviço de logística operacional existente
+            $this->logisticsService->assignCourier($order, $userId);
+
+            // 2. Localiza o registo de Employee correspondente ao User
+            $courier = Employee::where('user_id', $userId)->first()
+                ?? Employee::where('id', $userId)->first();
+
+            if ($courier) {
+                if (isset($validated['delivery_distance_km'])) {
+                    $order->delivery_distance_km = (float) $validated['delivery_distance_km'];
+                }
+
+                $this->courierSettlementService->assignCourier($order, $courier);
+            }
+
+            return back()->with('success', 'Entregador atribuído e taxa fixada com sucesso!');
         } catch (\Exception $e) {
             return back()->withErrors(['driver_id' => $e->getMessage()]);
         }

@@ -2,17 +2,28 @@
 
 namespace App\Models;
 
+use App\Enums\CourierPaymentModel;
 use App\Enums\EmployeeRole;
 use App\Enums\EmploymentType;
 use App\Enums\PaymentCycle;
+use App\Models\AccountPayable;
+use App\Models\Customer;
+use App\Models\EmployeeLedger;
+use App\Models\EmployeeSchedule;
+use App\Models\EmployeeVacation;
+use App\Models\Kitchen;
+use App\Models\Order;
+use App\Models\Payslip;
+use App\Models\ShiftAttendance;
+use App\Models\User;
 use App\Observers\EmployeeObserver;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[ObservedBy([EmployeeObserver::class])]
 class Employee extends Model
@@ -24,6 +35,7 @@ class Employee extends Model
     protected $appends = [
         'meal_allowance',
         'active_roles',
+        'is_courier',
     ];
 
     protected $casts = [
@@ -37,6 +49,21 @@ class Employee extends Model
         'receives_night_premium' => 'boolean',
         'receives_hazard_pay'    => 'boolean',
         'food_allowance_amount'  => 'decimal:2',
+
+        // Regras de Remuneração e Logística do Motoboy
+        'courier_payment_model'  => CourierPaymentModel::class,
+        'daily_fee'              => 'decimal:2',
+        'default_delivery_fee'   => 'decimal:2',
+        'fee_per_km'             => 'decimal:2',
+        'minimum_guaranteed'     => 'decimal:2',
+    ];
+
+    protected $attributes = [
+        'courier_payment_model' => 'fixed',
+        'daily_fee'             => 0.00,
+        'default_delivery_fee'  => 0.00,
+        'fee_per_km'            => 0.00,
+        'minimum_guaranteed'    => 0.00,
     ];
 
     /**
@@ -58,6 +85,35 @@ class Employee extends Model
         return $this->getAllRoles();
     }
 
+    public function isCourier(): bool
+    {
+        $roles = $this->getAllRoles();
+        $target = EmployeeRole::COURIER->value ?? 'courier';
+        
+        return in_array($target, $roles, true)
+            || in_array('courier', $roles, true)
+            || in_array('motoboy', $roles, true)
+            || in_array('driver', $roles, true);
+    }
+
+    public function getIsCourierAttribute(): bool
+    {
+        return $this->isCourier();
+    }
+
+    public function isClt(): bool
+    {
+        return $this->employment_type === EmploymentType::CLT;
+    }
+
+    public function isFreelancer(): bool
+    {
+        return in_array($this->employment_type, [
+            EmploymentType::FREELANCER,
+            EmploymentType::FREELANCE_FIXED,
+        ], true);
+    }
+
     /**
      * Teto de vale-alimentação.
      */
@@ -65,6 +121,10 @@ class Employee extends Model
     {
         return (float) ($this->attributes['meal_allowance'] ?? $this->food_allowance_amount ?? 0);
     }
+
+    // =========================================================================
+    // RELACIONAMENTOS
+    // =========================================================================
 
     public function customer(): HasOne
     {
@@ -86,9 +146,6 @@ class Employee extends Model
         return $this->hasMany(EmployeeLedger::class);
     }
 
-    /**
-     * Holerites / Recibos de Pagamento (Exigido pelo PayslipsRelationManager no Filament)
-     */
     public function payslips(): HasMany
     {
         return $this->hasMany(Payslip::class);
@@ -119,6 +176,26 @@ class Employee extends Model
         return $this->hasMany(Order::class);
     }
 
+    /**
+     * Corridas / Entregas atribuídas a este motoboy
+     */
+    public function deliveries(): HasMany
+    {
+        return $this->hasMany(Order::class, 'courier_id');
+    }
+
+    /**
+     * Registros de presença em turnos de caixa
+     */
+    public function attendances(): HasMany
+    {
+        return $this->hasMany(ShiftAttendance::class, 'employee_id');
+    }
+
+    // =========================================================================
+    // ACESSORES DE REMUNERAÇÃO
+    // =========================================================================
+
     public function getMonthlySalaryAttribute(): float
     {
         return in_array($this->employment_type, [
@@ -131,5 +208,18 @@ class Employee extends Model
         return in_array($this->employment_type, [
             EmploymentType::FREELANCER, EmploymentType::FREELANCE_FIXED
         ]) ? (float) $this->base_remuneration : 0.0;
+    }
+
+    // =========================================================================
+    // SCOPES
+    // =========================================================================
+
+    public function scopeCouriers($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('role', EmployeeRole::COURIER->value ?? 'courier')
+              ->orWhere('role', 'courier')
+              ->orWhereJsonContains('secondary_roles', 'courier');
+        });
     }
 }

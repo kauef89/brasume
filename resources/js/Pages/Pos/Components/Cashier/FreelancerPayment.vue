@@ -3,7 +3,7 @@
         <!-- HEADER DO PAINEL -->
         <div class="h-14 px-6 border-b border-surface-border flex items-center justify-between shrink-0">
             <h3 class="font-black text-sm uppercase tracking-widest text-surface-text flex items-center gap-2">
-                <i class="pi pi-wallet text-primary-500"></i> Acerto de Diária
+                <i class="pi pi-wallet text-primary-500"></i> Acerto de Diária & Corridas
             </h3>
 
             <div class="flex items-center gap-2">
@@ -63,7 +63,7 @@
                             class="flex-1 py-1.5 px-2 rounded-lg font-black text-[10px] uppercase tracking-wider transition-colors border outline-none cursor-pointer"
                             :class="activePreset === 'full_rate' ? 'bg-primary-500 text-white border-primary-500' : 'bg-surface-1 text-surface-muted hover:text-surface-text border-surface-border'"
                         >
-                            Diária Cheia (Rolar Consumo)
+                            Diária/Corridas (Rolar Consumo)
                         </button>
                         <button
                             type="button"
@@ -77,11 +77,12 @@
 
                     <!-- BLOCOS DE CONFERÊNCIA POR TURNO -->
                     <div class="flex flex-col gap-3 pt-2">
+
                         <!-- 1. BLOCO: SERVIÇOS / DIÁRIA -->
                         <div class="bg-surface-1/80 border border-surface-border/70 rounded-xl p-3 flex flex-col gap-2 shadow-xs">
                             <div class="flex items-center justify-between">
                                 <span class="text-[10px] font-black uppercase tracking-wider text-primary-600 dark:text-primary-400 flex items-center gap-1.5">
-                                    <i class="pi pi-briefcase text-xs"></i> 1. Serviços e Honorários
+                                    <i class="pi pi-briefcase text-xs"></i> 1. Diária Fixa de Presença
                                 </span>
                                 <span class="text-[10px] font-bold text-surface-muted">Turno {{ shiftDateLabel }}</span>
                             </div>
@@ -110,11 +111,41 @@
                             </div>
                         </div>
 
-                        <!-- 2. BLOCO: EXCEDENTE DE LANCHE (SE HOUVER) -->
+                        <!-- 2. BLOCO EXCLUSIVO: PRODUÇÃO DE CORRIDAS (MOTOBOY) -->
+                        <div v-if="courierData?.deliveries_count > 0" class="bg-surface-1/80 border border-primary-500/30 rounded-xl p-3 flex flex-col gap-2 shadow-xs">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] font-black uppercase tracking-wider text-primary-500 flex items-center gap-1.5">
+                                    <i class="pi pi-truck text-xs"></i> 2. Produção de Entregas ({{ courierData.deliveries_count }} corridas)
+                                </span>
+                                <span v-if="courierData.minimum_guaranteed > 0" class="text-[9px] font-bold text-surface-muted">
+                                    Piso: {{ $formatCurrency(courierData.minimum_guaranteed) }}
+                                </span>
+                            </div>
+
+                            <div class="flex items-center justify-between p-2 rounded-lg bg-surface-2/60 border border-surface-border/50">
+                                <span class="text-xs font-bold text-surface-text">Total Repassado das Corridas</span>
+                                <span class="text-xs font-black text-success-500">
+                                    + {{ $formatCurrency(courierData.total_deliveries_fee) }}
+                                </span>
+                            </div>
+
+                            <!-- CONFERÊNCIA DE NUMERÁRIO DA RUA -->
+                            <div v-if="courierData.cash_collected > 0" class="flex items-center justify-between p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                <div class="flex flex-col">
+                                    <span class="text-xs font-black text-amber-700 dark:text-amber-400">Numerário em Mãos (Rua)</span>
+                                    <span class="text-[10px] text-surface-muted">Recebido dos clientes para entregar ao caixa</span>
+                                </div>
+                                <span class="text-xs font-black text-amber-600">
+                                    {{ $formatCurrency(courierData.cash_collected) }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- 3. BLOCO: EXCEDENTE DE LANCHE (SE HOUVER) -->
                         <div v-if="excedenteItems.length > 0" class="bg-surface-1/80 border border-surface-border/70 rounded-xl p-3 flex flex-col gap-2 shadow-xs">
                             <div class="flex items-center justify-between">
                                 <span class="text-[10px] font-black uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
-                                    <i class="pi pi-sparkles text-xs"></i> 2. Excedente de Lanche da Equipe
+                                    <i class="pi pi-sparkles text-xs"></i> 3. Excedente de Lanche da Equipe
                                 </span>
                                 <span class="text-[9px] text-surface-muted font-bold">Ultrapassou teto de benefício</span>
                             </div>
@@ -151,11 +182,11 @@
                             </div>
                         </div>
 
-                        <!-- 3. BLOCO: CONSUMO BALCÃO / PESSOAL (SE HOUVER) -->
+                        <!-- 4. BLOCO: CONSUMO BALCÃO / PESSOAL (SE HOUVER) -->
                         <div v-if="balcaoItems.length > 0" class="bg-surface-1/80 border border-surface-border/70 rounded-xl p-3 flex flex-col gap-2 shadow-xs">
                             <div class="flex items-center justify-between">
                                 <span class="text-[10px] font-black uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
-                                    <i class="pi pi-shopping-bag text-xs"></i> 3. Consumo Balcão (Itens Pessoais)
+                                    <i class="pi pi-shopping-bag text-xs"></i> 4. Consumo Balcão (Itens Pessoais)
                                 </span>
                                 <span class="text-[9px] text-surface-muted font-bold">Compras avulsas / Saída</span>
                             </div>
@@ -201,7 +232,7 @@
                         </span>
                     </div>
 
-                    <!-- TOTALIZADORES: A PAGAR AGORA VS ROLADO P/ O FUTURO -->
+                    <!-- TOTALIZADORES -->
                     <div class="pt-3 border-t border-surface-border flex flex-col gap-2.5">
                         <div class="flex items-center justify-between bg-surface-1 p-2.5 rounded-xl border border-surface-border text-xs">
                             <span class="font-bold text-surface-muted uppercase text-[10px]">Saldo Rolado para Próximo Turno:</span>
@@ -212,7 +243,7 @@
 
                         <div class="flex items-center justify-between bg-primary-500/10 p-3 rounded-xl border border-primary-500/20">
                             <label class="text-[11px] font-black text-primary-700 dark:text-primary-400 uppercase tracking-wider">
-                                Valor a Pagar Agora
+                                Valor a Liquidar Agora
                             </label>
                             <div class="flex items-center gap-2">
                                 <div class="relative w-32">
@@ -228,7 +259,7 @@
                     </div>
                 </div>
 
-                <!-- PASSO 1: SELEÇÃO DA ORIGEM / GAVETA OU PIX -->
+                <!-- PASSO 1: SELEÇÃO DA ORIGEM -->
                 <div v-if="step === 'method'" class="flex-1 flex flex-col animate-in fade-in slide-in-from-left-4 duration-300">
                     <p class="text-xs font-bold uppercase tracking-wider text-surface-muted text-center my-2">
                         {{ localPaidAmount === 0 ? 'Ação de Fechamento:' : 'Selecione a fonte do pagamento:' }}
@@ -322,8 +353,11 @@ const payoutData = ref({
     consumption_amount: 0,
     net_amount: 0,
     ledger_history: [],
+    courier_details: null,
     user: {}
 });
+
+const courierData = computed(() => payoutData.value.courier_details);
 
 const shiftDateLabel = ref('');
 const serviceItem = ref({
@@ -334,55 +368,55 @@ const serviceItem = ref({
 });
 const rawConsumptionItems = ref([]);
 
-// Itens categorizados
-const excedenteItems = computed(() => {
-    return rawConsumptionItems.value.filter(i => i.category === 'excedente');
-});
+const excedenteItems = computed(() => rawConsumptionItems.value.filter(i => i.category === 'excedente'));
+const balcaoItems = computed(() => rawConsumptionItems.value.filter(i => i.category === 'balcao'));
 
-const balcaoItems = computed(() => {
-    return rawConsumptionItems.value.filter(i => i.category === 'balcao');
-});
-
-// Itens selecionados para liquidação AGORA
 const settledItems = computed(() => {
     const list = [];
     if (serviceItem.value.selected && serviceItem.value.amount > 0) {
         list.push({ ...serviceItem.value });
     }
+    if (courierData.value?.total_deliveries_fee > 0) {
+        list.push({
+            id: 'courier_deliveries',
+            title: `Produção de Entregas (${courierData.value.deliveries_count} corridas)`,
+            amount: courierData.value.total_deliveries_fee,
+            type: 'service',
+            category: 'courier'
+        });
+    }
     rawConsumptionItems.value.forEach(item => {
-        if (item.selected) {
-            list.push({ ...item });
-        }
+        if (item.selected) list.push({ ...item });
     });
     return list;
 });
 
-// Itens que serão ROLADOS para o próximo turno
 const rolledItems = computed(() => {
     const list = [];
     if (!serviceItem.value.selected && serviceItem.value.amount > 0) {
         list.push({ ...serviceItem.value, title: `${serviceItem.value.title} (Rolada)` });
     }
     rawConsumptionItems.value.forEach(item => {
-        if (!item.selected) {
-            list.push({ ...item, title: `${item.title} (Rolado)` });
-        }
+        if (!item.selected) list.push({ ...item, title: `${item.title} (Rolado)` });
     });
     return list;
 });
 
-// Cálculo em tempo real do que deve ser pago agora
 const calculatedNow = computed(() => {
     const serviceAmt = serviceItem.value.selected ? (serviceItem.value.amount || 0) : 0;
+    const deliveriesAmt = courierData.value?.total_deliveries_fee || 0;
+    const minGuaranteed = courierData.value?.minimum_guaranteed || 0;
+
+    const gross = Math.max(serviceAmt + deliveriesAmt, minGuaranteed);
+
     const consAmt = rawConsumptionItems.value
         .filter(i => i.selected)
         .reduce((sum, i) => sum + (i.amount || 0), 0);
 
     const prev = payoutData.value.previous_balance || 0;
-    return Math.max(0, prev + serviceAmt - consAmt);
+    return Math.max(0, prev + gross - consAmt);
 });
 
-// Saldo rolado para a próxima vez
 const rolledBalance = computed(() => {
     const rolledServices = !serviceItem.value.selected ? (serviceItem.value.amount || 0) : 0;
     const rolledConsumptions = rawConsumptionItems.value
@@ -392,7 +426,6 @@ const rolledBalance = computed(() => {
     return rolledServices - rolledConsumptions;
 });
 
-// Presets de Ação Rápida
 const applyPreset = (preset) => {
     activePreset.value = preset;
     if (preset === 'all') {
@@ -408,16 +441,16 @@ const applyPreset = (preset) => {
     localPaidAmount.value = calculatedNow.value;
 };
 
-// Sincroniza inputs
 watch(() => props.payoutDetails, (newVal) => {
     if (newVal && Object.keys(newVal).length > 0) {
         payoutData.value = newVal;
         shiftDateLabel.value = newVal.shift_date_label || '';
 
+        const baseDaily = Number(newVal.courier_details?.daily_fee ?? newVal.service_item?.amount ?? newVal.gross_rate ?? 0);
         serviceItem.value = {
             id: newVal.service_item?.id || 'service_rate',
-            title: newVal.service_item?.title || 'Diária de Trabalho',
-            amount: Number(newVal.service_item?.amount ?? newVal.gross_rate ?? 0),
+            title: newVal.courier_details ? 'Diária Fixa do Turno' : (newVal.service_item?.title || 'Diária de Trabalho'),
+            amount: baseDaily,
             selected: true,
             category: 'services',
             type: 'service'

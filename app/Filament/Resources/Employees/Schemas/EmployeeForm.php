@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Employees\Schemas;
 
+use App\Enums\CourierPaymentModel;
 use App\Enums\EmployeeRole;
 use App\Enums\EmploymentType;
 use App\Enums\PaymentCycle;
@@ -16,6 +17,22 @@ use Filament\Schemas\Schema;
 
 class EmployeeForm
 {
+    /**
+     * Auxiliar para checar se o colaborador exerce a função de entregador/motoboy.
+     */
+    protected static function isCourierRole($get): bool
+    {
+        $role = $get('role');
+        $primary = $role instanceof \BackedEnum ? $role->value : (string) $role;
+
+        $secondary = (array) ($get('secondary_roles') ?? []);
+        $secondaryVals = array_map(fn ($r) => $r instanceof \BackedEnum ? $r->value : (string) $r, $secondary);
+
+        $allRoles = array_merge([$primary], $secondaryVals);
+
+        return in_array('courier', $allRoles, true) || in_array('motoboy', $allRoles, true);
+    }
+
     public static function getFormSchema(): array
     {
         return [
@@ -44,12 +61,14 @@ class EmployeeForm
                         ->enum(EmployeeRole::class)
                         ->default(EmployeeRole::WAITER)
                         ->required()
+                        ->live()
                         ->helperText("Define o papel principal do colaborador na escala, turnos e aplicativo de equipe."),
 
                     Select::make("secondary_roles")
                         ->label("Funções Adicionais Habilitadas")
                         ->options(EmployeeRole::class)
                         ->multiple()
+                        ->live()
                         ->helperText("Outras funções que este colaborador tem permissão para cobrir na escala."),
 
                     Toggle::make("is_active")
@@ -75,7 +94,7 @@ class EmployeeForm
                             $val = $type instanceof EmploymentType ? $type->value : (string) $type;
 
                             return match (true) {
-                                str_starts_with($val, 'clt'), $val === 'intern' => 'Salário Base Mensal',
+                                str_starts_with($val, 'clt'), $val === 'intern' => 'Salário Base Mensal (Piso Formal)',
                                 $val === 'partner' => 'Pró-Labore Mensal',
                                 $val === 'pj' => 'Valor do Contrato Mensal',
                                 default => 'Valor por Diária / Turno',
@@ -86,10 +105,9 @@ class EmployeeForm
                             $val = $type instanceof EmploymentType ? $type->value : (string) $type;
 
                             return match (true) {
-                                str_starts_with($val, 'clt'), $val === 'intern', $val === 'partner', $val === 'pj'
-                                    => 'Remuneração fixa mensal base para holerite e provisões.',
-                                default
-                                    => 'Remuneração variável calculada com base nos plantões da escala.',
+                                str_starts_with($val, 'clt') => 'Piso salarial na carteira. Se a produção das corridas superar este valor, a diferença é paga como bonificação.',
+                                $val === 'intern', $val === 'partner', $val === 'pj' => 'Remuneração fixa mensal base para holerite e provisões.',
+                                default => 'Remuneração base diária combinada para os plantões da escala.',
                             };
                         })
                         ->numeric()
@@ -114,6 +132,66 @@ class EmployeeForm
                         }),
                 ])
                 ->columns(2),
+
+            // =========================================================================
+            // SEÇÃO LOGÍSTICA & ENTREGAS (MOTOBOY)
+            // =========================================================================
+            Section::make("Regras de Remuneração Logística (Motoboy)")
+                ->icon("heroicon-o-truck")
+                ->description("Configuração de diária do turno, taxas por corrida e garantias mínimas de produção.")
+                ->visible(fn ($get) => self::isCourierRole($get))
+                ->schema([
+                    Grid::make(3)->schema([
+                        Select::make("courier_payment_model")
+                            ->label("Modelo de Repasse da Corrida")
+                            ->options(CourierPaymentModel::class)
+                            ->enum(CourierPaymentModel::class)
+                            ->default(CourierPaymentModel::FIXED)
+                            ->required()
+                            ->live()
+                            ->helperText("Define a métrica de cálculo das corridas entregues."),
+
+                        TextInput::make("daily_fee")
+                            ->label("Diária Fixa do Turno")
+                            ->numeric()
+                            ->prefix("R$")
+                            ->default(0.00)
+                            ->helperText("Valor fixo pago pela presença no turno/noite (independente de fazer entregas)."),
+
+                        TextInput::make("minimum_guaranteed")
+                            ->label("Garantia Mínima do Turno")
+                            ->numeric()
+                            ->prefix("R$")
+                            ->default(0.00)
+                            ->helperText("Piso garantido na noite se (diária + total de corridas) resultar em valor menor."),
+                    ]),
+
+                    Grid::make(2)->schema([
+                        TextInput::make("default_delivery_fee")
+                            ->label("Taxa Base por Corrida")
+                            ->numeric()
+                            ->prefix("R$")
+                            ->default(0.00)
+                            ->visible(function ($get) {
+                                $model = $get("courier_payment_model");
+                                $val = $model instanceof \BackedEnum ? $model->value : (string) $model;
+                                return in_array($val, ['fixed', 'neighborhood'], true);
+                            })
+                            ->helperText("Valor pago por corrida. Quando o modelo for 'Por Bairro', funciona como fallback para bairros sem repasse cadastrado."),
+
+                        TextInput::make("fee_per_km")
+                            ->label("Valor por Km Rodado")
+                            ->numeric()
+                            ->prefix("R$")
+                            ->default(0.00)
+                            ->visible(function ($get) {
+                                $model = $get("courier_payment_model");
+                                $val = $model instanceof \BackedEnum ? $model->value : (string) $model;
+                                return $val === 'distance';
+                            })
+                            ->helperText("Multiplicado pela distância da rota até o endereço do cliente."),
+                    ]),
+                ]),
 
             Section::make("Dados Bancários & Pagamento")
                 ->icon("heroicon-o-credit-card")
@@ -140,14 +218,14 @@ class EmployeeForm
                         ->visible(fn ($get) => $get("payment_method") === "salary_account")
                         ->schema([
                             TextInput::make("bank_agency")
-                                ->label("Cooperativa Destino (Agência)")
+                                ->label("Agência")
                                 ->placeholder("Ex: 2602")
                                 ->maxLength(4)
                                 ->required(fn ($get) => $get("payment_method") === "salary_account")
-                                ->helperText("Número da cooperativa Sicredi do colaborador."),
+                                ->helperText("Número da agência/cooperativa do colaborador."),
 
                             TextInput::make("bank_account")
-                                ->label("Conta Destino")
+                                ->label("Conta")
                                 ->placeholder("Ex: 38777")
                                 ->maxLength(10)
                                 ->required(fn ($get) => $get("payment_method") === "salary_account")
@@ -162,7 +240,7 @@ class EmployeeForm
                         ])
                         ->columnSpanFull(),
 
-                    // BLOCO 2: CHAVE PIX (OBRIGATÓRIO SE PIX / OPCIONAL COMO RESERVA SE CONTA-SALÁRIO)
+                    // BLOCO 2: CHAVE PIX
                     Grid::make(2)
                         ->visible(fn ($get) => $get("payment_method") !== "cash")
                         ->schema([
@@ -206,7 +284,8 @@ class EmployeeForm
                     ->default(false),
 
                 Toggle::make("receives_hazard_pay")
-                    ->label("Recebe Periculosidade?")
+                    ->label("Recebe Periculosidade (30%)?")
+                    ->helperText("Obrigatório por lei para motoboys em regime CLT.")
                     ->default(false),
 
                 Select::make("kitchens")

@@ -2,14 +2,16 @@
 
 namespace App\Filament\Resources\Payrolls\RelationManagers;
 
+use App\Filament\Resources\Payrolls\Actions\ExportSicrediCnabBulkAction;
 use App\Models\Payslip;
 use Filament\Actions\Action;
-use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\RepeatableEntry;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Grid;
+use Filament\Tables;
+use Filament\Actions\BulkActionGroup;
+use Filament\Tables\Table;
 
 class PayslipsRelationManager extends RelationManager
 {
@@ -61,6 +63,15 @@ class PayslipsRelationManager extends RelationManager
                     ->weight('black')
                     ->color('success')
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('bank_account_display')
+                    ->label('Conta Sicredi')
+                    ->state(fn (Payslip $record) => ($record->employee?->bank_agency && $record->employee?->bank_account)
+                        ? "Ag: {$record->employee->bank_agency} / Cc: {$record->employee->bank_account}-{$record->employee->bank_account_digit}"
+                        : null
+                    )
+                    ->placeholder('Não cadastrada')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('employee.pix_key')
                     ->label('Chave PIX')
@@ -117,6 +128,11 @@ class PayslipsRelationManager extends RelationManager
                             ])
                             ->columns(5),
                     ]),
+            ])
+            ->bulkActions([
+                BulkActionGroup::make([
+                    ExportSicrediCnabBulkAction::make(),
+                ]),
             ]);
     }
 }

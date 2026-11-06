@@ -111,6 +111,7 @@ class EmployeeResource extends Resource
         return [
             LedgersRelationManager::class,
             PayslipsRelationManager::class,
+            \App\Filament\Resources\Employees\RelationManagers\DeliveriesRelationManager::class,
         ];
     }
 

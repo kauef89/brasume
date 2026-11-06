@@ -2,12 +2,26 @@
 
 namespace App\Models;
 
+use App\Models\AcquirerTransaction;
+use App\Models\Address;
+use App\Models\CashShift;
+use App\Models\Coupon;
+use App\Models\Customer;
+use App\Models\DiningTable;
+use App\Models\Employee;
+use App\Models\FiscalDocument;
+use App\Models\Neighborhood;
+use App\Models\OrderItem;
+use App\Models\OrderRating;
+use App\Models\Payment;
+use App\Models\PrintJob;
+use App\Models\Transaction;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use App\Models\AcquirerTransaction;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Order extends Model
 {
@@ -16,7 +30,7 @@ class Order extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'pix_expires_at' => 'datetime',
+        'pix_expires_at'         => 'datetime',
         'address_snapshot'       => 'array',
         'address'                => 'array',
         'payment_intent_methods' => 'array',
@@ -28,6 +42,12 @@ class Order extends Model
         'total'                  => 'decimal:2',
         'created_at'             => 'datetime',
         'updated_at'             => 'datetime',
+
+        // Snapshot e controle financeiro do entregador
+        'courier_fee'            => 'decimal:2',
+        'delivery_distance_km'   => 'decimal:2',
+        'courier_assigned_at'    => 'datetime',
+        'courier_settled_at'     => 'datetime',
     ];
 
     protected $appends = [
@@ -39,6 +59,7 @@ class Order extends Model
 
     protected $attributes = [
         'payment_intent_status' => 'pending_choice',
+        'courier_fee'           => 0.00,
     ];
 
     public const SOURCE_CUSTOMER_APP       = 'customer_app';
@@ -74,6 +95,20 @@ class Order extends Model
     public function addressModel(): BelongsTo
     {
         return $this->deliveryAddress();
+    }
+
+    /**
+     * Retorna o Model Neighborhood vinculado ao endereço de entrega (se existir)
+     */
+    public function getNeighborhoodAttribute(): ?Neighborhood
+    {
+        if ($this->relationLoaded('deliveryAddress') && $this->deliveryAddress) {
+            return $this->deliveryAddress->relationLoaded('neighborhood')
+                ? $this->deliveryAddress->getRelation('neighborhood')
+                : $this->deliveryAddress->neighborhood()->first();
+        }
+
+        return $this->deliveryAddress?->neighborhood()->first();
     }
 
     public function getAddressAttribute($value): ?array
@@ -114,6 +149,17 @@ class Order extends Model
         return $this->belongsTo(Coupon::class);
     }
 
+    /**
+     * Motoboy formal da equipe (perfil RH / operacional)
+     */
+    public function courier(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'courier_id');
+    }
+
+    /**
+     * Usuário motorista (mantido para retrocompatibilidade com telas antigas)
+     */
     public function driver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'driver_id');
@@ -127,33 +173,21 @@ class Order extends Model
         return $this->belongsTo(User::class, 'employee_id');
     }
 
-    /**
-     * Alias semântico para atendente de salão
-     */
     public function waiter(): BelongsTo
     {
         return $this->attendant();
     }
 
-    /**
-     * Alias de retrocompatibilidade com queries existentes (Order::with('employee'))
-     */
     public function employee(): BelongsTo
     {
         return $this->attendant();
     }
 
-    /**
-     * Operador de caixa responsável pelo registo da comanda
-     */
     public function cashier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'cashier_id');
     }
 
-    /**
-     * Accessor para aceder ao perfil formal de RH do atendente (se existir)
-     */
     public function getStaffProfileAttribute(): ?Employee
     {
         if ($this->relationLoaded('attendant') && $this->attendant) {
@@ -189,6 +223,11 @@ class Order extends Model
         return $this->hasOne(FiscalDocument::class)->latestOfMany();
     }
 
+    public function fiscalDocuments(): HasMany
+    {
+        return $this->hasMany(FiscalDocument::class);
+    }
+
     public function rating(): HasOne
     {
         return $this->hasOne(OrderRating::class);
@@ -216,6 +255,16 @@ class Order extends Model
     public function accountReceivables(): HasMany
     {
         return $this->hasMany(AccountReceivable::class);
+    }
+
+    public function acquirerTransactions(): HasMany
+    {
+        return $this->hasMany(AcquirerTransaction::class);
+    }
+
+    public function cashShift(): BelongsTo
+    {
+        return $this->belongsTo(CashShift::class, 'cash_shift_id');
     }
 
     // =========================================================================
@@ -264,18 +313,22 @@ class Order extends Model
         return $this->fiscalDocument?->status;
     }
 
-    public function fiscalDocuments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    // =========================================================================
+    // HELPERS DE ENTREGA / MOTOBOY
+    // =========================================================================
+
+    public function isDelivery(): bool
     {
-        return $this->hasMany(\App\Models\FiscalDocument::class);
+        return !empty($this->address_id) || !empty($this->address_snapshot) || $this->order_type === 'delivery';
     }
 
-    public function cashShift(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function isAssignedToCourier(): bool
     {
-        return $this->belongsTo(CashShift::class, 'cash_shift_id');
+        return !empty($this->courier_id);
     }
 
-    public function acquirerTransactions(): HasMany
+    public function isCourierSettled(): bool
     {
-        return $this->hasMany(AcquirerTransaction::class);
+        return !empty($this->courier_settled_at);
     }
 }
