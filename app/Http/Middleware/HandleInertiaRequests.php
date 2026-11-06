@@ -95,7 +95,7 @@ class HandleInertiaRequests extends Middleware
                     || $request->is('operations*')
                     || $request->is('team*');
 
-                $channel = $isCustomerRoute ? 'delivery' : ($isPosRoute ? 'pos' : 'all');
+                $channel = $isCustomerRoute ? 'customer_app' : ($isPosRoute ? 'pos' : 'all');
 
                 return Cache::remember(
                     'tenant_payment_methods_' . tenant('id') . '_' . $channel,
@@ -105,7 +105,7 @@ class HandleInertiaRequests extends Middleware
                             ->where('engine_type', '!=', 'internal_loyalty');
 
                         if ($isCustomerRoute) {
-                            $query->where('show_on_delivery', true);
+                            $query->where('show_on_customer_app', true);
                         } elseif ($isPosRoute) {
                             $query->where('show_on_pos', true);
                         }

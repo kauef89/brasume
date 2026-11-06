@@ -36,6 +36,14 @@ class RecurringExpense extends Model
     /**
      * @return BelongsTo<Supplier,RecurringExpense>
      */
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * @return BelongsTo<Supplier,RecurringExpense>
+     */
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);

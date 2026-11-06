@@ -2,6 +2,7 @@
 
 namespace App\Services\Marketing;
 
+use App\Enums\PaymentEngineType;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\CompanySetting;
@@ -66,10 +67,15 @@ class LoyaltyService
 
         $customer->save();
 
-        $hasCashbackPayment = $order->payments()->where('method', 'like', '%Cashback%')->exists();
+        $hasCashbackPayment = $order->payments()
+            ->where(function ($query) {
+                $query->whereHas('paymentMethod', function ($q) {
+                    $q->where('engine_type', PaymentEngineType::INTERNAL_LOYALTY->value);
+                })->orWhere('method', 'like', '%Cashback%');
+            })->exists();
 
         if (!$hasCashbackPayment) {
-            $paymentMethod = PaymentMethod::where('engine_type', 'internal_loyalty')->first();
+            $paymentMethod = PaymentMethod::where('engine_type', PaymentEngineType::INTERNAL_LOYALTY->value)->first();
 
             $order->payments()->create([
                 'payment_method_id' => $paymentMethod?->id,
@@ -84,15 +90,43 @@ class LoyaltyService
         $settings = CompanySetting::getCached();
         if (!$settings || !$settings->loyalty_is_active) return;
 
+        // 🛡️ 1. Colaboradores não pontuam em programa de fidelidade comercial
+        if (!empty($customer->employee_id)) {
+            return;
+        }
+
+        // 🛡️ 2. Motores não elegíveis mapeados via Enum
+        $ineligibleEngines = [
+            PaymentEngineType::INTERNAL->value,
+            PaymentEngineType::ALLOWANCE->value,
+            PaymentEngineType::INTERNAL_LOYALTY->value,
+            PaymentEngineType::LOSS->value,
+        ];
+
+        $ineligiblePayments = (float) $order->payments()
+            ->where(function ($query) use ($ineligibleEngines) {
+                $query->whereHas('paymentMethod', function ($q) use ($ineligibleEngines) {
+                    $q->whereIn('engine_type', $ineligibleEngines);
+                })
+                ->orWhere('method', 'like', '%Cashback%')
+                ->orWhere('method', 'like', '%Perda%')
+                ->orWhere('method', 'like', '%Consumo%')
+                ->orWhere('method', 'like', '%Cortesia%')
+                ->orWhere('method', 'like', '%Lanche%');
+            })
+            ->sum('amount');
+
         $cashbackUsed = (float) (
             $order->cashback_used > 0
                 ? $order->cashback_used
-                : $order->payments()->where('method', 'like', '%Cashback%')->sum('amount')
+                : 0
         );
+
         $couponDiscount = (float) ($order->discount ?? 0);
 
-        // Pontua estritamente sobre dinheiro real gasto (sem cobrir cupom nem cashback já utilizado)
-        $netMoneyPaid = max(0, (float) $order->subtotal - $couponDiscount - $cashbackUsed);
+        // Pontuação calculada estritamente sobre dinheiro real
+        $deductions = max($cashbackUsed, $ineligiblePayments) + $couponDiscount;
+        $netMoneyPaid = max(0, (float) $order->subtotal - $deductions);
 
         if ($netMoneyPaid <= 0) {
             return;
@@ -105,7 +139,7 @@ class LoyaltyService
             $pointsEarned = (int) floor($netMoneyPaid * $multiplier);
         } elseif ($settings->loyalty_accumulation_rule === 'product_qty_all') {
             $multiplier = (float) ($settings->loyalty_points_multiplier ?? 1);
-            $totalQty = (int) $order->items()->sum('quantity');
+            $totalQty = (int) $order->items()->where('status', '!=', 'cancelled')->sum('quantity');
             $pointsEarned = (int) floor($totalQty * $multiplier);
         }
 
@@ -140,7 +174,7 @@ class LoyaltyService
     {
         if (!$order->customer) return;
 
-        // 🚀 1. Revoga os pontos ganhos neste pedido cancelado
+        // 🚀 1. Revoga os pontos creditados no pedido cancelado
         if ((int) ($order->loyalty_points_earned ?? 0) > 0) {
             $pointsToRevoke = (int) $order->loyalty_points_earned;
             $order->customer->loyalty_points = max(0, (int) $order->customer->loyalty_points - $pointsToRevoke);
@@ -148,11 +182,11 @@ class LoyaltyService
             $order->update(['loyalty_points_earned' => 0]);
         }
 
-        // 🚀 2. Restaura os pontos gastos via Cashback como forma de pagamento
+        // 🚀 2. Restaura o saldo gasto via Cashback tipado pelo Enum
         $loyaltyPayment = $order->payments()
             ->where(function ($query) {
                 $query->whereHas('paymentMethod', function ($q) {
-                    $q->where('engine_type', 'internal_loyalty');
+                    $q->where('engine_type', PaymentEngineType::INTERNAL_LOYALTY->value);
                 })->orWhere('method', 'like', '%Cashback%');
             })->first();
 

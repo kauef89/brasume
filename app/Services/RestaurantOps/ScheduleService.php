@@ -45,19 +45,13 @@ class ScheduleService
         ])->values()->toArray();
 
         return [
-            'employees' => Employee::with('user.roles')
-                ->where('is_active', true)
+            'employees' => Employee::where('is_active', true)
                 ->orderBy('name')
                 ->get()
                 ->map(function ($emp) {
-                    $roles = $emp->user ? $emp->user->roles->pluck('name')->toArray() : [];
-                    if (empty($roles) && !empty($emp->role)) {
-                        $roles = [$emp->role];
-                    }
-                    $emp->setAttribute('active_roles', $roles);
+                    $emp->setAttribute('active_roles', $emp->getAllRoles());
 
                     $typeLabel = 'Geral';
-
                     if ($emp->employment_type instanceof EmploymentType) {
                         $typeLabel = $emp->employment_type->getLabel() ?? 'Geral';
                     } elseif (is_string($emp->employment_type) || is_int($emp->employment_type)) {
@@ -178,7 +172,7 @@ class ScheduleService
                         'is_personal' => false,
                         'employee_id' => $employeeId,
                         'accounting_category' => 'Folha de Pagamento',
-                        'accounting_subcategory' => 'Diárias Extras'
+                        'accounting_subcategory' => 'freelancers'
                     ]);
 
                     $schedule->update(['payable_id' => $payable->id]);

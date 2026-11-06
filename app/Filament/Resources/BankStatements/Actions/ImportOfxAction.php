@@ -139,7 +139,7 @@ class ImportOfxAction extends Action
                                         "amount" => abs((float) $stmt->amount),
                                         "due_date" => $stmt->bank_date,
                                         "accounting_category" => "adm",
-                                        "accounting_subcategory" => "taxas",
+                                        "accounting_subcategory" => "bank_fees",
                                     ]);
 
                                     \App\Services\Accounting\BankReconciliationService::finalize($stmt, $payable, null, $desc);

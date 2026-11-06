@@ -102,7 +102,7 @@ class BasicSection
                     Forms\Components\Toggle::make("show_on_menu")
                         ->label("Mostrar no PDV/Balcão?")
                         ->default(true),
-                    Forms\Components\Toggle::make("show_on_delivery")
+                    Forms\Components\Toggle::make("show_on_customer_app")
                         ->label("Mostrar no Delivery?")
                         ->default(true),
                     Forms\Components\Toggle::make("is_age_restricted")

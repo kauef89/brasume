@@ -50,7 +50,7 @@ class HrSchema
                             Radio::make('allowance_frequency')
                                 ->label('Frequência da Cortesia')
                                 ->options([
-                                    'daily' => 'Diário',
+                                    'daily'   => 'Diário',
                                     'monthly' => 'Mensal',
                                 ])
                                 ->default('daily')
@@ -60,7 +60,7 @@ class HrSchema
                             Radio::make('allowance_scope')
                                 ->label('Regra de Distribuição')
                                 ->options([
-                                    'global' => 'Valor Fixo Global',
+                                    'global'     => 'Valor Fixo Global',
                                     'individual' => 'Valor Individual',
                                 ])
                                 ->default('global')
@@ -74,6 +74,22 @@ class HrSchema
                                 ->prefix('R$')
                                 ->required(fn (Get $get) => $get('allowance_scope') === 'global')
                                 ->visible(fn (Get $get) => $get('allowance_scope') === 'global')
+                                ->columnSpan(1),
+                        ]),
+
+                    // 🚀 REGRA DE CARRY-OVER / EXPIRAÇÃO DO BENEFÍCIO
+                    Grid::make(2)
+                        ->visible(fn(Get $get) => $get('has_food_allowance'))
+                        ->schema([
+                            Radio::make('carry_over_mode')
+                                ->label('Acúmulo de Saldo do Vale-Alimentação')
+                                ->options([
+                                    'none'       => 'Não-Cumulativo (Expira se não utilizado no dia/período)',
+                                    'cumulative' => 'Cumulativo (Acumula saldo não consumido)',
+                                ])
+                                ->default('none')
+                                ->required()
+                                ->helperText('No modo Não-Cumulativo, o benefício não utilizado no dia é zerado e não se transforma em saldo financeiro na conta-corrente.')
                                 ->columnSpan(1),
                         ]),
 

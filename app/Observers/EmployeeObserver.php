@@ -2,9 +2,11 @@
 
 namespace App\Observers;
 
-use App\Models\Employee;
 use App\Models\Customer;
+use App\Models\Employee;
+use App\Models\User;
 use Illuminate\Support\Facades\Log;
+use Spatie\Permission\Models\Role;
 
 class EmployeeObserver
 {
@@ -14,6 +16,7 @@ class EmployeeObserver
     public function created(Employee $employee): void
     {
         $this->syncToCustomer($employee);
+        $this->syncToUser($employee);
     }
 
     /**
@@ -22,20 +25,25 @@ class EmployeeObserver
     public function updated(Employee $employee): void
     {
         $this->syncToCustomer($employee);
+        $this->syncToUser($employee);
     }
 
     /**
-     * Quando o colaborador for desativado/demitido, desvincula o acesso a consumo interno.
+     * Quando o colaborador for desativado/demitido, desvincula consumo interno e suspende o acesso ao sistema.
      */
     public function deleted(Employee $employee): void
     {
         Customer::where('employee_id', $employee->id)->update([
             'employee_id' => null,
         ]);
+
+        User::where('employee_id', $employee->id)->update([
+            'is_active' => false,
+        ]);
     }
 
     /**
-     * Sincroniza ou cria o registro correspondente na tabela customers.
+     * Sincroniza ou cria o registro correspondente na tabela customers (Consumo Interno).
      */
     protected function syncToCustomer(Employee $employee): void
     {
@@ -76,6 +84,59 @@ class EmployeeObserver
             }
         } catch (\Throwable $e) {
             Log::error("Erro ao sincronizar Colaborador ID {$employee->id} para Clientes: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Espelha os cargos operacionais do Employee para as Roles do Spatie no User.
+     */
+    protected function syncToUser(Employee $employee): void
+    {
+        try {
+            // 1. Localiza a conta de acesso vinculada
+            $user = $employee->user ?: User::where('employee_id', $employee->id)->first();
+
+            // 2. Fallback: Localiza por e-mail e estabelece o vínculo caso ainda não exista
+            if (!$user && !empty($employee->email)) {
+                $user = User::where('email', $employee->email)->first();
+                if ($user && empty($user->employee_id)) {
+                    $user->update(['employee_id' => $employee->id]);
+                }
+            }
+
+            if (!$user) {
+                return;
+            }
+
+            // 3. Sincroniza status de ativação e nome
+            $userUpdates = [];
+            if ($user->name !== $employee->name && !empty($employee->name)) {
+                $userUpdates['name'] = $employee->name;
+            }
+            if ((bool) $user->is_active !== (bool) $employee->is_active) {
+                $userUpdates['is_active'] = (bool) $employee->is_active;
+            }
+
+            if (!empty($userUpdates)) {
+                $user->update($userUpdates);
+            }
+
+            // 4. Espelhamento direto: Employee -> Spatie Roles
+            if (method_exists($employee, 'getAllRoles')) {
+                $roles = $employee->getAllRoles();
+
+                if (!empty($roles)) {
+                    $guard = $user->guard_name ?? config('auth.defaults.guard', 'web');
+
+                    foreach ($roles as $roleName) {
+                        Role::findOrCreate($roleName, $guard);
+                    }
+
+                    $user->syncRoles($roles);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error("Erro ao sincronizar Colaborador ID {$employee->id} para Usuário: " . $e->getMessage());
         }
     }
 }

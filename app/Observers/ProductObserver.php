@@ -26,7 +26,7 @@ class ProductObserver
         if (in_array($product->type, $operationalTypes, true)) {
             // Insumos NUNCA aparecem em cardápios e não possuem preço ao consumidor
             $product->show_on_menu = false;
-            $product->show_on_delivery = false;
+            $product->show_on_customer_app = false;
             $product->dine_in_price = null;
             $product->delivery_price = null;
             $product->promo_price = null;

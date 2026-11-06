@@ -33,7 +33,7 @@ class Product extends Model
         "track_inventory"        => "boolean",
         "is_grab_and_go"         => "boolean",
         "show_on_menu"           => "boolean",
-        "show_on_delivery"       => "boolean",
+        "show_on_customer_app"       => "boolean",
         "is_age_restricted"      => "boolean",
         "requires_preparation"   => "boolean",
         "loyalty_reward"         => "boolean",

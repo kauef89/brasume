@@ -44,7 +44,7 @@ class Ingredient extends Product
                 $ingredient->type = ProductType::INGREDIENT->value;
             }
             $ingredient->show_on_menu = false;
-            $ingredient->show_on_delivery = false;
+            $ingredient->show_on_customer_app = false;
         });
     }
 }

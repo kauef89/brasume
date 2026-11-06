@@ -39,9 +39,21 @@ class PosCheckoutService
     {
         $relations = ['items.modifiers', 'items.subItems.modifiers'];
 
-        // 🚀 AQUI: Forçando a seleção dos campos de fidelidade do cliente!
+        // 🚀 Carrega os dados de fidelidade e os vínculos operacionais (RH e Convênios)
         if (method_exists($order, 'customer')) {
-            $relations['customer'] = fn($query) => $query->select('id', 'name', 'cpf', 'phone', 'loyalty_points', 'loyalty_points_expires_at');
+            $relations['customer'] = fn($query) => $query->select([
+                'id',
+                'name',
+                'cpf',
+                'phone',
+                'email',
+                'loyalty_points',
+                'loyalty_points_expires_at',
+                'employee_id',
+                'supplier_id',
+                'allow_credit',
+                'credit_limit',
+            ])->with('employee:id,name,role');
         }
 
         if (method_exists($order, 'address')) $relations[] = 'address';

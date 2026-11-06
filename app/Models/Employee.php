@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\EmployeeRole;
 use App\Enums\EmploymentType;
 use App\Enums\PaymentCycle;
 use App\Observers\EmployeeObserver;
@@ -21,11 +22,13 @@ class Employee extends Model
     protected $guarded = [];
 
     protected $appends = [
-        'role',
         'meal_allowance',
+        'active_roles',
     ];
 
     protected $casts = [
+        'role'                   => EmployeeRole::class,
+        'secondary_roles'        => 'array',
         'employment_type'        => EmploymentType::class,
         'payment_cycle'          => PaymentCycle::class,
         'work_days'              => 'array',
@@ -37,47 +40,37 @@ class Employee extends Model
     ];
 
     /**
-     * Retorna o cargo oficial (job_title) ou infere pelo tipo de contratação.
+     * Retorna a lista unificada de papéis que o funcionário está apto a exercer na operação.
      */
-    public function getRoleAttribute(): string
+    public function getAllRoles(): array
     {
-        if (!empty(trim($this->job_title ?? ''))) {
-            return trim($this->job_title);
-        }
+        $primary = $this->role instanceof EmployeeRole
+            ? $this->role->value
+            : (is_string($this->role) ? $this->role : EmployeeRole::WAITER->value);
 
-        $type = $this->employment_type instanceof EmploymentType
-            ? $this->employment_type->value
-            : (string) ($this->employment_type ?? '');
+        $secondary = is_array($this->secondary_roles) ? $this->secondary_roles : [];
 
-        return match ($type) {
-            'partner'         => 'Sócio',
-            'freelance_fixed' => 'Diarista',
-            'freelancer'      => 'Freelancer',
-            'pj'              => 'Prestador PJ',
-            'clt'             => 'Colaborador',
-            default           => 'Equipe',
-        };
+        return array_values(array_unique(array_filter(array_merge([$primary], $secondary))));
+    }
+
+    public function getActiveRolesAttribute(): array
+    {
+        return $this->getAllRoles();
     }
 
     /**
-     * Ponte de compatibilidade para leitura do teto de vale-alimentação.
+     * Teto de vale-alimentação.
      */
     public function getMealAllowanceAttribute(): float
     {
         return (float) ($this->attributes['meal_allowance'] ?? $this->food_allowance_amount ?? 0);
     }
 
-    /**
-     * Cliente correspondente no PDV para compras e consumo interno.
-     */
     public function customer(): HasOne
     {
         return $this->hasOne(Customer::class);
     }
 
-    /**
-     * Usuário autenticável vinculado ao colaborador.
-     */
     public function user(): HasOne
     {
         return $this->hasOne(User::class);
@@ -91,6 +84,14 @@ class Employee extends Model
     public function ledgers(): HasMany
     {
         return $this->hasMany(EmployeeLedger::class);
+    }
+
+    /**
+     * Holerites / Recibos de Pagamento (Exigido pelo PayslipsRelationManager no Filament)
+     */
+    public function payslips(): HasMany
+    {
+        return $this->hasMany(Payslip::class);
     }
 
     public function kitchens(): BelongsToMany

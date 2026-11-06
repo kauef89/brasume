@@ -23,7 +23,13 @@ class RecurringExpensesTable
         return $table
             ->columns([
                 TextColumn::make("name")->label("Conta")->searchable(),
-                TextColumn::make("supplier.name")->label("Fornecedor"),
+                TextColumn::make("creditor_name")
+                    ->label("Credor")
+                    ->getStateUsing(fn($record) => $record->employee_id ? $record->employee->name : ($record->supplier_id ? $record->supplier->name : "-")),
+                TextColumn::make("frequency")
+                    ->label("Frequência")
+                    ->badge()
+                    ->formatStateUsing(fn($state) => \App\Enums\PaymentCycle::tryFrom($state)?->getLabel() ?? $state),
                 TextColumn::make("due_day")->label("Vence Dia")->sortable(),
                 TextColumn::make("value_type")
                     ->label("Tipo")

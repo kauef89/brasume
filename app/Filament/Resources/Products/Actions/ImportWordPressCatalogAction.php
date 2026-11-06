@@ -161,7 +161,7 @@ class ImportWordPressCatalogAction extends Action
                     'promo_price' => $promoPrice,
                     'base_cost' => isset($metas['nativa_base_cost']) ? (float) $metas['nativa_base_cost'] : 0.0,
                     'show_on_menu' => isset($metas['nativa_exibir_mesa']) ? (bool) $metas['nativa_exibir_mesa'] : true,
-                    'show_on_delivery' => isset($metas['nativa_exibir_delivery']) ? (bool) $metas['nativa_exibir_delivery'] : true,
+                    'show_on_customer_app' => isset($metas['nativa_exibir_delivery']) ? (bool) $metas['nativa_exibir_delivery'] : true,
                     'requires_preparation' => isset($metas['nativa_requires_preparation']) ? (bool) $metas['nativa_requires_preparation'] : true,
                     'is_age_restricted' => isset($metas['nativa_apenas_maiores']) ? (bool) $metas['nativa_apenas_maiores'] : false,
                     'loyalty_reward' => isset($metas['nativa_is_loyalty_reward']) ? (bool) $metas['nativa_is_loyalty_reward'] : false,

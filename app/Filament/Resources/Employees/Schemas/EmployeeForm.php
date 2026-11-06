@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Employees\Schemas;
 
+use App\Enums\EmployeeRole;
 use App\Enums\EmploymentType;
 use App\Enums\PaymentCycle;
 use Filament\Schemas\Schema;
@@ -27,7 +28,21 @@ class EmployeeForm
                     TextInput::make("email")->email()->label("E-mail"),
                     TextInput::make("phone")->label("Telefone/WhatsApp"),
 
-                    // 🚀 TRAVA DE COLABORADOR
+                    // 🚀 FUNÇÃO OPERACIONAL NA LANCHONETE (Fonte Única da Verdade)
+                    Select::make("role")
+                        ->label("Função Operacional Principal")
+                        ->options(EmployeeRole::class)
+                        ->enum(EmployeeRole::class)
+                        ->default(EmployeeRole::WAITER)
+                        ->required()
+                        ->helperText("Define o papel principal do colaborador na escala, turnos e aplicativo de equipe."),
+
+                    Select::make("secondary_roles")
+                        ->label("Funções Adicionais Habilitadas")
+                        ->options(EmployeeRole::class)
+                        ->multiple()
+                        ->helperText("Outras funções que este colaborador tem permissão para cobrir na escala."),
+
                     Toggle::make("is_active")
                         ->label("Colaborador Ativo")
                         ->default(true)
@@ -60,7 +75,6 @@ class EmployeeForm
                         ->live()
                         ->columnSpan(1),
 
-                    // 🚀 RÓTULO MÁGICO: Vinculado aos casos do Enum tipado
                     TextInput::make("base_remuneration")
                         ->label(function ($get) {
                             $type = $get("employment_type");
@@ -92,12 +106,10 @@ class EmployeeForm
                             $settings = CompanySetting::getCached();
                             return $settings && $settings->has_food_allowance && $settings->allowance_scope === 'individual';
                         }),
-
                 ])
                 ->columns(2),
 
             Section::make("Benefícios & Escala")->schema([
-
                 CheckboxList::make("work_days")
                     ->label("Dias de Trabalho (Escala Padrão)")
                     ->options([

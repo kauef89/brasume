@@ -106,7 +106,7 @@ class LegacyProductsTable
                                 'category_id' => $data['category_id'],
                                 'status' => 'archived',
                                 'show_on_menu' => false,
-                                'show_on_delivery' => false,
+                                'show_on_customer_app' => false,
                                 'type' => 'resale',
                                 'unit_measure' => 'un',
                             ]);
@@ -207,7 +207,7 @@ class LegacyProductsTable
                                     'category_id' => $categoryId,
                                     'status' => 'archived',
                                     'show_on_menu' => false,
-                                    'show_on_delivery' => false,
+                                    'show_on_customer_app' => false,
                                     'type' => 'resale',
                                     'unit_measure' => 'un',
                                 ]);

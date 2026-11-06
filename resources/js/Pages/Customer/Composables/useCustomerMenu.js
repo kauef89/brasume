@@ -63,7 +63,7 @@ export function useCustomerMenu(props) {
     const validProducts = computed(() => {
         return (props.products || []).filter(p => {
             const isNotArchived = p.status !== 'archived' && p.status !== 'arquivado';
-            const isAvailableForDelivery = p.show_on_delivery !== false && p.show_on_delivery !== 0;
+            const isAvailableForDelivery = (p.show_on_customer_app ?? p.show_on_delivery) !== false && (p.show_on_customer_app ?? p.show_on_delivery) !== 0;
 
             return isNotArchived && isAvailableForDelivery;
         });

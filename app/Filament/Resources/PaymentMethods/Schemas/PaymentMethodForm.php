@@ -90,14 +90,14 @@ class PaymentMethodForm
                 ->schema([
                     Grid::make(4)->schema([
                         Toggle::make("show_on_pos")
-                            ->label("Disponível no PDV?")
+                            ->label("Disponível no Caixa/PDV?")
                             ->default(true)
                             ->inline(false),
 
-                        Toggle::make("show_on_delivery")
-                            ->label("Disponível no Delivery?")
-                            ->default(true)
-                            ->inline(false),
+                        Toggle::make("show_on_customer_app")
+                            ->label("Disponível na Loja Online?")
+                            ->default(false)
+                            ->helperText("Quando ativo, clientes poderão selecionar esta forma no aplicativo de delivery"),
 
                         Toggle::make("auto_fiscal_emission")
                             ->label("Emissão Fiscal Auto?")

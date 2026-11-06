@@ -11,30 +11,38 @@ use Illuminate\Support\Facades\Log;
 class RenewEmployeeAllowances extends Command
 {
     protected $signature = 'erp:renew-allowances';
-    protected $description = 'Renova o saldo de vale-alimentação dos colaboradores (Diário ou Mensal) de forma automática.';
+    protected $description = 'Gerencia a renovação e expiração do saldo de vale-alimentação dos colaboradores.';
 
-    public function handle()
+    public function handle(): int
     {
         $this->info("🚀 Iniciando motor de renovação de Vales (Multi-Tenant)...");
 
-        // Trazemos todos os Tenants para varrer um por um
         $tenants = Tenant::all();
         $totalWalletsUpdated = 0;
 
         foreach ($tenants as $tenant) {
-            // Isola o banco de dados para o cliente atual
             tenancy()->initialize($tenant);
 
             $settings = CompanySetting::getCached();
 
-            // Se este cliente não usa o vale-alimentação, pula para o próximo!
+            // Se o tenant não oferece vale-alimentação, avança
             if (!$settings || !$settings->has_food_allowance) {
                 tenancy()->end();
                 continue;
             }
 
-            // 🚀 INTELIGÊNCIA TEMPORAL
-            // Se a regra for MENSAL e hoje não for dia 1º, ignoramos este tenant.
+            $carryOverMode = $settings->carry_over_mode ?? 'none';
+
+            // 🛡️ REGRA 1: NÃO-CUMULATIVO (Expira diariamente / por período)
+            // No modo não-cumulativo, o vale NÃO vira dinheiro na conta-corrente.
+            // O colaborador tem a cota garantida para consumo no turno via MealAllowanceService.
+            if ($carryOverMode === 'none') {
+                $this->info("ℹ️ Tenant {$tenant->id}: Modo Não-Cumulativo ativo. Cotas diárias operam por turno (sem depósito financeiro em conta-corrente).");
+                tenancy()->end();
+                continue;
+            }
+
+            // 🛡️ REGRA 2: CUMULATIVO (Acumula saldo financeiro na carteira corporativa)
             if ($settings->allowance_frequency === 'monthly' && now()->day !== 1) {
                 tenancy()->end();
                 continue;
@@ -44,26 +52,23 @@ class RenewEmployeeAllowances extends Command
             $tenantUpdates = 0;
 
             foreach ($employees as $employee) {
-                // Descobre de onde vem o valor (Global vs Individual)
                 $amount = $settings->allowance_scope === 'global'
-                    ? (float) $settings->global_allowance_amount
-                    : (float) $employee->food_allowance_amount;
+                    ? (float) ($settings->global_allowance_amount ?? 0)
+                    : (float) ($employee->food_allowance_amount ?? 0);
 
-                // Só processa se houver algum valor configurado
                 if ($amount > 0) {
                     $latestLedger = $employee->ledgers()->latest('id')->first();
-                    $currentBalance = $latestLedger ? (float) $latestLedger->balance : 0;
+                    $currentBalance = $latestLedger ? (float) $latestLedger->balance : 0.00;
 
                     $desc = $settings->allowance_frequency === 'daily'
-                        ? 'Renovação Diária do Vale-Alimentação'
-                        : 'Renovação Mensal do Vale-Alimentação';
+                        ? 'Crédito Cumulativo de Vale-Alimentação (Diário)'
+                        : 'Crédito Cumulativo de Vale-Alimentação (Mensal)';
 
-                    // Registra o depósito no extrato do funcionário
                     $employee->ledgers()->create([
-                        'type' => 'credit',
+                        'type'        => 'credit',
                         'description' => $desc,
-                        'amount' => $amount,
-                        'balance' => $currentBalance + $amount,
+                        'amount'      => $amount,
+                        'balance'     => $currentBalance + $amount,
                     ]);
 
                     $tenantUpdates++;
@@ -71,14 +76,12 @@ class RenewEmployeeAllowances extends Command
                 }
             }
 
-            $this->info("✅ Tenant {$tenant->id}: {$tenantUpdates} carteiras renovadas.");
-
-            // Fecha a conexão com o tenant atual para não vazar dados
+            $this->info("✅ Tenant {$tenant->id}: {$tenantUpdates} carteiras cumulativas creditadas.");
             tenancy()->end();
         }
 
-        $this->info("🎉 Processo concluído! {$totalWalletsUpdated} carteiras atualizadas em todo o ecossistema.");
-        Log::info("CRON [erp:renew-allowances] executado: {$totalWalletsUpdated} carteiras renovadas.");
+        $this->info("🎉 Processo concluído! {$totalWalletsUpdated} carteiras processadas.");
+        Log::info("CRON [erp:renew-allowances] executado: {$totalWalletsUpdated} carteiras processadas.");
 
         return Command::SUCCESS;
     }

@@ -43,7 +43,7 @@ class Supply extends Product
                 $supply->type = ProductType::CONSUMABLE->value;
             }
             $supply->show_on_menu = false;
-            $supply->show_on_delivery = false;
+            $supply->show_on_customer_app = false;
         });
     }
 }

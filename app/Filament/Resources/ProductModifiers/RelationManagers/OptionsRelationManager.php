@@ -88,7 +88,7 @@ class OptionsRelationManager extends RelationManager
                 ->default(true)
                 ->inline(false),
 
-            FormComponents\Toggle::make("show_on_delivery")
+            FormComponents\Toggle::make("show_on_customer_app")
                 ->label("Exibir no Delivery (App Cliente)")
                 ->helperText("Visível no cardápio online do cliente.")
                 ->default(true)
@@ -179,7 +179,7 @@ class OptionsRelationManager extends RelationManager
                 Tables\Columns\ToggleColumn::make("show_on_pos")
                     ->label("PDV / Salão"),
 
-                Tables\Columns\ToggleColumn::make("show_on_delivery")
+                Tables\Columns\ToggleColumn::make("show_on_customer_app")
                     ->label("Delivery"),
 
                 Tables\Columns\ToggleColumn::make("is_active")->label("Ativa"),

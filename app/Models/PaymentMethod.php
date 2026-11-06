@@ -17,7 +17,7 @@ class PaymentMethod extends Model
     protected $casts = [
         'engine_type'          => PaymentEngineType::class,
         'show_on_pos'          => 'boolean',
-        'show_on_delivery'     => 'boolean',
+        'show_on_customer_app' => 'boolean',
         'auto_fiscal_emission' => 'boolean',
         'is_active'            => 'boolean',
     ];

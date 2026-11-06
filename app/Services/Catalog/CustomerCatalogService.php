@@ -29,7 +29,7 @@ class CustomerCatalogService
             $categoryProductsCache = Product::whereNotNull('category_id')
                 ->whereIn("type", ["dish", "resale", "manufactured"])
                 ->whereIn("status", ["available", "out_of_stock", "paused", "active"])
-                ->where("show_on_delivery", true)
+                ->where("show_on_customer_app", true)
                 ->get()
                 ->groupBy('category_id');
 
@@ -37,7 +37,7 @@ class CustomerCatalogService
                 ->whereIn("category_id", $validCategoryIds)
                 ->whereIn("type", ["dish", "resale", "combo", "manufactured"])
                 ->whereIn("status", ["available", "out_of_stock", "paused", "active"])
-                ->where("show_on_delivery", true)
+                ->where("show_on_customer_app", true)
                 ->get()
                 ->map(function ($product) use ($categoryProductsCache) {
                     return $this->formatProductForCustomer($product, $categoryProductsCache);

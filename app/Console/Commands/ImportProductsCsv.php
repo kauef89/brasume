@@ -65,7 +65,7 @@ class ImportProductsCsv extends Command
                 'requires_preparation' => (bool) $data['Exige Preparo (1/0)'],
                 'print_station_id' => $data['ID Estacao de Impressao'] ?: null,
                 
-                'show_on_delivery' => (bool) $data['Exibir no Delivery (1/0)'],
+                'show_on_customer_app' => (bool) $data['Exibir no Delivery (1/0)'],
                 'show_on_menu' => (bool) $data['Exibir na Mesa (1/0)'],
                 'is_age_restricted' => (bool) $data['Apenas Maiores de 18 (1/0)'],
                 'loyalty_reward' => (bool) $data['Recompensa Fidelidade (1/0)'],

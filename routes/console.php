@@ -61,3 +61,8 @@ Schedule::call(function () {
 // Dispara notas e dados de DP para a contabilidade
 Schedule::command('accounting:send-monthly')
     ->monthlyOn(1, '08:00');
+
+// Geração Automática de Contas a Pagar Recorrentes
+Schedule::command('erp:generate-recurring-payables')
+    ->dailyAt('04:30')
+    ->appendOutputTo(storage_path('logs/recurring_payables.log'));

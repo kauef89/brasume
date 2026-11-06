@@ -211,7 +211,7 @@ class CustomerDashboardService
     public function getDeliveryPaymentMethods()
     {
         return PaymentMethod::where('is_active', true)
-            ->where('show_on_delivery', true)
+            ->where('show_on_customer_app', true)
             ->get();
     }
 

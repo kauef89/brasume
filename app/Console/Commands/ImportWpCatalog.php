@@ -246,7 +246,7 @@ class ImportWpCatalog extends Command
                 'min_stock'               => $minStock,
                 'status'                  => $isActive ? 'active' : 'inactive',
                 'show_on_menu'            => $showTable,
-                'show_on_delivery'        => $showDelivery,
+                'show_on_customer_app'        => $showDelivery,
                 'is_age_restricted'       => $is18Plus,
                 'requires_preparation'    => $requiresPrep,
                 'print_station_id'        => $stationId,

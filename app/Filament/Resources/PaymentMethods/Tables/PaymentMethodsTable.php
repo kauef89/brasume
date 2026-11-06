@@ -36,8 +36,8 @@ class PaymentMethodsTable
                 Tables\Columns\ToggleColumn::make('show_on_pos')
                     ->label('PDV?'),
 
-                Tables\Columns\ToggleColumn::make('show_on_delivery')
-                    ->label('Delivery?'),
+                Tables\Columns\ToggleColumn::make('show_on_customer_app')
+                    ->label('App?'),
 
                 Tables\Columns\ToggleColumn::make('auto_fiscal_emission')
                     ->label('Fiscal Auto?'),

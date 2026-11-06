@@ -25,7 +25,14 @@ class RecurringExpenseForm
                     ->required()
                     ->placeholder("Ex: Conta de Luz Matriz")
                     ->maxLength(255),
+                Select::make("creditor_type")
+                    ->label("Tipo de Credor")
+                    ->options(["supplier" => "Fornecedor / Concessionária", "employee" => "Colaborador / Diarista"])
+                    ->default("supplier")
+                    ->live()
+                    ->required(),
                 Select::make("supplier_id")
+                    ->visible(fn(Get $get) => $get("creditor_type") === "supplier")
                     ->disabled(fn(Get $get) => $get('is_supplier_locked'))
                     ->dehydrated()
                     ->label("Fornecedor (Concessionária)")
@@ -40,6 +47,12 @@ class RecurringExpenseForm
                     ->createOptionUsing(
                         fn(array $data) => \App\Models\Supplier::create($data)->id
                     ),
+                Select::make("employee_id")
+                    ->label("Colaborador / Prestador")
+                    ->options(fn() => \App\Models\Employee::where("is_active", true)->pluck("name", "id"))
+                    ->searchable()
+                    ->visible(fn(Get $get) => $get("creditor_type") === "employee")
+                    ->required(fn(Get $get) => $get("creditor_type") === "employee"),
                 TextInput::make("contract_number")
                     ->label("Cód. Cliente / Contrato")
                     ->maxLength(255)
@@ -106,11 +119,36 @@ class RecurringExpenseForm
                     ->prefix('R$')
                     ->visible(fn($get) => $get("value_type") === "fixed")
                     ->required(fn($get) => $get("value_type") === "fixed"),
+                Select::make("frequency")
+                    ->label("Periodicidade")
+                    ->options(\App\Enums\PaymentCycle::class)
+                    ->default("monthly")
+                    ->live()
+                    ->required(),
+                Select::make("due_weekday")
+                    ->label("Dia da Semana")
+                    ->options([
+                        0 => "Domingo", 1 => "Segunda-feira", 2 => "Terça-feira",
+                        3 => "Quarta-feira", 4 => "Quinta-feira", 5 => "Sexta-feira", 6 => "Sábado"
+                    ])
+                    ->visible(fn(Get $get) => $get("frequency") === "weekly")
+                    ->required(fn(Get $get) => $get("frequency") === "weekly"),
                 TextInput::make("due_day")
+                    ->visible(fn(Get $get) => $get("frequency") !== "weekly")
                     ->label("Dia do Vencimento")
                     ->numeric()
                     ->minValue(1)
                     ->maxValue(31)
+                    ->helperText(fn(Get $get) => $get("frequency") === "biweekly" ? "Dia base (ex: 1. A parcela 2 será no dia 15)" : ""),
+                Select::make("due_month")
+                    ->label("Mês de Vencimento")
+                    ->options([
+                        1 => "Janeiro", 2 => "Fevereiro", 3 => "Março", 4 => "Abril",
+                        5 => "Maio", 6 => "Junho", 7 => "Julho", 8 => "Agosto",
+                        9 => "Setembro", 10 => "Outubro", 11 => "Novembro", 12 => "Dezembro"
+                    ])
+                    ->visible(fn(Get $get) => $get("frequency") === "yearly")
+                    ->required(fn(Get $get) => $get("frequency") === "yearly")
                     ->required()
             ]),
         ];
