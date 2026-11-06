@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Log;
 class ProcurementService
 {
     /**
-     * Varre todo o estoque e calcula reposições com agrupamento em embalagens fechadas.
+     * Varre estoque rígido e cadência de consumo para gerar a lista automatizada de compras.
      */
     public function generateAutomatedShoppingList(bool $ignoreWeekdays = false): int
     {
@@ -29,7 +29,10 @@ class ProcurementService
             })
             ->pluck('id');
 
-        $productsToReplenish = Product::where('track_inventory', true)
+        $generatedCount = 0;
+
+        // 1. REPOSIÇÃO POR ESTOQUE RÍGIDO (track_inventory = true)
+        $productsByStock = Product::where('track_inventory', true)
             ->whereNotIn('status', ['archived'])
             ->whereIn('type', ['resale', 'ingredient', 'packaging', 'supply', 'consumable'])
             ->where(function ($q) {
@@ -38,9 +41,7 @@ class ProcurementService
             })
             ->get();
 
-        $generatedCount = 0;
-
-        foreach ($productsToReplenish as $product) {
+        foreach ($productsByStock as $product) {
             $currentStock = (float) $product->current_stock;
             $minStock = (float) ($product->min_stock ?? 0);
             $targetStock = (float) ($product->max_stock ?? ($product->par_level ?? ($minStock * 2)));
@@ -48,7 +49,6 @@ class ProcurementService
             $baseDeficit = max(1.0, round($targetStock - $currentStock, 3));
             $isCritical = $currentStock <= 0;
 
-            // 🚀 MATEMÁTICA DE CONVERSÃO: Arredonda para fardos/caixas fechadas
             $packaging = $product->resolvePurchasePackaging();
             $factor = $packaging['factor'];
 
@@ -56,7 +56,6 @@ class ProcurementService
                 $packsNeeded = (int) ceil($baseDeficit / $factor);
                 $finalUnitsQty = $packsNeeded * $factor;
             } else {
-                $packsNeeded = 0;
                 $finalUnitsQty = $baseDeficit;
             }
 
@@ -82,26 +81,74 @@ class ProcurementService
                     $item->estimated_cost = round($item->suggested_qty * $unitCost, 2);
                 }
 
+                $item->notes = 'Gatilho: Estoque mínimo atingido.';
                 $item->save();
                 $generatedCount++;
             }
         }
 
-        Log::info("🛒 [ProcurementService] Varredura concluída. {$generatedCount} itens calculados com fator de conversão.");
+        // 2. REPOSIÇÃO POR CADÊNCIA DE CONSUMO (track_consumption = true)
+        $productsByConsumption = Product::where('track_consumption', true)
+            ->whereNotIn('status', ['archived'])
+            ->get();
+
+        foreach ($productsByConsumption as $product) {
+            $status = $product->getConsumptionReplenishmentStatus();
+
+            if ($status['needs_restock']) {
+                $suggestedUnits = $status['suggested_quantity'] > 0 ? $status['suggested_quantity'] : 1.0;
+
+                $packaging = $product->resolvePurchasePackaging();
+                $factor = $packaging['factor'];
+                if ($factor > 1) {
+                    $packs = (int) ceil($suggestedUnits / $factor);
+                    $finalUnits = $packs * $factor;
+                } else {
+                    $finalUnits = $suggestedUnits;
+                }
+
+                $supplierId = $product->supplier_id
+                    ?? ProductCostHistory::where('product_id', $product->id)->latest('id')->value('supplier_id');
+
+                $item = ShoppingListItem::firstOrNew([
+                    'product_id' => $product->id,
+                    'status'     => 'pending'
+                ]);
+
+                $item->suggested_qty = $item->exists ? max((float) $item->suggested_qty, $finalUnits) : $finalUnits;
+                $item->urgency_level = ($status['days_remaining'] !== null && $status['days_remaining'] <= 0) ? 'critical' : 'normal';
+                if (!$item->supplier_id && $supplierId) {
+                    $item->supplier_id = $supplierId;
+                }
+
+                $unitCost = (float) ($product->base_cost ?? 0);
+                if ($unitCost > 0) {
+                    $item->estimated_cost = round($item->suggested_qty * $unitCost, 2);
+                }
+
+                $item->notes = sprintf(
+                    'Gatilho: Consumo por cadência (Ciclo de %s dias | Última compra: %s | Previsão fim: %s).',
+                    $status['cycle_days'] ?? '-',
+                    $status['last_purchase_date'] ?? '-',
+                    $status['projected_depletion_date'] ?? '-'
+                );
+
+                $item->save();
+                $generatedCount++;
+            }
+        }
+
+        Log::info("🛒 [ProcurementService] Varredura concluída. {$generatedCount} itens calculados (Estoque Físico + Cadência de Consumo).");
 
         return $generatedCount;
     }
 
-    /**
-     * Adiciona manualmente com suporte a embalagens e caixas
-     */
     public function addManualItem(int $productId, float $qty, ?string $notes = null, ?int $supplierId = null, bool $isPackInput = false): ShoppingListItem
     {
         $product = Product::findOrFail($productId);
         $packaging = $product->resolvePurchasePackaging();
         $factor = $packaging['factor'];
 
-        // Se o operador informou "2 fardos", converte para as unidades de consumo correspondentes
         $finalUnits = ($isPackInput && $factor > 1) ? round($qty * $factor, 3) : $qty;
 
         $item = ShoppingListItem::firstOrNew([
@@ -134,9 +181,6 @@ class ProcurementService
         return $item;
     }
 
-    /**
-     * MOMENTO 1: Carrega os produtos de um StorageLocation para contagem física rápida
-     */
     public function getStorageLocationAuditData(int $locationId): array
     {
         $location = StorageLocation::with(['storageRules.product'])->findOrFail($locationId);
@@ -149,8 +193,6 @@ class ProcurementService
         foreach ($location->storageRules as $rule) {
             $product = $rule->product;
             if (!$product || $product->status === 'archived') continue;
-
-            // 🛑 Pratos montados são excluídos do levantamento de estoque
             if ($product->type === 'dish') continue;
 
             $packaging = $product->resolvePurchasePackaging();
@@ -190,9 +232,6 @@ class ProcurementService
         ];
     }
 
-    /**
-     * MOMENTO 1 (Submissão): Roteia as faltas do local físico para Compra ou Produção
-     */
     public function submitLocationAudit(int $locationId, array $items): array
     {
         $purchasesCreated = 0;
@@ -208,7 +247,6 @@ class ProcurementService
                 if (!$product) continue;
 
                 if ($product->type === 'manufactured') {
-                    // 🚀 ROTEAMENTO: Preparos internos vão para a fila da esteira de produção
                     if (class_exists(ProductionOrder::class)) {
                         ProductionOrder::create([
                             'product_id'   => $product->id,
@@ -221,7 +259,6 @@ class ProcurementService
                         $productionCreated++;
                     }
                 } else {
-                    // 🚀 ROTEAMENTO: Revenda, insumos e embalagens vão para a Lista de Compras
                     $isPack = !empty($entry['is_pack']);
                     $this->addManualItem($productId, $qtyNeeded, 'Conferência física no local', null, $isPack);
                     $purchasesCreated++;
@@ -235,9 +272,6 @@ class ProcurementService
         ];
     }
 
-    /**
-     * MOMENTO 2: Constrói a Matriz de Cotações com agrupamento em Caixas/Fardos
-     */
     public function getSmartBiddingMatrix(): array
     {
         $pendingItems = ShoppingListItem::with(['product.category', 'supplier'])
@@ -255,7 +289,6 @@ class ProcurementService
             $factor = $packaging['factor'];
             $baseQty = (float) $item->suggested_qty;
 
-            // Calcula exibição de fardos e unidades
             if ($factor > 1) {
                 $packsCount = (int) ceil($baseQty / $factor);
                 $packDisplay = "{$packsCount} {$packaging['purchase_uom']} ({$baseQty} {$packaging['base_uom']})";

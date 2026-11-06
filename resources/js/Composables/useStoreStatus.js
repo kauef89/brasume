@@ -92,7 +92,7 @@ export function useStoreStatus() {
             if (!status.value.next_open_time) return 'Nosso expediente já encerrou.';
             const openTime = new Date(status.value.next_open_time);
             const timeString = openTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            return `Expediente encerrado. Voltamos às ${timeString}`;
+            return `Voltamos às ${timeString}`;
         }
 
         if (isOpen.value) {

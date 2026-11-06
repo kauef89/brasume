@@ -118,4 +118,18 @@ class Employee extends Model
     {
         return $this->hasMany(Order::class);
     }
+
+    public function getMonthlySalaryAttribute(): float
+    {
+        return in_array($this->employment_type, [
+            EmploymentType::CLT, EmploymentType::INTERN, EmploymentType::PJ, EmploymentType::PARTNER
+        ]) ? (float) $this->base_remuneration : 0.0;
+    }
+
+    public function getDailyRateAttribute(): float
+    {
+        return in_array($this->employment_type, [
+            EmploymentType::FREELANCER, EmploymentType::FREELANCE_FIXED
+        ]) ? (float) $this->base_remuneration : 0.0;
+    }
 }

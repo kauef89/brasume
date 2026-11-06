@@ -10,6 +10,7 @@ use Filament\Forms;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Utilities\Get;
 use App\Models\Category;
 use Illuminate\Validation\Rules\Unique;
 
@@ -39,7 +40,7 @@ class SupplyForm
                             ->columnSpan(1),
                     ]),
 
-                    Grid::make(4)->schema([
+                    Grid::make(3)->schema([
                         Forms\Components\Select::make("type")
                             ->label("Classificação")
                             ->options([
@@ -64,13 +65,34 @@ class SupplyForm
                             ->required()
                             ->default(UnitOfMeasure::UN->value)
                             ->columnSpan(1),
-
-                        Forms\Components\Toggle::make("track_inventory")
-                            ->label("Controlar Estoque?")
-                            ->default(true)
-                            ->inline(false)
-                            ->columnSpan(1),
                     ]),
+
+                    Section::make("Gestão de Suprimento (Estoque vs. Consumo)")
+                        ->schema([
+                            Grid::make(3)->schema([
+                                Forms\Components\Toggle::make("track_inventory")
+                                    ->label("Controlar Estoque Físico?")
+                                    ->helperText("Ative apenas se fizer contagem periódica de unidades no armazém.")
+                                    ->default(false)
+                                    ->inline(false)
+                                    ->columnSpan(1),
+
+                                Forms\Components\Toggle::make("track_consumption")
+                                    ->label("Controlar Consumo por Cadência?")
+                                    ->helperText("Gera sugestão de compra por intervalo médio de compras.")
+                                    ->default(true)
+                                    ->live()
+                                    ->inline(false)
+                                    ->columnSpan(1),
+
+                                Forms\Components\TextInput::make("consumption_cycle_days")
+                                    ->label("Ciclo Médio Estimado (Dias)")
+                                    ->numeric()
+                                    ->visible(fn(Get $get) => (bool) $get('track_consumption'))
+                                    ->helperText("Deixe em branco para calcular automaticamente pela média entre compras.")
+                                    ->columnSpan(1),
+                            ]),
+                        ]),
 
                     Forms\Components\TextInput::make("base_cost")
                         ->label("Custo Base")

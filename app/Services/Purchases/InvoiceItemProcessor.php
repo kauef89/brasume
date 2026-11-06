@@ -235,7 +235,7 @@ class InvoiceItemProcessor
                 }
             } else {
                 $targetLocationId = $this->resolveStorageLocationForProcurement($product);
-                $inventoryService->addStock($product->fresh(), $actualQty, 'nfe_import', null, $targetLocationId);
+                if ($product->track_inventory) { $inventoryService->addStock($product->fresh(), $actualQty, 'nfe_import', null, $targetLocationId); }
             }
 
             // 📡 Transmite a atualização do catálogo aos clientes conectados

@@ -9,7 +9,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\RepeatableEntry;
-use Filament\Infolists\Components\Grid;
+use Filament\Schemas\Components\Grid;
 
 class PayslipsRelationManager extends RelationManager
 {

@@ -31,6 +31,8 @@ class Product extends Model
         "min_stock"              => "float",
         "max_stock"              => "float",
         "track_inventory"        => "boolean",
+        "track_consumption"      => "boolean",
+        "consumption_cycle_days" => "integer",
         "is_grab_and_go"         => "boolean",
         "show_on_menu"           => "boolean",
         "show_on_customer_app"       => "boolean",
@@ -188,5 +190,77 @@ class Product extends Model
                 })->orWhereNull('category_id');
             });
         });
+    }
+
+    /**
+     * Calcula o intervalo médio (em dias) entre as últimas compras registradas.
+     */
+    public function calculateAveragePurchaseCycleDays(): ?float
+    {
+        $dates = $this->costHistories()
+            ->whereNotNull('created_at')
+            ->orderBy('created_at', 'asc')
+            ->pluck('created_at')
+            ->map(fn($date) => \Carbon\Carbon::parse($date));
+
+        if ($dates->count() < 2) {
+            return null;
+        }
+
+        $intervals = [];
+        for ($i = 1; $i < $dates->count(); $i++) {
+            $diff = $dates[$i - 1]->diffInDays($dates[$i]);
+            if ($diff > 0) {
+                $intervals[] = $diff;
+            }
+        }
+
+        return count($intervals) > 0 ? round(array_sum($intervals) / count($intervals), 1) : null;
+    }
+
+    /**
+     * Obtém o ciclo efetivo de reposição: valor manual arbitrado ou média histórica.
+     */
+    public function getEffectiveConsumptionCycleDays(): ?float
+    {
+        if (!is_null($this->consumption_cycle_days) && $this->consumption_cycle_days > 0) {
+            return (float) $this->consumption_cycle_days;
+        }
+
+        return $this->calculateAveragePurchaseCycleDays();
+    }
+
+    /**
+     * Avalia se o item atingiu a janela de reabastecimento por consumo.
+     */
+    public function getConsumptionReplenishmentStatus(): array
+    {
+        $cycleDays = $this->getEffectiveConsumptionCycleDays();
+        $latest = $this->latestCostHistory ?? $this->costHistories()->latest('id')->first();
+
+        if (!$latest || !$cycleDays || $cycleDays <= 0) {
+            return [
+                'needs_restock'            => false,
+                'cycle_days'               => $cycleDays,
+                'days_since_last'          => null,
+                'days_remaining'           => null,
+                'projected_depletion_date' => null,
+            ];
+        }
+
+        $lastDate = \Carbon\Carbon::parse($latest->created_at);
+        $daysSince = (int) $lastDate->diffInDays(now());
+        $depletionDate = $lastDate->copy()->addDays((int) round($cycleDays));
+        $daysRemaining = (int) now()->diffInDays($depletionDate, false);
+
+        return [
+            'needs_restock'            => $daysRemaining <= 3, // Dispara sugestão 3 dias antes do fim estimado
+            'cycle_days'               => $cycleDays,
+            'days_since_last'          => $daysSince,
+            'days_remaining'           => $daysRemaining,
+            'last_purchase_date'       => $lastDate->format('d/m/Y'),
+            'projected_depletion_date' => $depletionDate->format('d/m/Y'),
+            'suggested_quantity'       => (float) ($latest->quantity > 0 ? $latest->quantity : 1),
+        ];
     }
 }
