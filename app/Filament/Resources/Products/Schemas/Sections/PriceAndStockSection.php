@@ -60,7 +60,14 @@ class PriceAndStockSection
                 ]),
 
                 Section::make("Controle de Estoque")
-                    ->visible(fn(Get $get) => $get("type") !== "combo")
+                    ->visible(function (Get $get, ?Product $record): bool {
+                        $type = $get("type") ?? $record?->type;
+                        if ($type instanceof \App\Enums\ProductType) {
+                            return $type !== \App\Enums\ProductType::COMBO;
+                        }
+                        $typeStr = is_string($type) ? $type : ($type?->value ?? null);
+                        return $typeStr !== "combo";
+                    })
                     ->schema([
                         Grid::make(4)->schema([
                             Forms\Components\TextInput::make("sku")

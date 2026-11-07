@@ -48,7 +48,7 @@ class CourierSettlementService
         // Busca registros de presença ativos no turno atual cuja função seja entregador
         return Employee::whereHas('attendances', function ($q) use ($currentShift) {
             $q->where('cash_shift_id', $currentShift->id)
-              ->whereNull('clock_out');
+              ->whereNull('checked_out_at');
         })
         ->where(function ($q) {
             $q->where('role', EmployeeRole::COURIER->value ?? 'courier')

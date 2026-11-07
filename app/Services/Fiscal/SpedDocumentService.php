@@ -493,22 +493,37 @@ class SpedDocumentService
         $tools = new Tools($configJson, Certificate::readPfx($certificadoDigital, $settings->certificate_password));
         $tools->model($document->model);
 
+        // 🛡️ Garante mínimo de 15 caracteres exigidos pela SEFAZ
+        $cleanJustification = trim($justification);
+        if (mb_strlen($cleanJustification) < 15) {
+            $cleanJustification .= ' - Solicitada reabertura do pedido';
+        }
+
+        // 🚀 Ordem Canônica NFePHP: $chNFe, $xJust, $nProt, ?DateTimeInterface $dhEvento, int $nSeqEvento
         $response = $tools->sefazCancela(
             $document->access_key,
+            $cleanJustification,
             $document->protocol,
-            $justification,
+            now(),
             1
         );
 
         $std = new Standardize();
         $arr = $std->toArray($response);
 
-        if (isset($arr['cStat']) && $arr['cStat'] == 128) {
+        // 128: Lote de Evento Processado | 218: NF-e já cancelada previamente na base SEFAZ
+        if (isset($arr['cStat']) && in_array((int) $arr['cStat'], [128, 218], true)) {
+            if ((int) $arr['cStat'] === 218) {
+                $document->update(['status' => 'canceled']);
+                return true;
+            }
+
             $retEvento = $arr['retEvento'][0] ?? $arr['retEvento'] ?? [];
             $infEvento = $retEvento['infEvento'] ?? $retEvento['infRet'] ?? null;
-            $cStatEvento = $infEvento['cStat'] ?? null;
+            $cStatEvento = (int) ($infEvento['cStat'] ?? 0);
 
-            if (in_array($cStatEvento, [135, 155])) {
+            // 135: Homologado | 155: Homologado fora do prazo | 573: Evento duplicado já processado
+            if (in_array($cStatEvento, [135, 155, 573], true)) {
                 $document->update(['status' => 'canceled']);
                 return true;
             }

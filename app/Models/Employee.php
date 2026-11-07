@@ -60,10 +60,10 @@ class Employee extends Model
 
     protected $attributes = [
         'courier_payment_model' => 'fixed',
-        'daily_fee'             => 0.00,
-        'default_delivery_fee'  => 0.00,
-        'fee_per_km'            => 0.00,
-        'minimum_guaranteed'    => 0.00,
+        'daily_fee'              => 0.00,
+        'default_delivery_fee'   => 0.00,
+        'fee_per_km'             => 0.00,
+        'minimum_guaranteed'     => 0.00,
     ];
 
     /**
@@ -88,12 +88,10 @@ class Employee extends Model
     public function isCourier(): bool
     {
         $roles = $this->getAllRoles();
-        $target = EmployeeRole::COURIER->value ?? 'courier';
-        
-        return in_array($target, $roles, true)
-            || in_array('courier', $roles, true)
-            || in_array('motoboy', $roles, true)
-            || in_array('driver', $roles, true);
+
+        return in_array(EmployeeRole::DRIVER->value, $roles, true)
+            || in_array(EmployeeRole::COURIER->value, $roles, true)
+            || in_array('motoboy', $roles, true);
     }
 
     public function getIsCourierAttribute(): bool
@@ -187,9 +185,16 @@ class Employee extends Model
     /**
      * Registros de presença em turnos de caixa
      */
-    public function attendances(): HasMany
+    public function attendances(): \Illuminate\Database\Eloquent\Relations\HasManyThrough
     {
-        return $this->hasMany(ShiftAttendance::class, 'employee_id');
+        return $this->hasManyThrough(
+            ShiftAttendance::class,
+            User::class,
+            'employee_id',
+            'user_id',
+            'id',
+            'id'
+        );
     }
 
     // =========================================================================
@@ -217,9 +222,10 @@ class Employee extends Model
     public function scopeCouriers($query)
     {
         return $query->where(function ($q) {
-            $q->where('role', EmployeeRole::COURIER->value ?? 'courier')
-              ->orWhere('role', 'courier')
-              ->orWhereJsonContains('secondary_roles', 'courier');
+            $q->whereIn('role', [EmployeeRole::DRIVER->value, EmployeeRole::COURIER->value, 'motoboy'])
+              ->orWhereJsonContains('secondary_roles', EmployeeRole::DRIVER->value)
+              ->orWhereJsonContains('secondary_roles', EmployeeRole::COURIER->value)
+              ->orWhereJsonContains('secondary_roles', 'motoboy');
         });
     }
 }

@@ -22,12 +22,10 @@ class AvailabilityService
             $visitedIds = [];
 
             if ($action === 'out_of_stock') {
+                // 🛡️ Altera apenas o estado comercial; NUNCA destrói a contagem física do produto
                 $product->update(['status' => 'out_of_stock']);
 
-                if ($product->track_inventory) {
-                    $product->update(['current_stock' => 0]);
-                    event(new StockLowDetected($product, 'critical'));
-                }
+                event(new StockLowDetected($product, 'critical'));
 
                 // Desativa adicionais vinculados a este insumo
                 ModifierOption::where('linked_product_id', $product->id)->update(['is_active' => false]);
@@ -38,7 +36,6 @@ class AvailabilityService
             } elseif ($action === 'paused') {
                 $product->update(['status' => 'paused']);
 
-                // Pausa gerencial também desativa modificadores e pratos dependentes
                 ModifierOption::where('linked_product_id', $product->id)->update(['is_active' => false]);
                 $this->cascadeDisable($product->id, $visitedIds);
 

@@ -8,6 +8,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use App\Models\Product;
 use App\Models\Category;
+use App\Enums\ProductType;
 
 class ComboSection
 {
@@ -15,10 +16,19 @@ class ComboSection
     {
         return Section::make("Passos do Combo")
             ->icon("heroicon-o-square-3-stack-3d")
-            ->visible(fn(Get $get) => $get("type") === "combo")
+            ->visible(function (Get $get, ?Product $record): bool {
+                $type = $get("type") ?? $record?->type;
+
+                if ($type instanceof ProductType) {
+                    return $type === ProductType::COMBO;
+                }
+
+                $typeStr = is_string($type) ? $type : ($type?->value ?? null);
+                return $typeStr === 'combo';
+            })
             ->schema([
                 Forms\Components\Repeater::make("comboGroups")
-                    ->relationship()
+                    ->relationship('comboGroups')
                     ->label("")
                     ->schema([
                         Forms\Components\TextInput::make("name")
@@ -41,7 +51,7 @@ class ComboSection
                             ->columnSpan(1),
 
                         Forms\Components\Repeater::make("items")
-                            ->relationship()
+                            ->relationship('items')
                             ->label("Itens Disponíveis")
                             ->schema([
                                 Forms\Components\Select::make("selection_type")
