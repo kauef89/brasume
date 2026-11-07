@@ -81,4 +81,9 @@ class BankStatement extends Model
 
         return "Outros";
     }
+
+    public function suggestedReceivable(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\AccountReceivable::class, 'suggested_receivable_id');
+    }
 }

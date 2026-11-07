@@ -20,9 +20,25 @@ class ManageAcquirerTransactions extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
-            ImportAcquirerReportAction::make()
-                ->label('Importar Relatório CSV')
-                ->color('success'),
+            ImportAcquirerReportAction::make(),
+
+            \Filament\Actions\Action::make('reprocess_pending')
+                ->label('Reprocessar Pendências')
+                ->icon('heroicon-m-arrow-path')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Reprocessar Conciliação Automática')
+                ->modalDescription('O sistema reavaliará todas as transações com dúvida ou órfãs utilizando as regras e vínculos de terminais atualizados.')
+                ->action(function () {
+                    $engine = app(\App\Services\Financial\Acquirers\AcquirerReconciliationEngine::class);
+                    $promoted = $engine->reprocessPending();
+
+                    \Filament\Notifications\Notification::make()
+                        ->title('Reprocessamento Concluído')
+                        ->body("{$promoted} transação(ões) foram conciliadas automaticamente.")
+                        ->success()
+                        ->send();
+                }),
         ];
     }
 

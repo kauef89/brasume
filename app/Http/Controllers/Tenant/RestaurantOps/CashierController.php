@@ -14,6 +14,7 @@ use App\Services\Printing\Documents\ShiftClosureReport;
 use App\Services\Printing\PrintDispatcher;
 use App\Services\RestaurantOps\ShiftAttendanceService;
 use App\Services\RestaurantOps\ShiftCashierService;
+use App\Services\RestaurantOps\ShiftAuditService;
 use App\Services\RestaurantOps\OperationalShiftClosureService;
 use Illuminate\Http\Request;
 
@@ -315,7 +316,7 @@ class CashierController extends Controller
     /**
      * 🔍 Diagnóstico pré-fechamento: inspeciona anomalias antes de fechar o turno
      */
-    public function inspectDiscrepancy(Request $request, ShiftCashierService $cashierService)
+    public function inspectDiscrepancy(Request $request, ShiftAuditService $auditService)
     {
         $shift = CashShift::where('status', 'open')->latest('opened_at')->first();
         if (!$shift) {
@@ -323,7 +324,9 @@ class CashierController extends Controller
         }
 
         $actualCash = (float) $request->input('amount', 0);
-        $diagnostic = $cashierService->diagnoseDiscrepancy($shift, $actualCash);
+        $terminalSettlements = $request->input('terminal_totals', []) ?: $request->input('terminal_settlements', []);
+
+        $diagnostic = $auditService->diagnose($shift, $actualCash, $terminalSettlements);
 
         return response()->json($diagnostic);
     }
@@ -331,7 +334,7 @@ class CashierController extends Controller
     /**
      * 🔧 Aplica a correção do meio de pagamento sugerido
      */
-    public function fixPaymentMethod(Request $request, ShiftCashierService $cashierService)
+    public function fixPaymentMethod(Request $request, ShiftAuditService $auditService)
     {
         $validated = $request->validate([
             'payment_id' => 'required|integer|exists:payments,id',
@@ -347,7 +350,7 @@ class CashierController extends Controller
         $operatorName = $operator?->name ?? 'Operador';
 
         try {
-            $result = $cashierService->applyDiscrepancyCorrection(
+            $result = $auditService->applyCorrection(
                 $shift,
                 (int) $validated['payment_id'],
                 (int) $validated['new_method_id'],
