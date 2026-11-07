@@ -148,7 +148,7 @@
                     </div>
                     <h3 class="text-xl font-black mb-1 uppercase tracking-wider text-surface-text">Abertura de Turno</h3>
                     <p class="text-xs text-surface-muted max-w-xs leading-relaxed">
-                        Passo 1: Confirme a equipa presente para libertar o acesso ao sistema. Em seguida, informe o fundo de troco da gaveta.
+                        Passo 1: Confirme a equipe presente para liberar o acesso ao sistema. Em seguida, informe o fundo de troco da gaveta.
                     </p>
                 </div>
 

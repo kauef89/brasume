@@ -109,7 +109,7 @@ class CashierController extends Controller
             return back()->withErrors(['error' => $msg, 'shift' => $msg]);
         }
 
-        // 3. Sincronização da Equipa no Fecho
+        // 3. Sincronização da Equipe no Fechamento
         if ($request->filled('attendees')) {
             $attendanceService->syncShiftAttendees($request->input('attendees'), $shift);
         }
@@ -313,7 +313,7 @@ class CashierController extends Controller
     }
 
     /**
-     * 🔍 Diagnóstico pré-fecho: inspeciona anomalias antes de fechar o turno
+     * 🔍 Diagnóstico pré-fechamento: inspeciona anomalias antes de fechar o turno
      */
     public function inspectDiscrepancy(Request $request, ShiftCashierService $cashierService)
     {

@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 
 class PrintDispatcher
 {
-    public function dispatch(Printer $printer, $document): void
+    public function dispatch(Printer $printer, $document): ?PrintJob
     {
         Log::info("🚀 [PrintDispatcher] Iniciando formatação do documento para a impressora: {$printer->name}");
 
@@ -33,7 +33,7 @@ class PrintDispatcher
         if (!$printer->is_active) {
             Log::warning("🛑 [PrintDispatcher] A impressora de destino está inativa. Disparo cancelado.");
             $this->firePrintAlert($printer, $order, 'Impressora de destino está desativada.');
-            return;
+            return null;
         }
 
         $blueprint = $document->build();
@@ -53,7 +53,7 @@ class PrintDispatcher
         } catch (\Exception $e) {
             Log::error("❌ [PrintDispatcher] Erro ao salvar na tabela 'print_jobs': " . $e->getMessage());
             $this->firePrintAlert($printer, $order, 'Erro interno ao salvar ordem de impressão.');
-            return;
+            return null;
         }
 
         // 2. Prepara o Pacote para a Bridge Node.js
@@ -75,6 +75,8 @@ class PrintDispatcher
             Log::error("❌ [PrintDispatcher] Erro ao tentar disparar o WebSocket: " . $e->getMessage());
             $this->firePrintAlert($printer, $order, 'Falha ao transmitir ordem para a fila.');
         }
+
+        return $job;
     }
 
     public function retryJobs(array $jobIds): int

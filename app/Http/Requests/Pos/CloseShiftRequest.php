@@ -23,6 +23,7 @@ class CloseShiftRequest extends FormRequest
             'observation'                   => ['nullable', 'string', 'max:500'],
             'pin'                           => ['nullable', 'string'],
             'details'                       => ['nullable'],
+            'terminal_settlements'          => ['nullable', 'array'],
             'attendees'                     => [$requireAttendance ? 'required' : 'nullable', 'array', $requireAttendance ? 'min:1' : 'min:0'],
             'attendees.*.user_id'           => ['required', 'integer', 'exists:users,id'],
             'attendees.*.attendance_status' => ['nullable', 'string', 'in:present,absent,vacation,day_off'],

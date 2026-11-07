@@ -12,7 +12,7 @@
                 </div>
                 <div>
                     <h2 class="text-xl font-black text-surface-text leading-tight">
-                        {{ isOpenMode ? 'Abertura de Caixa' : 'Fecho de Caixa' }}
+                        {{ isOpenMode ? 'Abertura de Caixa' : 'Fechamento de Caixa' }}
                     </h2>
                     <p class="text-xs font-medium text-surface-muted">
                         {{ isOpenMode ? 'Informe as cédulas e moedas do fundo de troco inicial.' : 'Realize a contagem do dinheiro físico e a conferência das fitas dos terminais.' }}

@@ -26,6 +26,7 @@ class CashShift extends Model
         'corrected_errors_details' => 'array',
         'cash_breakage_amount'     => 'decimal:2',
         'apos_breakage_amount'     => 'decimal:2',
+        'terminal_settlements'  => 'array',
         'has_breakage'             => 'boolean',
     ];
 

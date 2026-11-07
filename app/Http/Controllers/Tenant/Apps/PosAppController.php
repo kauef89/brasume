@@ -60,6 +60,7 @@ class PosAppController extends Controller
             'currentShift' => $shift,
             'managerData' => $opsService->getManagerShiftSummary($user),
             'bankAccounts' => BankAccount::where('is_active', true)->orderBy('name')->get(),
+            'devices' => \App\Models\Device::where('is_active', true)->orderBy('name')->get(),
             'users' => $attendanceService->getShiftUsersData(),
             'currentAttendees' => $attendanceService->getCurrentAttendees($shift),
             'todayScheduledAttendees' => $scheduleService->getTodayScheduledAttendees(),

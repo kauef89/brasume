@@ -117,7 +117,7 @@ class ShiftCashierService
     }
 
     /**
-     * 🧠 DIAGNÓSTICO INTELIGENTE PRÉ-FECHO:
+     * 🧠 DIAGNÓSTICO INTELIGENTE PRÉ-FECHAMENTO:
      * Compara o saldo informado com o esperado e identifica se há um erro evidente de meio de pagamento.
      */
     public function diagnoseDiscrepancy(CashShift $shift, float $actualCash): array
@@ -142,7 +142,7 @@ class ShiftCashierService
         $suggestion = null;
 
         // CENÁRIO A: Falta dinheiro em gaveta (Ex: R$ -67,50)
-        // O operador registou como Dinheiro no ecrã, mas o cliente pagou por Maquineta / Cartão / Pix
+        // O operador registrou como Dinheiro no tela, mas o cliente pagou por Maquineta / Cartão / Pix
         if ($diff < 0) {
             $candidatePayments = Payment::with(['order', 'paymentMethod'])
                 ->where('cash_shift_id', $shift->id)
@@ -188,7 +188,7 @@ class ShiftCashierService
                         ->first() ?? PaymentMethod::find(5);
 
                     $reason = "O Pedido #{$payment->order_id} possui um pagamento de R$ " . number_format($payment->amount, 2, ',', '.') .
-                              " registado como Dinheiro que coincide exatamente com o valor em falta.";
+                              " registrado como Dinheiro que coincide exatamente com o valor em falta.";
                 }
 
                 if ($suggestedMethod) {
@@ -230,7 +230,7 @@ class ShiftCashierService
                     'suggested_method_id'   => $cashMethod->id,
                     'suggested_method_name' => $cashMethod->name,
                     'amount'                => (float) $payment->amount,
-                    'reason'                => "O Pedido #{$payment->order_id} foi registado como '{$payment->method}', mas há um excedente físico idêntico na gaveta.",
+                    'reason'                => "O Pedido #{$payment->order_id} foi registrado como '{$payment->method}', mas há um excedente físico idêntico na gaveta.",
                     'type'                  => 'electronic_to_cash'
                 ];
                 break;
@@ -247,7 +247,7 @@ class ShiftCashierService
     }
 
     /**
-     * 🔧 APLICA A CORREÇÃO DE FORMA DE PAGAMENTO E REGISTA A FALHA OPERACIONAL NO TURNO
+     * 🔧 APLICA A CORREÇÃO DE FORMA DE PAGAMENTO E REGISTRA A FALHA OPERACIONAL NO TURNO
      */
     public function applyDiscrepancyCorrection(CashShift $shift, int $paymentId, int $newMethodId, string $operatorName): array
     {
@@ -277,7 +277,7 @@ class ShiftCashierService
                 ]);
             }
 
-            // 3. Regista o histórico de erro corrigido no turno (Auditoria de Eficácia)
+            // 3. Registra o histórico de erro corrigido no turno (Auditoria de Eficácia)
             $details = $shift->corrected_errors_details ?? [];
             $details[] = [
                 'timestamp'        => now()->toDateTimeString(),
@@ -320,12 +320,22 @@ class ShiftCashierService
 
             $hasBreakage = abs($diff) >= 0.02;
 
+            $terminalSettlements = $data['terminal_settlements'] ?? ($data['terminal_totals'] ?? null);
+            $totalAposDeclared = 0;
+            if (is_array($terminalSettlements)) {
+                foreach ($terminalSettlements as $t) {
+                    $totalAposDeclared += (float) ($t['total'] ?? 0);
+                }
+            }
+
             $updatePayload = [
                 'status'                   => 'closed',
                 'closed_at'                => $closedAt,
                 'closing_balance_expected' => $expected,
                 'closing_balance_actual'   => $actual,
                 'cash_breakage_amount'     => $diff,
+                'apos_breakage_amount'     => round($totalAposDeclared, 2),
+                'terminal_settlements'      => $terminalSettlements,
                 'has_breakage'             => $hasBreakage,
                 'closed_by'                => $operatorId,
                 'notes'                    => $data['notes'] ?? ($data['observation'] ?? null),
@@ -369,7 +379,7 @@ class ShiftCashierService
                 $this->printDispatcher->dispatch($cashierPrinter, $report);
             }
         } catch (\Throwable $e) {
-            Log::warning("⚠️ Falha ao imprimir relatório de fecho: " . $e->getMessage());
+            Log::warning("⚠️ Falha ao imprimir relatório de fechamento: " . $e->getMessage());
         }
 
         try {
