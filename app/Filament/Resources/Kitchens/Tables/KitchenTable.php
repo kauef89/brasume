@@ -19,6 +19,7 @@ class KitchenTable
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')->label('Cozinha')->searchable(),
+                Tables\Columns\TextColumn::make('type')->label('Modo KDS')->badge()->formatStateUsing(fn ($state) => $state === 'bar' ? 'Bar / Bebidas' : 'Cozinha Tradicional')->color(fn ($state) => $state === 'bar' ? 'warning' : 'info'),
                 Tables\Columns\TextColumn::make('printer.name')->label('Impressora vinculada'),
                 Tables\Columns\ToggleColumn::make('is_active')->label('Ativa'),
             ])

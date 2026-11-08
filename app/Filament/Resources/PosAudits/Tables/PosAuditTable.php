@@ -65,6 +65,15 @@ class PosAuditTable
                             ->when($data['created_from'], fn(Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date))
                             ->when($data['created_until'], fn(Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date));
                     }),
+                SelectFilter::make('action')
+                    ->label('Operação')
+                    ->options([
+                        'cancel_item'    => 'Estorno de Item',
+                        'edit_item'      => 'Edição de Item',
+                        'cancel_order'   => 'Cancelamento de Pedido',
+                        'cash_out'       => 'Sangria de Caixa',
+                        'apply_discount' => 'Desconto Manual',
+                    ]),
                 SelectFilter::make('authorizer_id')
                     ->label('Autorizador')
                     ->relationship('authorizer', 'name'),

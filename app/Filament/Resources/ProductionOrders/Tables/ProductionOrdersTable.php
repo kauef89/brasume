@@ -31,14 +31,9 @@ class ProductionOrdersTable
                 ->numeric(3)
                 ->label('Realizado'),
 
-            Columns\BadgeColumn::make('status')
-                ->colors([
-                    'danger' => 'pending',
-                    'warning' => 'in_progress',
-                    'success' => 'completed',
-                    'secondary' => 'cancelled',
-                ])
-                ->label('Status'),
+            Columns\TextColumn::make('status')
+                ->label('Estado')
+                ->badge(),
         ];
     }
 

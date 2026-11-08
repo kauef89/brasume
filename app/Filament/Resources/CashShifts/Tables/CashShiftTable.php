@@ -135,12 +135,26 @@ class CashShiftTable
                         ];
                     })
                     ->action(function (CashShift $record, array $data): void {
-                        app(\App\Services\RestaurantOps\ShiftCashierService::class)->closeShift([
+                        /** @var \App\Services\RestaurantOps\OperationalShiftClosureService $opClosure */
+                        $opClosure = app(\App\Services\RestaurantOps\OperationalShiftClosureService::class);
+                        $blockers = $opClosure->getPendingShiftBlockers($record->id);
+
+                        if ($blockers['has_blockers']) {
+                            $msg = 'Impossível fechar o turno: existem pedidos ativos ou comandas com saldo pendente de pagamento.';
+                            \Filament\Notifications\Notification::make()->title('Bloqueio Operacional')->body($msg)->danger()->send();
+                            return;
+                        }
+
+                        $cashierService = app(\App\Services\RestaurantOps\ShiftCashierService::class);
+                        $payload = [
                             'amount' => $data['closing_balance_actual'],
-                            'retained_amount' => 0, // Admin retém zero por padrão nesta tela
-                            'observation' => $data['notes'],
-                            'details' => null
-                        ], auth()->id(), $record); // 🚀 Injeta o turno exato da linha!
+                            'retained_amount' => 0,
+                            'observation' => $data['notes'] ?? null,
+                            'details' => null,
+                        ];
+
+                        $closed = $cashierService->closeShift($record, $payload, auth()->id(), auth()->user()?->name ?? 'Administrador');
+                        $opClosure->closeShift($closed->id, true);
 
                         Notification::make()->title('Caixa Fechado com sucesso!')->success()->send();
                     }),

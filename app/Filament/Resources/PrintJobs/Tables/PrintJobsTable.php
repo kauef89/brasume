@@ -33,6 +33,7 @@ class PrintJobsTable
                         'conference_bill' => 'Conferência Mesa',
                         'delivery_dispatch' => 'Via Motoboy',
                         'freelancer_receipt' => 'Vale Freelancer',
+                        'test_page' => 'Página de Teste',
                         default => $state,
                     }),
 
@@ -53,10 +54,45 @@ class PrintJobsTable
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
-                // Pode adicionar um SelectFilter pelo 'status' aqui no futuro
+                \Filament\Tables\Filters\SelectFilter::make('status')
+                    ->label('Estado')
+                    ->options([
+                        'pending' => 'Pendente',
+                        'success' => 'Impresso com Sucesso',
+                        'failed'  => 'Falhou',
+                    ]),
+                \Filament\Tables\Filters\SelectFilter::make('printer_id')
+                    ->label('Impressora')
+                    ->relationship('printer', 'name'),
+                \Filament\Tables\Filters\SelectFilter::make('job_type')
+                    ->label('Tipo de Trabalho')
+                    ->options([
+                        'kitchen_ticket'    => 'Comanda Cozinha',
+                        'customer_receipt'  => 'Recibo Cliente',
+                        'conference_bill'   => 'Conferência Mesa',
+                        'delivery_dispatch' => 'Via Motoboy',
+                        'freelancer_receipt'=> 'Vale Freelancer',
+                        'test_page'         => 'Página de Teste',
+                    ]),
             ])
             ->recordActions([
-                ViewAction::make(), // 🚀 Apenas Visualizar!
+                \Filament\Actions\Action::make('reenviar')
+                    ->label('Reenviar')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('warning')
+                    ->visible(fn ($record) => $record->status === 'failed')
+                    ->requiresConfirmation()
+                    ->modalHeading('Reenviar Trabalho de Impressão')
+                    ->modalDescription('O trabalho voltará ao estado pendente para que o agente local (Bridge) tente imprimir novamente.')
+                    ->action(function ($record) {
+                        $record->update([
+                            'status' => 'pending',
+                            'attempts' => 0,
+                            'error_message' => null,
+                        ]);
+                        \Filament\Notifications\Notification::make()->title('Trabalho recolocado na fila!')->success()->send();
+                    }),
+                ViewAction::make(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
