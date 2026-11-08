@@ -25,6 +25,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Forms\Components\Placeholder;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 
 class ConciliationTabsSchema
 {
@@ -36,19 +37,16 @@ class ConciliationTabsSchema
         $descStr = $statement->counterparty_name ?: $statement->description;
         $docStr = $statement->document ? "<span class='ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'>DOC: {$statement->document}</span>" : '';
 
-        // Deteção de Semelhantes no Extrato Pendente (mesmo sinal de débito/crédito)
-        $cleanSearchTerm = trim((string) ($statement->counterparty_name ?: $statement->description));
+        // Deteção Canónica de Semelhantes
+        $cleanSearchTerm = self::extractCanonicalTerm($statement);
         $sign = $statement->amount < 0 ? '<' : '>';
 
         $similarQuery = BankStatement::where('status', 'pending')
             ->where('id', '!=', $statement->id)
             ->where('amount', $sign, 0)
-            ->where(function ($q) use ($statement, $cleanSearchTerm) {
-                if (!empty($statement->document)) {
-                    $q->where('document', $statement->document);
-                }
-                if (!empty($cleanSearchTerm) && strlen($cleanSearchTerm) >= 3) {
-                    $q->orWhere('counterparty_name', 'like', "%{$cleanSearchTerm}%")
+            ->where(function ($q) use ($cleanSearchTerm) {
+                if (strlen($cleanSearchTerm) >= 3) {
+                    $q->where('counterparty_name', 'like', "%{$cleanSearchTerm}%")
                       ->orWhere('description', 'like', "%{$cleanSearchTerm}%");
                 }
             });
@@ -196,8 +194,10 @@ class ConciliationTabsSchema
 
     public static function processConciliation(array $data, BankStatement $statement): void
     {
-        $type = $data['conciliation_type'] ?? null;
-        $mode = $data['action_mode'] ?? null;
+        // 🛡️ Normalização Absoluta do Enum e Modo
+        $rawType = $data['conciliation_type'] ?? null;
+        $type = $rawType instanceof \BackedEnum ? $rawType->value : (string) $rawType;
+        $mode = (string) ($data['action_mode'] ?? '');
 
         if (!$type && !empty($data['existing_payable_id'])) {
             $type = 'avulsa'; $mode = 'link';
@@ -209,13 +209,15 @@ class ConciliationTabsSchema
         $category = null;
         $subcategory = null;
 
-        if (in_array($type, [ConciliationType::TRANSFER->value, 'transferencia'])) {
+        $searchTerm = self::extractCanonicalTerm($statement);
+
+        if (in_array($type, [ConciliationType::TRANSFER->value, 'transferencia', 'transfer'], true)) {
             $tData = $data['transfer_new'] ?? [];
             if (!empty($tData['target_account_id'])) {
                 $conciliable = BankAccount::find($tData['target_account_id']);
                 $description = $tData['description'] ?? "Transferência";
             }
-        } elseif (in_array($type, [ConciliationType::EXPENSE->value, 'avulsa'])) {
+        } elseif (in_array($type, [ConciliationType::EXPENSE->value, 'avulsa', 'expense'], true)) {
             if ($mode === 'link' && !empty($data['existing_payable_id'])) {
                 $idRaw = $data["existing_payable_id"];
                 if (str_starts_with($idRaw, "batch_")) {
@@ -234,7 +236,7 @@ class ConciliationTabsSchema
                 $subcategory = $conciliable->accounting_subcategory;
                 $description = $conciliable->description;
             }
-        } elseif (in_array($type, [ConciliationType::RECURRING->value, 'fixa'])) {
+        } elseif (in_array($type, [ConciliationType::RECURRING->value, 'fixa', 'recurring'], true)) {
             if ($mode === 'link' && !empty($data['existing_fixed_id'])) {
                 $fixed = RecurringExpense::find($data["existing_fixed_id"]);
                 $desc = $fixed->name . " (" . $statement->bank_date->format("M/Y") . ")";
@@ -263,50 +265,52 @@ class ConciliationTabsSchema
                 ]);
                 $supplierId = $fixed->supplier_id;
             }
-        } elseif (in_array($type, [ConciliationType::PERSONAL->value, 'pessoal'])) {
+        } elseif (in_array($type, [ConciliationType::PERSONAL->value, 'pessoal', 'personal'], true)) {
             $category = AccountingCategory::PARTNERS->value;
             $subcategory = 'personal';
+
             if ($mode === 'link' && !empty($data['existing_personal_id'])) {
                 $conciliable = AccountPayable::find($data['existing_personal_id']);
                 $supplierId = $conciliable->supplier_id;
             } elseif ($mode === 'new') {
                 $pData = $data['pessoal_new'] ?? [];
-                $supplierId = !empty($pData['is_supplier_locked']) || (!empty($pData['identify_supplier']) && !empty($pData['supplier_id']))
-                    ? $pData['supplier_id']
-                    : Supplier::firstOrCreate(
-                        ['name' => 'Uso Pessoal / Sócios'],
-                        ['type' => 'physical', 'is_personal' => true, 'accounting_category' => AccountingCategory::PARTNERS->value, 'accounting_subcategory' => 'personal', 'is_active' => true]
-                    )->id;
+
+                // 🎯 Auto-Match Inteligente por Termo Canónico e Normalização Fonética
+                $supplierId = !empty($pData['supplier_id']) ? $pData['supplier_id'] : null;
+
+                if (!$supplierId) {
+                    $supplierId = self::resolveSupplierForTerm($searchTerm);
+                }
+
                 $desc = !empty($pData['description'])
                     ? $pData['description'] . " - " . ($statement->counterparty_name ?: $statement->description)
                     : "Uso Pessoal: " . ($statement->counterparty_name ?: $statement->description);
+
                 $conciliable = AccountPayable::create([
-                    "description" => $desc,
-                    "supplier_id" => $supplierId,
-                    "amount" => abs((float) $statement->amount),
-                    "due_date" => $statement->bank_date,
-                    "is_personal" => true,
-                    "accounting_category" => $category,
+                    "description"            => $desc,
+                    "supplier_id"            => $supplierId,
+                    "amount"                 => abs((float) $statement->amount),
+                    "due_date"               => $statement->bank_date,
+                    "is_personal"            => true,
+                    "accounting_category"    => $category,
                     "accounting_subcategory" => $subcategory
                 ]);
                 $description = $desc;
             }
         }
 
-        // 1. Finaliza a transação ativa no motor de conciliação
+        // 1. Finaliza a transação activa no motor de conciliação
         if ($conciliable) {
             BankReconciliationService::finalize($statement, $conciliable, $supplierId, $description);
         }
 
-        $searchTerm = $data['search_term_used'] ?? trim((string) ($statement->counterparty_name ?: $statement->description));
-
         // 2. Memoriza Regra Futura (se selecionado)
         if (!empty($data['remember_future_rule']) && !empty($searchTerm)) {
             $targetTypeEnum = match ($type) {
-                'transferencia', ConciliationType::TRANSFER->value => ConciliationType::TRANSFER,
-                'fixa', ConciliationType::RECURRING->value          => ConciliationType::RECURRING,
-                'pessoal', ConciliationType::PERSONAL->value        => ConciliationType::PERSONAL,
-                default                                            => ConciliationType::EXPENSE,
+                'transferencia', 'transfer', ConciliationType::TRANSFER->value => ConciliationType::TRANSFER,
+                'fixa', 'recurring', ConciliationType::RECURRING->value         => ConciliationType::RECURRING,
+                'pessoal', 'personal', ConciliationType::PERSONAL->value       => ConciliationType::PERSONAL,
+                default                                                       => ConciliationType::EXPENSE,
             };
 
             $targetAccId = ($targetTypeEnum === ConciliationType::TRANSFER && $conciliable instanceof BankAccount)
@@ -327,29 +331,21 @@ class ConciliationTabsSchema
         }
 
         // 3. Resolve Ocorrências Semelhantes em Cascata (Batch Resolve)
-        $shouldResolveSimilar = !empty($data['resolve_similar_entries']) || !empty($data['batch_resolve']) || !empty($data['conciliar_semelhantes']);
+        $shouldResolveSimilar = !empty($data['resolve_similar_entries']) 
+            || !empty($data['batch_resolve']) 
+            || !empty($data['conciliar_semelhantes'])
+            || (isset($data['resolve_similar_entries']) && $data['resolve_similar_entries'] === true);
 
-        if ($shouldResolveSimilar) {
-            $doc = preg_replace('/[^0-9]/', '', (string) ($statement->document ?? ''));
-            $counterName = trim((string) ($statement->counterparty_name ?? ''));
-            $desc = trim((string) ($statement->description ?? ''));
+        if ($shouldResolveSimilar && strlen($searchTerm) >= 3) {
             $sign = $statement->amount < 0 ? '<' : '>';
 
             $similarPending = BankStatement::query()
                 ->where('status', 'pending')
                 ->where('id', '!=', $statement->id)
                 ->where('amount', $sign, 0)
-                ->where(function ($q) use ($doc, $counterName, $desc, $searchTerm) {
-                    if (!empty($doc) && strlen($doc) >= 11) {
-                        $q->where('document', $doc);
-                    }
-                    if (!empty($counterName) && strlen($counterName) >= 4) {
-                        $q->orWhere('counterparty_name', 'like', "%{$counterName}%");
-                    }
-                    if (!empty($searchTerm) && strlen($searchTerm) >= 4) {
-                        $q->orWhere('counterparty_name', 'like', "%{$searchTerm}%")
-                          ->orWhere('description', 'like', "%{$searchTerm}%");
-                    }
+                ->where(function ($q) use ($searchTerm) {
+                    $q->where('counterparty_name', 'like', "%{$searchTerm}%")
+                      ->orWhere('description', 'like', "%{$searchTerm}%");
                 })
                 ->get();
 
@@ -357,7 +353,7 @@ class ConciliationTabsSchema
                 $simDesc = $description ?: ($simStmt->counterparty_name ?: $simStmt->description);
 
                 // CENÁRIO A: Pessoal / Sócios
-                if (in_array($type, [ConciliationType::PERSONAL->value, 'pessoal'])) {
+                if (in_array($type, [ConciliationType::PERSONAL->value, 'pessoal', 'personal'], true)) {
                     $simPayable = AccountPayable::create([
                         "description"            => "Uso Pessoal: " . ($simStmt->counterparty_name ?: $simStmt->description),
                         "supplier_id"            => $supplierId,
@@ -369,8 +365,8 @@ class ConciliationTabsSchema
                     ]);
                     BankReconciliationService::finalize($simStmt, $simPayable, $supplierId, $simPayable->description);
                 }
-                // CENÁRIO B: Conta Fixa / Recorrente (Ex: Unifique, Aluguel)
-                elseif (in_array($type, [ConciliationType::RECURRING->value, 'fixa'])) {
+                // CENÁRIO B: Conta Fixa / Recorrente
+                elseif (in_array($type, [ConciliationType::RECURRING->value, 'fixa', 'recurring'], true)) {
                     $fixedDesc = $simDesc . " (" . $simStmt->bank_date->format("M/Y") . ")";
                     $simPayable = AccountPayable::create([
                         "description"            => $fixedDesc,
@@ -383,7 +379,7 @@ class ConciliationTabsSchema
                     BankReconciliationService::finalize($simStmt, $simPayable, $supplierId, $fixedDesc);
                 }
                 // CENÁRIO C: Despesa Avulsa
-                elseif (in_array($type, [ConciliationType::EXPENSE->value, 'avulsa'])) {
+                elseif (in_array($type, [ConciliationType::EXPENSE->value, 'avulsa', 'expense'], true)) {
                     $simPayable = AccountPayable::create([
                         "description"            => $simDesc,
                         "supplier_id"            => $supplierId,
@@ -394,12 +390,63 @@ class ConciliationTabsSchema
                     ]);
                     BankReconciliationService::finalize($simStmt, $simPayable, $supplierId, $simDesc);
                 }
-                // CENÁRIO D: Transferência / Pagamento de Fatura de Cartão
-                elseif (in_array($type, [ConciliationType::TRANSFER->value, 'transferencia']) && $conciliable instanceof BankAccount) {
+                // CENÁRIO D: Transferência
+                elseif (in_array($type, [ConciliationType::TRANSFER->value, 'transferencia', 'transfer'], true) && $conciliable instanceof BankAccount) {
                     $transfDesc = $description ?: ($simStmt->counterparty_name ?: "Transferência / Pgto de Fatura");
                     BankReconciliationService::finalize($simStmt, $conciliable, null, $transfDesc);
                 }
             }
         }
+    }
+
+    /**
+     * Extrai termo canónico limpo independente de prefixos operacionais do banco.
+     */
+    public static function extractCanonicalTerm(BankStatement $statement): string
+    {
+        $raw = (string) ($statement->counterparty_name ?: $statement->description);
+        $clean = preg_replace('/^(Débito:\s*|COMPRAS NACIONAIS-[A-Z0-9]+\s+)/i', '', $raw);
+        $clean = preg_replace('/\s+(BALNEARIO\s+BARBR|JOINVILLE\s+BR|ARAQUARI\s+BR|SAO\s+FRANCISCOBR|OSASCO\s+BR|BALNE\s+BR|BR)$/i', '', $clean);
+        
+        $term = trim($clean);
+        $words = explode(' ', $term);
+
+        // Se contiver palavras suficientes, extrai a raiz de 2 palavras (ex: "FARMACIA PRECO")
+        if (count($words) >= 2) {
+            return $words[0] . ' ' . $words[1];
+        }
+
+        return $term;
+    }
+
+    /**
+     * Localiza o fornecedor por similaridade fonética e canónica.
+     */
+    public static function resolveSupplierForTerm(string $term): int
+    {
+        if (strlen($term) >= 4) {
+            // 1. Procura directa
+            $found = Supplier::where('name', 'like', "%{$term}%")
+                ->orWhere('document_name', 'like', "%{$term}%")
+                ->first();
+
+            if ($found) return $found->id;
+
+            // 2. Procura com caracteres normalizados (ex: "PRECO" casa com "Preço")
+            $termAscii = Str::ascii($term);
+            $allSuppliers = Supplier::where('is_active', true)->get(['id', 'name', 'document_name']);
+
+            foreach ($allSuppliers as $sup) {
+                $supAscii = Str::ascii($sup->name . ' ' . ($sup->document_name ?? ''));
+                if (str_contains(mb_strtolower($supAscii), mb_strtolower($termAscii))) {
+                    return $sup->id;
+                }
+            }
+        }
+
+        return Supplier::firstOrCreate(
+            ['name' => 'Uso Pessoal / Sócios'],
+            ['type' => 'physical', 'is_personal' => true, 'accounting_category' => AccountingCategory::PARTNERS->value, 'accounting_subcategory' => 'personal', 'is_active' => true]
+        )->id;
     }
 }

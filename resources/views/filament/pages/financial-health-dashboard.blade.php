@@ -166,7 +166,7 @@
                 <div class="border-b border-gray-100 dark:border-white/10 px-6 py-4 bg-gray-50/50 dark:bg-gray-950/40 flex items-center justify-between">
                     <div>
                         <h3 class="text-sm font-semibold text-gray-950 dark:text-white uppercase tracking-wider">Demonstrativo de Resultado do Exercício (DRE)</h3>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Visão contábil e estrutural do faturamento, deduções e margens.</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Clique nas linhas das despesas para abrir a estratificação por fornecedor, subcategoria e tipo.</p>
                     </div>
                     <span class="text-xs font-mono text-gray-400 dark:text-gray-500 font-medium">{{ $report['period']['start'] }} &mdash; {{ $report['period']['end'] }}</span>
                 </div>
@@ -199,12 +199,99 @@
                         </div>
                     </div>
 
-                    {{-- CMV --}}
-                    <div class="flex items-center justify-between px-6 py-2.5 bg-gray-50/30 dark:bg-gray-950/20 text-xs">
-                        <span class="text-gray-600 dark:text-gray-400 pl-4 flex items-center gap-1.5"><x-heroicon-m-minus-small class="w-4 h-4 text-danger-400"/> Custo da Mercadoria Vendida (CMV Real)</span>
-                        <div class="flex items-center gap-x-8 shrink-0">
-                            <span class="w-16 text-right font-mono text-gray-400 dark:text-gray-500">{{ $report['revenue']['gross'] > 0 ? number_format(($report['cogs']['total'] / $report['revenue']['gross']) * 100, 1) : 0 }}%</span>
-                            <span class="w-36 text-right font-mono font-medium text-danger-600 dark:text-danger-400">- R$ {{ number_format($report['cogs']['total'], 2, ',', '.') }}</span>
+                    {{-- 3. CMV REAL (ACCORDION) --}}
+                    @php $cogsB = $report['cogs']['breakdown'] ?? null; @endphp
+                    <div x-data="{ open: false, subTab: 'suppliers' }" class="border-b border-gray-100 dark:border-white/5">
+                        <button type="button" @click="open = !open" class="w-full flex items-center justify-between px-6 py-2.5 bg-gray-50/30 dark:bg-gray-950/20 text-xs hover:bg-gray-100/60 dark:hover:bg-white/[0.04] transition text-left cursor-pointer">
+                            <span class="text-gray-700 dark:text-gray-300 pl-4 flex items-center gap-2 font-medium">
+                                <x-heroicon-m-chevron-right class="w-4 h-4 text-gray-400 transition-transform duration-200" ::class="open ? 'rotate-90 text-primary-500' : ''"/>
+                                <x-heroicon-m-shopping-cart class="w-4 h-4 text-danger-500"/>
+                                Custo da Mercadoria Vendida (CMV Real)
+                                @if(!empty($cogsB['items']))
+                                    <span class="text-[10px] text-gray-400 font-normal">({{ count($cogsB['items']) }} compras &bull; ver estratificação)</span>
+                                @endif
+                            </span>
+                            <div class="flex items-center gap-x-8 shrink-0">
+                                <span class="w-16 text-right font-mono text-gray-400 dark:text-gray-500">{{ $report['revenue']['gross'] > 0 ? number_format(($report['cogs']['total'] / $report['revenue']['gross']) * 100, 1) : 0 }}%</span>
+                                <span class="w-36 text-right font-mono font-medium text-danger-600 dark:text-danger-400">- R$ {{ number_format($report['cogs']['total'], 2, ',', '.') }}</span>
+                            </div>
+                        </button>
+
+                        {{-- Painel Accordion CMV --}}
+                        <div x-show="open" x-collapse class="bg-gray-50/90 dark:bg-gray-950/70 px-6 py-3.5 border-t border-gray-200/60 dark:border-white/5 text-xs">
+                            <div class="flex items-center gap-2 mb-3 border-b border-gray-200/50 dark:border-white/10 pb-2">
+                                <button type="button" @click="subTab = 'suppliers'" :class="subTab === 'suppliers' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    🏢 Por Fornecedor ({{ count($cogsB['by_supplier'] ?? []) }})
+                                </button>
+                                <button type="button" @click="subTab = 'subcategories'" :class="subTab === 'subcategories' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    🏷️ Por Subcategoria
+                                </button>
+                                <button type="button" @click="subTab = 'nature'" :class="subTab === 'nature' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    🔄 Pontual vs Recorrente
+                                </button>
+                                <button type="button" @click="subTab = 'items'" :class="subTab === 'items' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    📄 Todas as Compras ({{ count($cogsB['items'] ?? []) }})
+                                </button>
+                            </div>
+
+                            {{-- Sub-aba Fornecedores --}}
+                            <div x-show="subTab === 'suppliers'" class="space-y-2">
+                                <div class="grid grid-cols-12 font-bold text-gray-500 dark:text-gray-400 uppercase text-[10px] pb-1 border-b border-gray-200/40 dark:border-white/5">
+                                    <span class="col-span-5">Fornecedor</span>
+                                    <span class="col-span-2 text-center">Títulos</span>
+                                    <span class="col-span-2 text-right">Pago</span>
+                                    <span class="col-span-3 text-right">Total (R$)</span>
+                                </div>
+                                @foreach($cogsB['by_supplier'] ?? [] as $sup)
+                                    <div class="grid grid-cols-12 items-center py-1 border-b border-gray-100 dark:border-white/[0.03]">
+                                        <span class="col-span-5 font-semibold text-gray-900 dark:text-white truncate">{{ $sup['name'] }}</span>
+                                        <span class="col-span-2 text-center font-mono text-gray-500">{{ $sup['count'] }} nf(s)</span>
+                                        <span class="col-span-2 text-right font-mono text-success-600 dark:text-success-400">R$ {{ number_format($sup['paid'], 2, ',', '.') }}</span>
+                                        <span class="col-span-3 text-right font-mono font-bold text-gray-900 dark:text-white">R$ {{ number_format($sup['amount'], 2, ',', '.') }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+
+                            {{-- Sub-aba Subcategorias --}}
+                            <div x-show="subTab === 'subcategories'" class="space-y-1.5">
+                                @foreach($cogsB['by_subcategory'] ?? [] as $sub)
+                                    <div class="flex items-center justify-between py-1 border-b border-gray-100 dark:border-white/[0.03]">
+                                        <span class="font-medium text-gray-800 dark:text-gray-200">{{ $sub['label'] }} ({{ $sub['count'] }} compras)</span>
+                                        <span class="font-mono font-semibold text-gray-900 dark:text-white">R$ {{ number_format($sub['amount'], 2, ',', '.') }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+
+                            {{-- Sub-aba Natureza --}}
+                            <div x-show="subTab === 'nature'" class="grid grid-cols-2 gap-3 py-1">
+                                <div class="p-3 rounded-lg bg-white dark:bg-gray-900 ring-1 ring-gray-950/5 dark:ring-white/10">
+                                    <span class="text-gray-500 font-medium text-[11px]">Compras & Estoque Pontual</span>
+                                    <div class="text-base font-bold text-gray-950 dark:text-white mt-1">R$ {{ number_format($cogsB['by_nature']['punctual']['amount'] ?? 0, 2, ',', '.') }}</div>
+                                    <span class="text-[10px] text-gray-400">{{ $cogsB['by_nature']['punctual']['count'] ?? 0 }} títulos</span>
+                                </div>
+                                <div class="p-3 rounded-lg bg-white dark:bg-gray-900 ring-1 ring-gray-950/5 dark:ring-white/10">
+                                    <span class="text-gray-500 font-medium text-[11px]">Contratos / Recorrências</span>
+                                    <div class="text-base font-bold text-gray-950 dark:text-white mt-1">R$ {{ number_format($cogsB['by_nature']['recurring']['amount'] ?? 0, 2, ',', '.') }}</div>
+                                    <span class="text-[10px] text-gray-400">{{ $cogsB['by_nature']['recurring']['count'] ?? 0 }} contratos</span>
+                                </div>
+                            </div>
+
+                            {{-- Sub-aba Títulos Individuais --}}
+                            <div x-show="subTab === 'items'" class="space-y-1 max-h-56 overflow-y-auto pr-1">
+                                @foreach($cogsB['items'] ?? [] as $item)
+                                    <div class="flex items-center justify-between py-1 text-[11px] border-b border-gray-100 dark:border-white/[0.03]">
+                                        <div class="flex items-center gap-2 truncate">
+                                            <span class="font-mono text-gray-400">#{{ $item['id'] }}</span>
+                                            <span class="font-semibold text-gray-900 dark:text-white">{{ $item['supplier'] }}</span>
+                                            <span class="text-gray-500 truncate">({{ $item['description'] }})</span>
+                                        </div>
+                                        <div class="flex items-center gap-3 shrink-0">
+                                            <span class="px-1.5 py-0.2 rounded text-[9px] font-bold {{ $item['status'] === 'paid' ? 'bg-success-100 text-success-800 dark:bg-success-950/50 dark:text-success-400' : 'bg-warning-100 text-warning-800 dark:bg-warning-950/50 dark:text-warning-400' }}">{{ $item['status'] === 'paid' ? 'PAGO' : 'PENDENTE' }}</span>
+                                            <span class="font-mono font-bold text-gray-900 dark:text-white">R$ {{ number_format($item['amount'], 2, ',', '.') }}</span>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
                         </div>
                     </div>
 
@@ -217,34 +304,197 @@
                         </div>
                     </div>
 
-                    {{-- Despesas Operacionais --}}
-                    <div class="flex items-center justify-between px-6 py-2.5 bg-gray-50/30 dark:bg-gray-950/20 text-xs">
-                        <span class="text-gray-600 dark:text-gray-400 pl-4 flex items-center gap-1.5"><x-heroicon-m-minus-small class="w-4 h-4 text-gray-400"/> Estrutura, Ocupação & Sistemas (Infra/Adm)</span>
-                        <div class="flex items-center gap-x-8 shrink-0">
-                            <span class="w-16 text-right font-mono text-gray-400 dark:text-gray-500">{{ $report['revenue']['gross'] > 0 ? number_format((($report['expenses']['utilities'] + $report['expenses']['admin'] + $report['expenses']['maintenance']) / $report['revenue']['gross']) * 100, 1) : 0 }}%</span>
-                            <span class="w-36 text-right font-mono font-medium text-gray-600 dark:text-gray-400">- R$ {{ number_format($report['expenses']['utilities'] + $report['expenses']['admin'] + $report['expenses']['maintenance'], 2, ',', '.') }}</span>
+                    {{-- 4. ESTRUTURA, OCUPAÇÃO & SISTEMAS (ACCORDION) --}}
+                    @php $structB = $report['expenses']['structure_breakdown'] ?? null; @endphp
+                    <div x-data="{ open: false, subTab: 'suppliers' }" class="border-b border-gray-100 dark:border-white/5">
+                        <button type="button" @click="open = !open" class="w-full flex items-center justify-between px-6 py-2.5 bg-gray-50/30 dark:bg-gray-950/20 text-xs hover:bg-gray-100/60 dark:hover:bg-white/[0.04] transition text-left cursor-pointer">
+                            <span class="text-gray-600 dark:text-gray-400 pl-4 flex items-center gap-2 font-medium">
+                                <x-heroicon-m-chevron-right class="w-4 h-4 text-gray-400 transition-transform duration-200" ::class="open ? 'rotate-90 text-primary-500' : ''"/>
+                                <x-heroicon-m-bolt class="w-4 h-4 text-gray-400"/>
+                                Estrutura, Ocupação & Sistemas (Infra/Adm)
+                                @if(!empty($structB['projected_recurring']))
+                                    <span class="text-[10px] text-amber-600 font-semibold">({{ count($structB['projected_recurring']) }} contratos provisionados)</span>
+                                @endif
+                            </span>
+                            <div class="flex items-center gap-x-8 shrink-0">
+                                <span class="w-16 text-right font-mono text-gray-400 dark:text-gray-500">{{ $report['revenue']['gross'] > 0 ? number_format((($report['expenses']['utilities'] + $report['expenses']['admin'] + $report['expenses']['maintenance']) / $report['revenue']['gross']) * 100, 1) : 0 }}%</span>
+                                <span class="w-36 text-right font-mono font-medium text-gray-600 dark:text-gray-400">- R$ {{ number_format($report['expenses']['utilities'] + $report['expenses']['admin'] + $report['expenses']['maintenance'], 2, ',', '.') }}</span>
+                            </div>
+                        </button>
+
+                        {{-- Painel Accordion Estrutura --}}
+                        <div x-show="open" x-collapse class="bg-gray-50/90 dark:bg-gray-950/70 px-6 py-3.5 border-t border-gray-200/60 dark:border-white/5 text-xs">
+                            <div class="flex items-center gap-2 mb-3 border-b border-gray-200/50 dark:border-white/10 pb-2">
+                                <button type="button" @click="subTab = 'suppliers'" :class="subTab === 'suppliers' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    🏢 Por Fornecedor / Concessionária
+                                </button>
+                                <button type="button" @click="subTab = 'subcategories'" :class="subTab === 'subcategories' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    🏷️ Por Tipo (Água/Luz/Net/Sistemas)
+                                </button>
+                                <button type="button" @click="subTab = 'contracts'" :class="subTab === 'contracts' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    🔄 Contratos Recorrentes ({{ count($structB['contracts'] ?? []) }})
+                                </button>
+                                @if(!empty($structB['projected_recurring']))
+                                <button type="button" @click="subTab = 'projected'" :class="subTab === 'projected' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    📅 Contratos Provisionados
+                                </button>
+                                @endif
+                                <button type="button" @click="subTab = 'items'" :class="subTab === 'items' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    📄 Títulos Lançados ({{ count($structB['items'] ?? []) }})
+                                </button>
+                            </div>
+
+                            <div x-show="subTab === 'suppliers'" class="space-y-1.5">
+                                @forelse($structB['by_supplier'] ?? [] as $sup)
+                                    <div class="flex items-center justify-between py-1 border-b border-gray-100 dark:border-white/[0.03]">
+                                        <span class="font-semibold text-gray-900 dark:text-white">{{ $sup['name'] }}</span>
+                                        <span class="font-mono font-bold text-gray-900 dark:text-white">R$ {{ number_format($sup['amount'], 2, ',', '.') }}</span>
+                                    </div>
+                                @empty
+                                    <div class="text-gray-400 py-1 italic">Nenhum título pago ou vencido ainda no período.</div>
+                                @endforelse
+                            </div>
+
+                            <div x-show="subTab === 'subcategories'" class="space-y-1.5">
+                                @foreach($structB['by_subcategory'] ?? [] as $sub)
+                                    <div class="flex items-center justify-between py-1 border-b border-gray-100 dark:border-white/[0.03]">
+                                        <span class="font-medium text-gray-800 dark:text-gray-200">{{ $sub['label'] }}</span>
+                                        <span class="font-mono font-semibold text-gray-900 dark:text-white">R$ {{ number_format($sub['amount'], 2, ',', '.') }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+
+                            @if(!empty($structB['projected_recurring']))
+                            <div x-show="subTab === 'projected'" class="space-y-2">
+                                <p class="text-[10px] text-gray-500">Despesas fixas que entram na competência mensal mas ainda não tiveram o boleto/fatura liquidado no caixa:</p>
+                                @foreach($structB['projected_recurring'] as $prec)
+                                    <div class="flex items-center justify-between py-1 border-b border-gray-100 dark:border-white/[0.03]">
+                                        <div>
+                                            <span class="font-semibold text-gray-900 dark:text-white">{{ $prec['name'] }}</span>
+                                            <span class="text-[10px] text-gray-400 ml-1">({{ $prec['supplier'] }} &bull; Vence dia {{ $prec['due_day'] }})</span>
+                                        </div>
+                                        <span class="font-mono font-bold text-amber-600 dark:text-amber-400">R$ {{ number_format($prec['amount'], 2, ',', '.') }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+                            @endif
+
+                            <div x-show="subTab === 'items'" class="space-y-1 max-h-56 overflow-y-auto pr-1">
+                                @forelse($structB['items'] ?? [] as $item)
+                                    <div class="flex items-center justify-between py-1 text-[11px] border-b border-gray-100 dark:border-white/[0.03]">
+                                        <div class="flex items-center gap-2 truncate">
+                                            <span class="font-semibold text-gray-900 dark:text-white">{{ $item['supplier'] }}</span>
+                                            <span class="text-gray-500 truncate">{{ $item['description'] }}</span>
+                                        </div>
+                                        <span class="font-mono font-bold text-gray-900 dark:text-white">R$ {{ number_format($item['amount'], 2, ',', '.') }}</span>
+                                    </div>
+                                @empty
+                                    <div class="text-gray-400 py-1 italic">Nenhum título direto encontrado.</div>
+                                @endforelse
+                            </div>
                         </div>
                     </div>
 
-                    <div class="flex items-center justify-between px-6 py-2.5 bg-gray-50/30 dark:bg-gray-950/20 text-xs">
-                        <span class="text-gray-600 dark:text-gray-400 pl-4 flex items-center gap-1.5"><x-heroicon-m-minus-small class="w-4 h-4 text-gray-400"/> Equipe, Pessoal & Freelancers</span>
-                        <div class="flex items-center gap-x-8 shrink-0">
-                            <span class="w-16 text-right font-mono text-gray-400 dark:text-gray-500">{{ $report['revenue']['gross'] > 0 ? number_format(($report['expenses']['payroll'] / $report['revenue']['gross']) * 100, 1) : 0 }}%</span>
-                            <span class="w-36 text-right font-mono font-medium text-gray-600 dark:text-gray-400">- R$ {{ number_format($report['expenses']['payroll'], 2, ',', '.') }}</span>
+                    {{-- 5. EQUIPE, PESSOAL & FREELANCERS (ACCORDION) --}}
+                    @php $payB = $report['expenses']['payroll_breakdown'] ?? null; @endphp
+                    <div x-data="{ open: false, subTab: 'forecast' }" class="border-b border-gray-100 dark:border-white/5">
+                        <button type="button" @click="open = !open" class="w-full flex items-center justify-between px-6 py-2.5 bg-gray-50/30 dark:bg-gray-950/20 text-xs hover:bg-gray-100/60 dark:hover:bg-white/[0.04] transition text-left cursor-pointer">
+                            <span class="text-gray-600 dark:text-gray-400 pl-4 flex items-center gap-2 font-medium">
+                                <x-heroicon-m-chevron-right class="w-4 h-4 text-gray-400 transition-transform duration-200" ::class="open ? 'rotate-90 text-primary-500' : ''"/>
+                                <x-heroicon-m-user-group class="w-4 h-4 text-gray-400"/>
+                                Equipe, Pessoal & Freelancers
+                                <span class="text-[10px] text-gray-400 font-normal">(CLT, Provisões & Diárias)</span>
+                            </span>
+                            <div class="flex items-center gap-x-8 shrink-0">
+                                <span class="w-16 text-right font-mono text-gray-400 dark:text-gray-500">{{ $report['revenue']['gross'] > 0 ? number_format(($report['expenses']['payroll'] / $report['revenue']['gross']) * 100, 1) : 0 }}%</span>
+                                <span class="w-36 text-right font-mono font-medium text-gray-600 dark:text-gray-400">- R$ {{ number_format($report['expenses']['payroll'], 2, ',', '.') }}</span>
+                            </div>
+                        </button>
+
+                        <div x-show="open" x-collapse class="bg-gray-50/90 dark:bg-gray-950/70 px-6 py-3.5 border-t border-gray-200/60 dark:border-white/5 text-xs">
+                            <div class="flex items-center gap-2 mb-3 border-b border-gray-200/50 dark:border-white/10 pb-2">
+                                <button type="button" @click="subTab = 'forecast'" :class="subTab === 'forecast' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    👥 Composição da Folha
+                                </button>
+                                <button type="button" @click="subTab = 'items'" :class="subTab === 'items' ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'" class="px-2.5 py-1 rounded-md transition text-[11px]">
+                                    📄 Títulos Lançados ({{ count($payB['items'] ?? []) }})
+                                </button>
+                            </div>
+
+                            <div x-show="subTab === 'forecast'" class="grid grid-cols-2 lg:grid-cols-4 gap-3 py-1">
+                                <div class="p-3 rounded-lg bg-white dark:bg-gray-900 ring-1 ring-gray-950/5 dark:ring-white/10">
+                                    <span class="text-gray-500 font-medium text-[11px]">Salários CLT Base</span>
+                                    <div class="text-base font-bold text-gray-950 dark:text-white mt-1">R$ {{ number_format($payB['forecast']['clt_base'] ?? 0, 2, ',', '.') }}</div>
+                                </div>
+                                <div class="p-3 rounded-lg bg-white dark:bg-gray-900 ring-1 ring-gray-950/5 dark:ring-white/10">
+                                    <span class="text-gray-500 font-medium text-[11px]">Provisões (13º/Férias)</span>
+                                    <div class="text-base font-bold text-gray-950 dark:text-white mt-1">R$ {{ number_format($payB['forecast']['provisions'] ?? 0, 2, ',', '.') }}</div>
+                                </div>
+                                <div class="p-3 rounded-lg bg-white dark:bg-gray-900 ring-1 ring-gray-950/5 dark:ring-white/10">
+                                    <span class="text-gray-500 font-medium text-[11px]">Diaristas & Freelancers</span>
+                                    <div class="text-base font-bold text-gray-950 dark:text-white mt-1">R$ {{ number_format($payB['forecast']['freelancers'] ?? 0, 2, ',', '.') }}</div>
+                                    <span class="text-[10px] text-gray-400">{{ $payB['forecast']['freelancer_shifts'] ?? 0 }} diárias escaladas</span>
+                                </div>
+                                <div class="p-3 rounded-lg bg-white dark:bg-gray-900 ring-1 ring-gray-950/5 dark:ring-white/10">
+                                    <span class="text-gray-500 font-medium text-[11px]">Total Realizado no Caixa</span>
+                                    <div class="text-base font-bold text-success-600 dark:text-success-400 mt-1">R$ {{ number_format($payB['realized'] ?? 0, 2, ',', '.') }}</div>
+                                </div>
+                            </div>
+
+                            <div x-show="subTab === 'items'" class="space-y-1 max-h-56 overflow-y-auto pr-1">
+                                @forelse($payB['items'] ?? [] as $item)
+                                    <div class="flex items-center justify-between py-1 text-[11px] border-b border-gray-100 dark:border-white/[0.03]">
+                                        <div class="flex items-center gap-2 truncate">
+                                            <span class="font-semibold text-gray-900 dark:text-white">{{ $item['employee'] }}</span>
+                                            <span class="text-gray-500 truncate">{{ $item['description'] }}</span>
+                                        </div>
+                                        <div class="flex items-center gap-3 shrink-0">
+                                            <span class="px-1.5 py-0.2 rounded text-[9px] font-bold {{ $item['status'] === 'paid' ? 'bg-success-100 text-success-800' : 'bg-warning-100 text-warning-800' }}">{{ $item['status'] === 'paid' ? 'PAGO' : 'PENDENTE' }}</span>
+                                            <span class="font-mono font-bold text-gray-900 dark:text-white">R$ {{ number_format($item['amount'], 2, ',', '.') }}</span>
+                                        </div>
+                                    </div>
+                                @empty
+                                    <div class="text-gray-400 py-1 italic">Nenhum pagamento avulso registrado além da provisão de folha.</div>
+                                @endforelse
+                            </div>
                         </div>
                     </div>
 
+                    {{-- 6. CONTAS A CLASSIFICAR (ACCORDION) --}}
                     @if($report['expenses']['uncategorized'] > 0)
-                    <div class="flex items-center justify-between px-6 py-2.5 bg-warning-50/40 dark:bg-warning-950/20 text-xs">
-                        <span class="text-warning-800 dark:text-warning-400 pl-4 flex items-center gap-1.5 font-semibold"><x-heroicon-m-exclamation-triangle class="w-4 h-4 text-warning-500"/> Contas a Classificar (Auditoria)</span>
-                        <div class="flex items-center gap-x-8 shrink-0">
-                            <span class="w-16 text-right font-mono text-warning-600/70 dark:text-warning-400/70">{{ $report['revenue']['gross'] > 0 ? number_format(($report['expenses']['uncategorized'] / $report['revenue']['gross']) * 100, 1) : 0 }}%</span>
-                            <span class="w-36 text-right font-mono font-semibold text-warning-800 dark:text-warning-400">- R$ {{ number_format($report['expenses']['uncategorized'], 2, ',', '.') }}</span>
+                    @php $uncatB = $report['expenses']['uncategorized_breakdown'] ?? null; @endphp
+                    <div x-data="{ open: false }" class="border-b border-gray-100 dark:border-white/5 bg-warning-50/20 dark:bg-warning-950/10">
+                        <button type="button" @click="open = !open" class="w-full flex items-center justify-between px-6 py-2.5 text-xs hover:bg-warning-50/40 dark:hover:bg-warning-950/20 transition text-left cursor-pointer">
+                            <span class="text-warning-800 dark:text-warning-400 pl-4 flex items-center gap-2 font-semibold">
+                                <x-heroicon-m-chevron-right class="w-4 h-4 text-warning-500 transition-transform duration-200" ::class="open ? 'rotate-90' : ''"/>
+                                <x-heroicon-m-exclamation-triangle class="w-4 h-4 text-warning-500"/>
+                                Contas a Classificar (Auditoria)
+                                <span class="text-[10px] text-warning-600 font-normal">({{ $uncatB['count'] ?? 0 }} pendências de categorização)</span>
+                            </span>
+                            <div class="flex items-center gap-x-8 shrink-0">
+                                <span class="w-16 text-right font-mono text-warning-600/70 dark:text-warning-400/70">{{ $report['revenue']['gross'] > 0 ? number_format(($report['expenses']['uncategorized'] / $report['revenue']['gross']) * 100, 1) : 0 }}%</span>
+                                <span class="w-36 text-right font-mono font-semibold text-warning-800 dark:text-warning-400">- R$ {{ number_format($report['expenses']['uncategorized'], 2, ',', '.') }}</span>
+                            </div>
+                        </button>
+
+                        <div x-show="open" x-collapse class="bg-warning-50/40 dark:bg-warning-950/30 px-6 py-3 border-t border-warning-200/50 dark:border-warning-500/20 text-xs">
+                            <div class="space-y-1 max-h-56 overflow-y-auto pr-1">
+                                @foreach($uncatB['items'] ?? [] as $item)
+                                    <div class="flex items-center justify-between py-1 text-[11px] border-b border-warning-100 dark:border-white/[0.03]">
+                                        <div class="flex items-center gap-2 truncate">
+                                            <span class="font-mono text-warning-700">#{{ $item['id'] }}</span>
+                                            <span class="font-semibold text-gray-900 dark:text-white">{{ $item['supplier'] }}</span>
+                                            <span class="text-gray-600 truncate">{{ $item['description'] }}</span>
+                                        </div>
+                                        <span class="font-mono font-bold text-gray-900 dark:text-white">R$ {{ number_format($item['amount'], 2, ',', '.') }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
                         </div>
                     </div>
                     @endif
 
-                    {{-- 4. EBITDA --}}
+                    {{-- 7. EBITDA --}}
                     <div class="flex items-center justify-between px-6 py-3.5 hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition font-bold">
                         <span class="text-gray-950 dark:text-white">4. EBITDA (Resultado Operacional)</span>
                         <div class="flex items-center gap-x-8 shrink-0">
@@ -253,7 +503,7 @@
                         </div>
                     </div>
 
-                    {{-- Fora do Operacional --}}
+                    {{-- 8. CAPEX --}}
                     @if($report['capex']['total'] > 0)
                     <div class="flex items-center justify-between px-6 py-2.5 bg-gray-50/30 dark:bg-gray-950/20 text-xs">
                         <span class="text-gray-500 dark:text-gray-400 pl-4 flex items-center gap-1.5"><x-heroicon-m-minus-small class="w-4 h-4 text-gray-400"/> Investimentos em Ativos / Fachada (CAPEX)</span>
@@ -264,15 +514,51 @@
                     </div>
                     @endif
 
-                    <div class="flex items-center justify-between px-6 py-2.5 bg-gray-50/30 dark:bg-gray-950/20 text-xs">
-                        <span class="text-gray-500 dark:text-gray-400 pl-4 flex items-center gap-1.5"><x-heroicon-m-minus-small class="w-4 h-4 text-gray-400"/> Retiradas dos Sócios (Segregação Pessoal)</span>
-                        <div class="flex items-center gap-x-8 shrink-0">
-                            <span class="w-16 text-right font-mono text-gray-400 dark:text-gray-500">{{ $report['revenue']['gross'] > 0 ? number_format(($report['personal_expenses']['total'] / $report['revenue']['gross']) * 100, 1) : 0 }}%</span>
-                            <span class="w-36 text-right font-mono font-medium text-gray-500 dark:text-gray-400">- R$ {{ number_format($report['personal_expenses']['total'], 2, ',', '.') }}</span>
+                    {{-- 9. RETIRADAS DOS SÓCIOS (ACCORDION) --}}
+                    @php $persB = $report['personal_expenses']['breakdown'] ?? null; @endphp
+                    <div x-data="{ open: false }" class="border-b border-gray-100 dark:border-white/5">
+                        <button type="button" @click="open = !open" class="w-full flex items-center justify-between px-6 py-2.5 bg-gray-50/30 dark:bg-gray-950/20 text-xs hover:bg-gray-100/60 dark:hover:bg-white/[0.04] transition text-left cursor-pointer">
+                            <span class="text-gray-500 dark:text-gray-400 pl-4 flex items-center gap-2 font-medium">
+                                <x-heroicon-m-chevron-right class="w-4 h-4 text-gray-400 transition-transform duration-200" ::class="open ? 'rotate-90 text-primary-500' : ''"/>
+                                <x-heroicon-m-user class="w-4 h-4 text-gray-400"/>
+                                Retiradas dos Sócios (Segregação Pessoal)
+                                <span class="text-[10px] text-gray-400 font-normal">(Pró-labore & Cartões Pessoais)</span>
+                            </span>
+                            <div class="flex items-center gap-x-8 shrink-0">
+                                <span class="w-16 text-right font-mono text-gray-400 dark:text-gray-500">{{ $report['revenue']['gross'] > 0 ? number_format(($report['personal_expenses']['total'] / $report['revenue']['gross']) * 100, 1) : 0 }}%</span>
+                                <span class="w-36 text-right font-mono font-medium text-gray-500 dark:text-gray-400">- R$ {{ number_format($report['personal_expenses']['total'], 2, ',', '.') }}</span>
+                            </div>
+                        </button>
+
+                        <div x-show="open" x-collapse class="bg-gray-50/90 dark:bg-gray-950/70 px-6 py-3.5 border-t border-gray-200/60 dark:border-white/5 text-xs">
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <div class="p-3 rounded-lg bg-white dark:bg-gray-900 ring-1 ring-gray-950/5 dark:ring-white/10">
+                                    <span class="text-gray-500 font-medium text-[11px]">Pró-labore Oficial Provisionado</span>
+                                    <div class="text-base font-bold text-gray-950 dark:text-white mt-1">R$ {{ number_format($persB['prolabore_forecast'] ?? 0, 2, ',', '.') }}</div>
+                                </div>
+                                <div class="p-3 rounded-lg bg-white dark:bg-gray-900 ring-1 ring-gray-950/5 dark:ring-white/10">
+                                    <span class="text-gray-500 font-medium text-[11px]">Despesas Pessoais Conciliadas</span>
+                                    <div class="text-base font-bold text-gray-950 dark:text-white mt-1">R$ {{ number_format($persB['realized'] ?? 0, 2, ',', '.') }}</div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-1 max-h-48 overflow-y-auto pr-1">
+                                @forelse($persB['items'] ?? [] as $item)
+                                    <div class="flex items-center justify-between py-1 text-[11px] border-b border-gray-100 dark:border-white/[0.03]">
+                                        <div class="flex items-center gap-2 truncate">
+                                            <span class="font-semibold text-gray-900 dark:text-white">{{ $item['supplier'] }}</span>
+                                            <span class="text-gray-500 truncate">{{ $item['description'] }}</span>
+                                        </div>
+                                        <span class="font-mono font-bold text-gray-900 dark:text-white">R$ {{ number_format($item['amount'], 2, ',', '.') }}</span>
+                                    </div>
+                                @empty
+                                    <div class="text-gray-400 py-1 italic">Nenhum gasto pessoal lançado no período.</div>
+                                @endforelse
+                            </div>
                         </div>
                     </div>
 
-                    {{-- Resultado Líquido Final --}}
+                    {{-- 10. Resultado Líquido Final --}}
                     <div class="flex items-center justify-between px-6 py-4 bg-gray-100/70 dark:bg-gray-950 border-t border-gray-200 dark:border-white/10 font-bold">
                         <span class="text-sm font-bold uppercase tracking-tight text-gray-950 dark:text-white">Resultado Líquido Retido no Caixa</span>
                         <div class="flex items-center gap-x-8 shrink-0">
@@ -283,8 +569,7 @@
                 </div>
             </div>
 
-        @elseif($activeView === 'cmv')
-            {{-- VIEW 2: CMV & DESPERDÍCIO --}}
+        {{-- VIEW 2: CMV & DESPERDÍCIO --}}
 
             {{-- LINHA ÚNICA DE 4 CARDS COM ÍCONES --}}
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">

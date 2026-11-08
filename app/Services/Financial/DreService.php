@@ -3,6 +3,7 @@
 namespace App\Services\Financial;
 
 use App\Enums\AccountingCategory;
+use App\Enums\AccountingSubcategory;
 use App\Enums\EmploymentType;
 use App\Models\AccountPayable;
 use App\Models\Employee;
@@ -132,7 +133,17 @@ class DreService
             ? min(100, round(($grossRevenue / $breakEvenRevenue) * 100, 1))
             : 0;
 
-        // 14. NÓ COMPARATIVO (PROJETADO vs. REALIZADO)
+        // 14. ESTRATIFICAÇÕES DETALHADAS (DRILL-DOWN)
+        $cogsBreakdown = $this->getSectionBreakdown([AccountingCategory::INGREDIENTS->value, AccountingCategory::PACKAGING->value]);
+        $structureBreakdown = $this->getSectionBreakdown(
+            [AccountingCategory::UTILITIES->value, AccountingCategory::ADMINISTRATIVE->value, AccountingCategory::MAINTENANCE->value],
+            excludedSubcategories: ['taxes', 'impostos', 'bank_fees', 'taxas']
+        );
+        $payrollBreakdown = $this->getPayrollBreakdown($payrollForecast, $payrollRealized);
+        $uncategorizedBreakdown = $this->getUncategorizedBreakdown();
+        $personalBreakdown = $this->getPersonalBreakdown($payrollForecast['partners_prolabore'], $personalExpensesRealized);
+
+        // 15. NÓ COMPARATIVO (PROJETADO vs. REALIZADO)
         $comparative = [
             'revenue' => [
                 'gross' => ['projected' => $grossRevenue, 'realized' => $grossRevenue, 'variance' => 0.0],
@@ -201,6 +212,7 @@ class DreService
                 'ingredients' => $ingredientsAmount,
                 'packaging'   => $packagingAmount,
                 'total'       => $cogsTotal,
+                'breakdown'   => $cogsBreakdown,
             ],
             'contribution_margin' => [
                 'amount' => $contributionMargin,
@@ -214,6 +226,9 @@ class DreService
                 'marketing'     => $marketingCosts,
                 'uncategorized' => $uncategorizedCosts,
                 'total_fixed'   => $totalOperatingExpenses,
+                'structure_breakdown'     => $structureBreakdown,
+                'payroll_breakdown'       => $payrollBreakdown,
+                'uncategorized_breakdown' => $uncategorizedBreakdown,
             ],
             'operating_profit' => [
                 'amount' => $operatingProfit,
@@ -221,9 +236,11 @@ class DreService
             ],
             'capex' => [
                 'total' => $capexAmount,
+                'breakdown' => $this->getSectionBreakdown([AccountingCategory::CAPEX->value]),
             ],
             'personal_expenses' => [
                 'total' => $personalExpenses,
+                'breakdown' => $personalBreakdown,
             ],
             'retained_profit' => $retainedNetProfit,
             'break_even' => [
@@ -243,7 +260,7 @@ class DreService
      */
     protected function calculatePayrollForecast(): array
     {
-        // 1. Mensalistas CLT (Aparecida, Natália e Ildo)
+        // 1. Mensalistas CLT
         $cltBase = (float) Employee::query()
             ->where('is_active', true)
             ->where('employment_type', EmploymentType::CLT->value)
@@ -257,7 +274,7 @@ class DreService
             ->whereIn('employment_type', [EmploymentType::INTERN->value, EmploymentType::PJ->value])
             ->sum('base_remuneration');
 
-        // 3. Pró-labore dos Sócios (Kaue e Irotides - alocado abaixo do EBITDA)
+        // 3. Pró-labore dos Sócios (alocado abaixo do EBITDA)
         $partnersProLabore = (float) Employee::query()
             ->where('is_active', true)
             ->where('employment_type', EmploymentType::PARTNER->value)
@@ -290,7 +307,6 @@ class DreService
                     $freelancerAmount += ($val > 0 ? $val : 100.00);
                 }
             } else {
-                // Fallback para meses passados sem escala digitalizada: lê os títulos reais de diaristas no Contas a Pagar
                 $freelancerAmount = (float) AccountPayable::query()
                     ->where('is_personal', false)
                     ->where('accounting_category', AccountingCategory::PAYROLL->value)
@@ -314,7 +330,7 @@ class DreService
     }
 
     /**
-     * Busca o montante de folha operacional reconhecido no Contas a Pagar (excluindo retiradas de sócios)
+     * Busca o montante de folha operacional reconhecido no Contas a Pagar
      */
     protected function getOperationalPayrollRealized(): float
     {
@@ -334,7 +350,6 @@ class DreService
                 ->sum('amount');
         }
 
-        // Em competência: títulos vencidos no mês OU títulos de folha vencendo até o dia 10 do mês subsequente
         $nextMonthCutoff = $this->endDate->copy()->addDays(10)->toDateString();
 
         return (float) $query->where(function ($q) use ($nextMonthCutoff) {
@@ -357,7 +372,6 @@ class DreService
             ->where('is_personal', false)
             ->sum('default_amount');
 
-        // Média de consumo elétrico e água caso as faturas públicas ainda não tenham sido lançadas no mês
         if ($category === AccountingCategory::UTILITIES->value && $realizedAmount < 500.00) {
             $recurringTotal = max($recurringTotal, 1450.00);
         }
@@ -417,5 +431,260 @@ class DreService
         }
 
         return $query->whereBetween('due_date', [$this->startDate->toDateString(), $this->endDate->toDateString()]);
+    }
+
+    /**
+     * Estratificação por Natureza, Fornecedor, Subcategoria e Títulos
+     */
+            public function getSectionBreakdown(array $categories, array $subcategories = [], array $excludedSubcategories = []): array
+    {
+        $query = $this->getBasePayablesQuery()
+            ->with(['supplier', 'employee', 'recurringExpense'])
+            ->where('is_personal', false);
+
+        if (!empty($categories)) {
+            $query->whereIn('accounting_category', $categories);
+        }
+        if (!empty($subcategories)) {
+            $query->whereIn('accounting_subcategory', $subcategories);
+        }
+        if (!empty($excludedSubcategories)) {
+            $query->whereNotIn('accounting_subcategory', $excludedSubcategories);
+        }
+
+        $payables = $query->orderBy('due_date', 'asc')->get();
+
+        // 1. Contratos ativos da seção
+        $activeRecurring = RecurringExpense::with('supplier')
+            ->whereIn('accounting_category', $categories)
+            ->where('is_active', true)
+            ->where('is_personal', false)
+            ->orderBy('due_day', 'asc')
+            ->get();
+
+        $contracts = [];
+        $consumedPayableIds = [];
+
+        foreach ($activeRecurring as $rec) {
+            $matchedPayables = $payables->filter(function ($p) use ($rec, $consumedPayableIds) {
+                if (in_array($p->id, $consumedPayableIds)) return false;
+                if ($p->recurring_expense_id === $rec->id) return true;
+                if ($rec->supplier_id && $p->supplier_id === $rec->supplier_id) return true;
+                return false;
+            });
+
+            if ($matchedPayables->isNotEmpty()) {
+                foreach ($matchedPayables as $matchedPayable) {
+                    $consumedPayableIds[] = $matchedPayable->id;
+                    $isPaid = $matchedPayable->status === 'paid';
+                    $contracts[] = [
+                        'id'           => $rec->id,
+                        'name'         => $rec->name,
+                        'supplier'     => $rec->supplier?->name ?: ($rec->employee?->name ?: ($matchedPayable->supplier?->name ?: ($matchedPayable->employee?->name ?: 'Colaborador / Diarista'))),
+                        'due_day'      => $matchedPayable->due_date ? $matchedPayable->due_date->format('d/m') : sprintf('%02d/%s', $rec->due_day, $this->startDate->format('m')),
+                        'amount'       => (float) $matchedPayable->amount,
+                        'status'       => $isPaid ? 'paid' : 'pending',
+                        'status_label' => $isPaid ? 'PAGO' : 'PENDENTE',
+                        'payable_id'   => $matchedPayable->id,
+                    ];
+                }
+            } else {
+                $contracts[] = [
+                    'id'           => $rec->id,
+                    'name'         => $rec->name,
+                    'supplier'     => $rec->supplier?->name ?: 'Fornecedor Contratado',
+                    'due_day'      => sprintf('%02d/%s', $rec->due_day, $this->startDate->format('m')),
+                    'amount'       => (float) $rec->default_amount,
+                    'status'       => 'provisioned',
+                    'status_label' => 'A VENCER (PROVISÃO)',
+                    'payable_id'   => null,
+                ];
+            }
+        }
+
+        $punctualItems = $payables->filter(fn($p) => !in_array($p->id, $consumedPayableIds));
+        $recurringTotalAmount = collect($contracts)->sum('amount');
+
+        $byNature = [
+            'recurring' => [
+                'label'     => 'Contratos / Recorrências',
+                'amount'    => (float) $recurringTotalAmount,
+                'count'     => count($contracts),
+                'contracts' => $contracts,
+            ],
+            'punctual' => [
+                'label'  => 'Compras & Gastos Pontuais',
+                'amount' => (float) $punctualItems->sum('amount'),
+                'count'  => $punctualItems->count(),
+            ],
+        ];
+
+        // 2. Agrupamento por Fornecedor (inclui contratos provisionados)
+        $supplierGroups = [];
+        foreach ($payables as $p) {
+            $sName = $p->supplier?->name ?: ($p->supplier?->document_name ?: ($p->employee?->name ?: 'Não Identificado'));
+            if (!isset($supplierGroups[$sName])) {
+                $supplierGroups[$sName] = ['name' => $sName, 'amount' => 0.0, 'count' => 0, 'paid' => 0.0, 'pending' => 0.0];
+            }
+            $supplierGroups[$sName]['amount'] += (float) $p->amount;
+            $supplierGroups[$sName]['count']++;
+            if ($p->status === 'paid') {
+                $supplierGroups[$sName]['paid'] += (float) $p->amount;
+            } else {
+                $supplierGroups[$sName]['pending'] += (float) $p->amount;
+            }
+        }
+
+        foreach ($contracts as $c) {
+            if ($c['status'] === 'provisioned') {
+                $sName = $c['supplier'];
+                if (!isset($supplierGroups[$sName])) {
+                    $supplierGroups[$sName] = ['name' => $sName, 'amount' => 0.0, 'count' => 0, 'paid' => 0.0, 'pending' => 0.0];
+                }
+                $supplierGroups[$sName]['amount'] += (float) $c['amount'];
+                $supplierGroups[$sName]['count']++;
+                $supplierGroups[$sName]['pending'] += (float) $c['amount'];
+            }
+        }
+        $bySupplier = collect($supplierGroups)->sortByDesc('amount')->values()->all();
+
+        // 3. Subcategorias
+        $bySubcategory = $payables->groupBy('accounting_subcategory')
+            ->map(function ($items, $subKey) {
+                $amt = (float) $items->sum('amount');
+                $subEnum = AccountingSubcategory::tryFrom($subKey ?? '');
+                $label = $subEnum ? $subEnum->getLabel() : ($subKey ? ucfirst($subKey) : 'Geral');
+                return [
+                    'key'    => $subKey,
+                    'label'  => $label,
+                    'amount' => $amt,
+                    'count'  => $items->count(),
+                ];
+            })
+            ->sortByDesc('amount')
+            ->values()
+            ->all();
+
+        $items = $payables->map(fn($p) => [
+            'id'           => $p->id,
+            'description'  => $p->description,
+            'supplier'     => $p->supplier?->name ?: ($p->employee?->name ?: 'S/F'),
+            'amount'       => (float) $p->amount,
+            'due_date'     => $p->due_date ? $p->due_date->format('d/m/Y') : '-',
+            'payment_date' => $p->payment_date ? $p->payment_date->format('d/m/Y') : '-',
+            'status'       => $p->status,
+            'is_recurrent' => !is_null($p->recurring_expense_id),
+        ])->values()->all();
+
+        return [
+            'total'          => (float) ($punctualItems->sum('amount') + $recurringTotalAmount),
+            'by_nature'      => $byNature,
+            'contracts'      => $contracts,
+            'by_supplier'    => $bySupplier,
+            'by_subcategory' => $bySubcategory,
+            'items'          => $items,
+        ];
+    }
+
+    public function getPayrollBreakdown(array $forecast, float $realized): array
+    {
+        $query = AccountPayable::query()
+            ->with(['employee', 'supplier'])
+            ->where('is_personal', false)
+            ->where('accounting_category', AccountingCategory::PAYROLL->value);
+
+        if ($this->regime === 'caixa') {
+            $payables = $query->where('status', 'paid')
+                ->whereBetween('payment_date', [$this->startDate->toDateString(), $this->endDate->toDateString()])
+                ->get();
+        } else {
+            $nextMonthCutoff = $this->endDate->copy()->addDays(10)->toDateString();
+            $payables = $query->where(function ($q) use ($nextMonthCutoff) {
+                $q->whereBetween('due_date', [$this->startDate->toDateString(), $this->endDate->toDateString()])
+                  ->orWhere(function ($sub) use ($nextMonthCutoff) {
+                      $sub->whereBetween('due_date', [$this->endDate->toDateString(), $nextMonthCutoff])
+                          ->whereIn('accounting_subcategory', ['payroll', 'salaries', 'freelancers']);
+                  });
+            })->get();
+        }
+
+        $items = $payables->map(fn($p) => [
+            'id'          => $p->id,
+            'description' => $p->description,
+            'employee'    => $p->employee?->name ?: ($p->supplier?->name ?: 'Colaborador'),
+            'amount'      => (float) $p->amount,
+            'due_date'    => $p->due_date ? $p->due_date->format('d/m/Y') : '-',
+            'status'      => $p->status,
+        ])->values()->all();
+
+        return [
+            'forecast' => $forecast,
+            'realized' => $realized,
+            'items'    => $items,
+        ];
+    }
+
+    public function getUncategorizedBreakdown(): array
+    {
+        $payables = $this->getBasePayablesQuery()
+            ->with('supplier')
+            ->where('is_personal', false)
+            ->where(function ($q) {
+                $q->whereNull('accounting_category')
+                  ->orWhere('accounting_category', '')
+                  ->orWhere('accounting_category', 'like', '%SEM%');
+            })
+            ->orderBy('due_date', 'asc')
+            ->get();
+
+        return [
+            'total' => (float) $payables->sum('amount'),
+            'count' => $payables->count(),
+            'items' => $payables->map(fn($p) => [
+                'id'          => $p->id,
+                'description' => $p->description,
+                'supplier'    => $p->supplier?->name ?: 'A Identificar',
+                'amount'      => (float) $p->amount,
+                'due_date'    => $p->due_date ? $p->due_date->format('d/m/Y') : '-',
+                'status'      => $p->status,
+            ])->values()->all(),
+        ];
+    }
+
+    public function getPersonalBreakdown(float $prolabore, float $realized): array
+    {
+        $payables = $this->getBasePayablesQuery()
+            ->with('supplier')
+            ->where(function ($q) {
+                $q->where('is_personal', true)
+                  ->orWhere('accounting_category', AccountingCategory::PARTNERS->value)
+                  ->orWhere('accounting_category', 'socios');
+            })
+            ->orderBy('due_date', 'asc')
+            ->get();
+
+        $bySupplier = $payables->groupBy(fn($p) => $p->supplier?->name ?: 'Uso Pessoal')
+            ->map(fn($items, $name) => [
+                'name'   => $name,
+                'amount' => (float) $items->sum('amount'),
+                'count'  => $items->count(),
+            ])
+            ->sortByDesc('amount')
+            ->values()
+            ->all();
+
+        return [
+            'prolabore_forecast' => $prolabore,
+            'realized'           => $realized,
+            'by_supplier'        => $bySupplier,
+            'items'              => $payables->map(fn($p) => [
+                'id'          => $p->id,
+                'description' => $p->description,
+                'supplier'    => $p->supplier?->name ?: 'Uso Pessoal',
+                'amount'      => (float) $p->amount,
+                'due_date'    => $p->due_date ? $p->due_date->format('d/m/Y') : '-',
+                'status'      => $p->status,
+            ])->values()->all(),
+        ];
     }
 }
