@@ -127,9 +127,11 @@ class OptionsRelationManager extends RelationManager
                     ->formatStateUsing(fn ($state) => $state . "x"),
 
                 Tables\Columns\TextColumn::make("linkedProduct.name")
-                    ->label("Insumo")
+                    ->label("Insumo (Baixa)")
                     ->searchable()
-                    ->placeholder("-"),
+                    ->placeholder("⚠️ Sem baixa")
+                    ->description(fn ($record) => $record->linked_product_id ? "Debita {$record->linked_qty} " . strtoupper($record->linkedProduct?->unit_of_measure ?? '') : 'Não movimenta estoque')
+                    ->color(fn ($record) => $record->linked_product_id ? 'success' : 'gray'),
 
                 Tables\Columns\TextColumn::make("linked_qty")
                     ->label("Porção")

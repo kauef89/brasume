@@ -39,15 +39,7 @@ class ProductTable
                 Tables\Columns\TextColumn::make('type')
                     ->label('Tipo')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => match (strtolower($state)) {
-                        ProductType::DISH->value => 'Prato',
-                        ProductType::COMBO->value => 'Combo',
-                        ProductType::RESALE->value => 'Revenda',
-                        ProductType::INGREDIENT->value => 'Insumo',
-                        ProductType::MANUFACTURED->value => 'Preparado',
-                        default        => ucfirst($state),
-                    })
-                    ->color('gray')
+                    ->sortable()
                     ->grow(false),
 
                 Tables\Columns\SelectColumn::make('category_id')

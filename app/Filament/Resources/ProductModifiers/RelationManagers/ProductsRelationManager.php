@@ -49,7 +49,8 @@ class ProductsRelationManager extends RelationManager
                         'dish' => 'Prato',
                         'combo' => 'Combo',
                         'resale' => 'Revenda',
-                        'ingredient' => 'Insumo',
+                        'option' => 'Opção',
+                        'ingredient' => 'Opção',
                         'manufactured' => 'Preparado',
                         default => ucfirst($state),
                     })

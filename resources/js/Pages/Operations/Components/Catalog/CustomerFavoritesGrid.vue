@@ -99,7 +99,7 @@ const enrichedFavorites = computed(() => {
         const rawSelections = fav.modifiers || fav.selections || fav.favorite_selections || [];
 
         // MOTOR DE HIGIENIZAÇÃO (Tolerância Zero)
-        const ingredientGroups = (realProduct.modifiers || []).filter(g => g.type === 'ingredient');
+        const ingredientGroups = (realProduct.modifiers || []).filter(g => ['option', 'ingredient'].includes(g.type));
         let cleanedSelections = rawSelections;
 
         if (ingredientGroups.length > 0) {
@@ -128,7 +128,7 @@ const enrichedFavorites = computed(() => {
                         name: matchedOption.name,
                         price: Number(matchedOption.price || 0),
                         group_id: matchedOption.groupId,
-                        is_ingredient: matchedOption.groupType === 'ingredient'
+                        is_ingredient: ['option', 'ingredient'].includes(matchedOption.groupType)
                     });
                 } else if (sel.is_joker || selName.startsWith('obs:')) {
                     tempCleaned.push(sel);

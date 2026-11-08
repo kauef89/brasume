@@ -230,7 +230,7 @@ const isAddSuccess = ref(false);
 // 🚀 NORMALIZADOR DE MACRO-TIPOS
 const normalizeType = (type) => {
     const t = String(type || '').toLowerCase().trim();
-    if (t === 'ingredient' || t === 'ingrediente') return 'ingredient';
+    if (t === 'option' || t === 'opcao' || t === 'ingredient' || t === 'ingrediente') return 'option';
     if (t === 'add_on' || t === 'additional' || t === 'adicional' || t === 'addon') return 'add_on';
     if (t === 'observation' || t === 'observacao' || t === 'observação') return 'observation';
     return 'add_on';
@@ -241,7 +241,7 @@ const allTabs = computed(() => {
     const mods = props.product?.modifiers || [];
     const tabs = [];
 
-    const ingredientGroups = mods.filter(g => normalizeType(g.type) === 'ingredient');
+    const ingredientGroups = mods.filter(g => ['option', 'ingredient'].includes(normalizeType(g.type)));
     const addonGroups = mods.filter(g => normalizeType(g.type) === 'add_on');
     const observationGroups = mods.filter(g => normalizeType(g.type) === 'observation');
 

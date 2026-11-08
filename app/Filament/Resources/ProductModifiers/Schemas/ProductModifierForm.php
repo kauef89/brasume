@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\ProductModifiers\Schemas;
 
+use App\Enums\ModifierType;
+
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components as SchemaComponents;
@@ -29,11 +31,7 @@ class ProductModifierForm
 
                     FormComponents\Select::make("type")
                         ->label("Tipo de Modificador")
-                        ->options([
-                            "observation" => "Observação",
-                            "add_on" => "Adicional",
-                            "ingredient" => "Ingrediente",
-                        ])
+                        ->options(ModifierType::class)
                         ->required()
                         ->live(),
 
@@ -61,7 +59,7 @@ class ProductModifierForm
                             ])
                             ->default("base_plus_increment")
                             ->visible(
-                                fn(Get $get) => $get("type") === "ingredient",
+                                fn(Get $get) => in_array($get("type") instanceof \BackedEnum ? $get("type")->value : $get("type"), ["option", "ingredient"]),
                             )
                             ->required(),
 
@@ -91,7 +89,7 @@ class ProductModifierForm
                             ->numeric()
                             ->default(0)
                             ->visible(
-                                fn(Get $get) => $get("type") === "ingredient",
+                                fn(Get $get) => in_array($get("type") instanceof \BackedEnum ? $get("type")->value : $get("type"), ["option", "ingredient"]),
                             ),
                         FormComponents\TextInput::make("increment")
                             ->label("Valor Extra (Un)")
@@ -99,7 +97,7 @@ class ProductModifierForm
                             ->prefix('R$')
                             ->default(0)
                             ->visible(
-                                fn(Get $get) => $get("type") === "ingredient",
+                                fn(Get $get) => in_array($get("type") instanceof \BackedEnum ? $get("type")->value : $get("type"), ["option", "ingredient"]),
                             ),
                         FormComponents\Toggle::make("allow_quantity")
                             ->label("Permitir Qtd?")

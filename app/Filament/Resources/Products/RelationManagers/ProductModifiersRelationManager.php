@@ -36,6 +36,7 @@ class ProductModifiersRelationManager extends RelationManager
                     ->label('Tipo')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
+                        'option' => 'info',
                         'ingredient' => 'info',
                         'add_on' => 'success',
                         'removal' => 'danger',

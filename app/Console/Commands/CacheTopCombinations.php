@@ -61,7 +61,7 @@ class CacheTopCombinations extends Command
                 $productsWithIngredients = DB::table('modifier_group_product')
                     ->join('modifier_groups', 'modifier_group_product.modifier_group_id', '=', 'modifier_groups.id')
                     ->whereNull('modifier_groups.deleted_at')
-                    ->where('modifier_groups.type', 'ingredient')
+                    ->whereIn('modifier_groups.type', ['option', 'ingredient'])
                     ->pluck('modifier_group_product.product_id')
                     ->unique()
                     ->toArray();
@@ -217,7 +217,7 @@ class CacheTopCombinations extends Command
                     // Reseta os pesos das opções de ingredientes para refletir a amostra recente
                     DB::table('modifier_options')
                         ->join('modifier_groups', 'modifier_options.modifier_group_id', '=', 'modifier_groups.id')
-                        ->where('modifier_groups.type', 'ingredient')
+                        ->whereIn('modifier_groups.type', ['option', 'ingredient'])
                         ->update(['modifier_options.historical_weight' => 0]);
 
                     // Grava os novos volumes minerados

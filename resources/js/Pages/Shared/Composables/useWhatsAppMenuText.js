@@ -20,7 +20,7 @@ export function useWhatsAppMenuText() {
 
     const normalizeType = (type) => {
         const t = String(type || "").toLowerCase().trim();
-        if (t === "ingredient" || t === "ingrediente") return "ingredient";
+        if (t === "option" || t === "opcao" || t === "ingredient" || t === "ingrediente") return "option";
         if (t === "add_on" || t === "additional" || t === "adicional" || t === "addon") return "add_on";
         return "other";
     };
@@ -102,7 +102,7 @@ export function useWhatsAppMenuText() {
 
         const modifiers = product.modifiers || product.modifier_groups || [];
 
-        const ingredientGroups = modifiers.filter(g => normalizeType(g.type) === "ingredient");
+        const ingredientGroups = modifiers.filter(g => ["option", "ingredient"].includes(normalizeType(g.type)));
         if (ingredientGroups.length > 0) {
             ingredientGroups.forEach(group => {
                 const opts = (group.options || []).filter(opt => opt.is_active !== false);

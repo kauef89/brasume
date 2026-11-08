@@ -40,8 +40,8 @@ class InventoryLossForm
 
                         Components\Select::make('loss_type')
                             ->label('Origem / Classificação da Perda')
-                            ->options(InventoryLoss::TYPES)
-                            ->default(InventoryLoss::TYPE_OPERATIONAL)
+                            ->options(\App\Enums\InventoryLossType::class)
+                            ->default(\App\Enums\InventoryLossType::OPERATIONAL->value)
                             ->required()
                             ->columnSpan(1),
                     ]),

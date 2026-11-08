@@ -201,7 +201,7 @@ class ProductCostingService
     public static function simulatePricing(Product $product, array $selectedAddons, ?string $activeMode, ?float $customValue): array
     {
         $marginData = self::getMarginData($product);
-        $modifierGroups = $product->modifiers()->whereIn('type', ['add_on', 'ingredient'])->with('options')->get();
+        $modifierGroups = $product->modifiers()->whereIn('type', ['add_on', 'option', 'ingredient'])->with('options')->get();
 
         $predictiveCostTotal = self::getPredictiveModifiersCost($product);
         $simulatedCost = $marginData['base_cost'] - $predictiveCostTotal;

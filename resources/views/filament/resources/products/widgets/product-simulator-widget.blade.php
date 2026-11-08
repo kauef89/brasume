@@ -109,7 +109,7 @@
                 <legend class="flex items-center gap-3 px-2 text-sm font-medium text-gray-950 dark:text-white select-none">
                     <span>{{ $group->name }}</span>
 
-                    @if($group->type === 'ingredient')
+                    @if(in_array($group->type, ['option', 'ingredient']))
                         <span class="fi-badge flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase bg-gray-50 text-gray-600 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">ingrediente</span>
                     @else
                         <span class="fi-badge flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase bg-amber-50 text-amber-600 border border-amber-200 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-400">adicional</span>

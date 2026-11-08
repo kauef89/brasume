@@ -104,7 +104,7 @@ class ProcessPredictiveWeights extends Command
                 // Zera pesos de grupos do tipo ingredient para não manter lixo antigo
                 DB::table('modifier_options')
                     ->join('modifier_groups', 'modifier_options.modifier_group_id', '=', 'modifier_groups.id')
-                    ->where('modifier_groups.type', 'ingredient')
+                    ->whereIn('modifier_groups.type', ['option', 'ingredient'])
                     ->update(['modifier_options.historical_weight' => 0]);
 
                 foreach ($optionCounts as $optionId => $totalVolume) {

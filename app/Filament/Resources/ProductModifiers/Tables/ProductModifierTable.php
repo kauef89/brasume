@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\ProductModifiers\Tables;
 
+use App\Enums\ModifierType;
+
 use Filament\Tables\Table;
 use Filament\Tables;
 use Filament\Actions;
@@ -25,18 +27,6 @@ class ProductModifierTable
                 Tables\Columns\TextColumn::make('type')
                     ->label('Tipo')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'ingredient' => 'Ingrediente',
-                        'add_on' => 'Adicional',
-                        'observation' => 'Observação',
-                        default => ucfirst($state),
-                    })
-                    ->color(fn (string $state): string => match ($state) {
-                        'ingredient' => 'info',
-                        'add_on' => 'success',
-                        'observation' => 'warning',
-                        default => 'gray',
-                    })
                     ->sortable(),
 
                 // 🚀 RADAR 1: Quantidade de Categorias Únicas Atingidas
@@ -106,11 +96,7 @@ class ProductModifierTable
                 // 1. Filtro por Tipo de Modificador
                 Tables\Filters\SelectFilter::make('type')
                     ->label('Tipo')
-                    ->options([
-                        'ingredient' => 'Ingrediente',
-                        'add_on' => 'Adicional',
-                        'observation' => 'Observação',
-                    ])
+                    ->options(ModifierType::class)
                     ->multiple(),
 
                 // 2. Filtro por Status (Ativo por padrão)

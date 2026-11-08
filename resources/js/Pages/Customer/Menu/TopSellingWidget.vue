@@ -60,7 +60,7 @@ const enrichedCombinations = computed(() => {
         const rawSelections = combo.modifiers || combo.selections || combo.favorite_selections || [];
 
         // 🚀 O MOTOR DE HIGIENIZAÇÃO DE INGREDIENTES
-        const ingredientGroups = (realProduct.modifiers || []).filter(g => g.type === 'ingredient');
+        const ingredientGroups = (realProduct.modifiers || []).filter(g => ['option', 'ingredient'].includes(g.type));
         let cleanedSelections = rawSelections;
 
         if (ingredientGroups.length > 0) {
@@ -89,7 +89,7 @@ const enrichedCombinations = computed(() => {
                         price: Number(matchedIngredient.price || 0),
                         group_id: matchedIngredient.groupId
                     });
-                } else if (sel.type === 'ingredient' || sel.is_ingredient || (selGroupId && ingredientGroups.some(g => String(g.id) === selGroupId))) {
+                } else if (['option', 'ingredient'].includes(sel.type) || sel.is_ingredient || (selGroupId && ingredientGroups.some(g => String(g.id) === selGroupId))) {
                     isMappingBroken = true;
                     break;
                 } else {

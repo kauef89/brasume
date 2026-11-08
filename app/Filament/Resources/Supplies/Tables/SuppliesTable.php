@@ -31,12 +31,7 @@ class SuppliesTable
                 Tables\Columns\TextColumn::make('type')
                     ->label('Tipo')
                     ->badge()
-                    ->colors(['primary' => ProductType::PACKAGING->value, 'gray' => ProductType::CONSUMABLE->value])
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        ProductType::PACKAGING->value => 'Embalagem',
-                        ProductType::CONSUMABLE->value => 'Consumo / Operação',
-                        default => $state,
-                    }),
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('current_stock')
                     ->label('Stock Atual')

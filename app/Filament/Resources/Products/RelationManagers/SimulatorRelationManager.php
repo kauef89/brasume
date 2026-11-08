@@ -27,6 +27,6 @@ class SimulatorRelationManager extends RelationManager
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
         // A aba do Simulador SÓ VAI APARECER se o produto tiver modificadores cadastrados!
-        return $ownerRecord->modifiers()->whereIn('type', ['add_on', 'ingredient'])->exists();
+        return $ownerRecord->modifiers()->whereIn('type', ['add_on', 'option', 'ingredient'])->exists();
     }
 }

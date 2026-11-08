@@ -78,7 +78,7 @@ class ProductSimulatorWidget extends Widget
         $targetRecord = $this->record ?? $this->ownerRecord;
         if (!$targetRecord) return [];
         return [
-            'modifierGroups' => $targetRecord->modifiers()->whereIn('type', ['add_on', 'ingredient'])->with('options')->get(),
+            'modifierGroups' => $targetRecord->modifiers()->whereIn('type', ['add_on', 'option', 'ingredient'])->with('options')->get(),
         ];
     }
 }

@@ -192,7 +192,7 @@ const processedCloudOptions = computed(() => {
 const sortedCloudOptions = computed(() => processedCloudOptions.value);
 
 const predictedOptionIds = computed(() => {
-    if (!isCloudRender.value || props.group.type !== 'ingredient') return [];
+    if (!isCloudRender.value || !['option', 'ingredient'].includes(props.group.type)) return [];
 
     const available = props.helpers.getOptionsWithJoker(props.group);
     const selected = available.filter(opt => props.helpers.isSelected(props.group, opt));

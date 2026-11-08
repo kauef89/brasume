@@ -26,15 +26,10 @@ class InventoryLossesTable
                     ->weight('bold')
                     ->description(fn (InventoryLoss $record) => $record->storageLocation ? "Local: {$record->storageLocation->name}" : null),
 
-                Columns\BadgeColumn::make('loss_type')
+                Columns\TextColumn::make('loss_type')
                     ->label('Classificação')
-                    ->colors([
-                        'warning' => InventoryLoss::TYPE_OPERATIONAL,
-                        'danger'  => [InventoryLoss::TYPE_INVENTORY_AUDIT, InventoryLoss::TYPE_SPOILAGE],
-                        'gray'    => InventoryLoss::TYPE_EXPIRED,
-                        'info'    => InventoryLoss::TYPE_DAMAGED,
-                    ])
-                    ->formatStateUsing(fn ($state) => InventoryLoss::TYPES[$state] ?? ucfirst($state)),
+                    ->badge()
+                    ->sortable(),
 
                 Columns\TextColumn::make('quantity')
                     ->label('Qtd.')
@@ -62,7 +57,7 @@ class InventoryLossesTable
             ->filters([
                 Filters\SelectFilter::make('loss_type')
                     ->label('Tipo de Perda')
-                    ->options(InventoryLoss::TYPES),
+                    ->options(\App\Enums\InventoryLossType::class),
 
                 Filters\SelectFilter::make('storage_location_id')
                     ->label('Local de Armazenamento')

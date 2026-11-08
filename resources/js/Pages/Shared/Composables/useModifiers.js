@@ -1,3 +1,4 @@
+const isOptionGroup = (type) => type === 'option' || type === 'ingredient';
 import { ref } from "vue";
 
 export function useModifiers(isCustomerMode = false) {
@@ -35,7 +36,7 @@ export function useModifiers(isCustomerMode = false) {
                 }
 
                 if (foundGroup && foundOpt) {
-                    if (foundGroup.allow_quantity && foundGroup.type !== 'ingredient') {
+                    if (foundGroup.allow_quantity && !isOptionGroup(foundGroup.type)) {
                         selections.value[foundGroup.id].qtys[foundOpt.id] = sel.qty || 1;
                     } else {
                         selections.value[foundGroup.id].selectedIds.push(foundOpt.id);
@@ -46,7 +47,7 @@ export function useModifiers(isCustomerMode = false) {
     };
 
     const getOptionsWithJoker = (group) => {
-        if (group.type === "ingredient") {
+        if (isOptionGroup(group.type)) {
             if (isCustomerMode) {
                 return group.options;
             }
@@ -111,7 +112,7 @@ export function useModifiers(isCustomerMode = false) {
         const increment = Number(group.increment || 0);
         const optionsWithJoker = getOptionsWithJoker(group);
 
-        if (group.type === 'ingredient') {
+        if (isOptionGroup(group.type)) {
             let selectedItems = state.selectedIds.map(optId => {
                 const opt = optionsWithJoker.find(o => String(o.id) === String(optId));
                 return { opt, basePrice: Number(opt?.price || 0) };
@@ -164,7 +165,7 @@ export function useModifiers(isCustomerMode = false) {
         if (opt.isJoker) return 0;
         const basePrice = Number(opt.price || 0);
 
-        if (group.type !== 'ingredient') return basePrice;
+        if (!isOptionGroup(group.type)) return basePrice;
 
         const state = selections.value[group.id];
         if (!state) return basePrice;
@@ -214,7 +215,7 @@ export function useModifiers(isCustomerMode = false) {
         const state = selections.value[group.id];
         if (!state) return false;
 
-        if (group.allow_quantity && group.type !== 'ingredient') {
+        if (group.allow_quantity && !isOptionGroup(group.type)) {
             const totalQty = Object.values(state.qtys || {}).reduce((a, b) => a + Number(b || 0), 0);
             return totalQty >= min;
         } else {
@@ -243,7 +244,7 @@ export function useModifiers(isCustomerMode = false) {
             if (!state) return;
 
             let groupParts = [];
-            if (group.allow_quantity && group.type !== 'ingredient') {
+            if (group.allow_quantity && !isOptionGroup(group.type)) {
                 group.options.forEach((opt) => {
                     const qty = state.qtys[opt.id] || 0;
                     if (qty > 0) groupParts.push(`${qty}x ${opt.name}`);
@@ -270,7 +271,7 @@ export function useModifiers(isCustomerMode = false) {
             const state = selections.value[group.id];
             if (!state) return;
 
-            if (group.allow_quantity && group.type !== 'ingredient') {
+            if (group.allow_quantity && !isOptionGroup(group.type)) {
                 group.options.forEach((opt) => {
                     const qty = state.qtys[opt.id] || 0;
                     if (qty > 0) {
