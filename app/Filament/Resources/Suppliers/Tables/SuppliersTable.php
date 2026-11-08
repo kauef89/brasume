@@ -76,7 +76,9 @@ class SuppliersTable
                         "virtual" => "Virtual",
                     ]),
             ])
-            ->actions([])
+            ->actions([
+                Tables\Actions\EditAction::make()->iconButton(),
+            ])
             ->bulkActions([
                 \Filament\Actions\BulkActionGroup::make([
                     MergeSuppliersBulkAction::make(),

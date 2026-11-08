@@ -26,7 +26,7 @@ class SupplierResource extends Resource
 
     public static function getNavigationGroup(): ?string
     {
-        return 'Financeiro';
+        return 'Estoque & Compras';
     }
 
     public static function getNavigationSort(): ?int

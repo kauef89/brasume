@@ -86,6 +86,17 @@ class AccountPayableForm
                     $set("employee_id", null);
                 })
                 ->columnSpanFull(),
+            \Filament\Forms\Components\Toggle::make("is_personal")
+                ->label("Despesa Pessoal / Sócios?")
+                ->helperText("Marque se este pagamento for particular de sócio.")
+                ->live()
+                ->afterStateUpdated(function ($set, $state) {
+                    if ($state) {
+                        $set("accounting_category", \App\Enums\AccountingCategory::PARTNERS->value);
+                        $set("accounting_subcategory", "personal");
+                    }
+                })
+                ->columnSpanFull(),
             Grid::make(4)->schema([
                 Select::make("supplier_id")
                     ->disabled(fn(Get $get) => $get('is_supplier_locked'))
@@ -133,6 +144,13 @@ class AccountPayableForm
                     ->label("Colaborador Vinculado")
                     ->options(fn() => \App\Models\Employee::where('is_active', true)->pluck("name", "id"))
                     ->searchable()
+                    ->live()
+                    ->afterStateUpdated(function ($state, \Filament\Schemas\Components\Utilities\Set $set) {
+                        if ($state) {
+                            $set("accounting_category", \App\Enums\AccountingCategory::PAYROLL->value);
+                            $set("accounting_subcategory", "freelancers");
+                        }
+                    })
                     ->visible(
                         fn($get) => $get("beneficiary_type") === "employee",
                     )
@@ -183,11 +201,7 @@ class AccountPayableForm
 
                 Select::make("status")
                     ->label("Status")
-                    ->options([
-                        "pending" => "Pendente",
-                        "paid" => "Pago",
-                        "cancelled" => "Cancelado",
-                    ])
+                    ->options(\App\Enums\PaymentStatus::class)
                     ->default("pending")
                     ->required()
                     ->live()

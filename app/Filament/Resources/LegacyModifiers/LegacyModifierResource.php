@@ -21,6 +21,7 @@ class LegacyModifierResource extends Resource
 {
     protected static ?string $model = LegacyModifier::class;
     protected static string|\UnitEnum|null $navigationGroup = 'Sistema Legado';
+    protected static ?int $navigationSort = 4;
     protected static ?string $navigationLabel = "Modificadores Antigos";
     protected static ?string $modelLabel = "Modificador Legado";
 
@@ -84,57 +85,7 @@ class LegacyModifierResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return $table
-            ->columns([
-                TextColumn::make('name')
-                    ->label('Sabor / Adicional (Legado)')
-                    ->searchable(),
-
-                TextColumn::make('order_item_modifiers_count')
-                    ->counts('orderItemModifiers')
-                    ->label('Ocorrências')
-                    ->badge()
-                    ->color('info')
-                    ->sortable(),
-
-                // 🚀 Exibe de forma inteligente para onde ele foi mapeado!
-                TextColumn::make('mapped_to')
-                    ->label('Mapeado Para')
-                    ->badge()
-                    ->color(fn ($record) => ($record->modifier_option_id || $record->current_product_id) ? 'gray' : ($record->is_ignored ? 'gray' : 'danger'))
-                    ->state(function ($record) {
-                        if ($record->is_ignored) return 'Ignorado';
-                        if ($record->modifier_option_id) return 'Opção: ' . ($record->currentOption->name ?? '');
-                        if ($record->current_product_id) return 'Produto: ' . ($record->currentProduct->name ?? '');
-                        return 'Pendente';
-                    }),
-            ])
-            ->defaultSort('modifier_option_id', 'asc')
-            ->filters([
-                TernaryFilter::make('is_mapped')
-                    ->label('Status')
-                    ->queries(
-                        true: fn ($query) => $query->whereNotNull('modifier_option_id')->orWhereNotNull('current_product_id'),
-                        false: fn ($query) => $query->whereNull('modifier_option_id')->whereNull('current_product_id')->where('is_ignored', false),
-                    )
-            ])
-            ->actions([
-                            EditAction::make()
-                                ->modalWidth('md')
-                                ->mutateFormDataUsing(function (array $data): array {
-                                    // 🚀 SEGURANÇA (MÉTODO CORRETO PARA TABLE ACTIONS):
-                                    // Garante que um item não seja Produto E Opção ao mesmo tempo
-                                    if (!isset($data['mapping_type'])) return $data;
-
-                                    if ($data['mapping_type'] === 'option') {
-                                        $data['current_product_id'] = null;
-                                    } else {
-                                        $data['modifier_option_id'] = null;
-                                    }
-
-                                    return $data;
-                                }),
-                        ]);
+        return \App\Filament\Resources\LegacyModifiers\Tables\LegacyModifiersTable::build($table);
     }
 
     public static function getPages(): array

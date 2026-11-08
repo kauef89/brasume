@@ -23,7 +23,7 @@ class LegacyProductResource extends Resource
     protected static string|\BackedEnum|null $navigationIcon = "heroicon-o-archive-box";
     protected static string|\UnitEnum|null $navigationGroup = 'Sistema Legado';
     protected static ?string $navigationLabel = "Produtos Antigos";
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
     protected static ?string $modelLabel = "Produto Legado";
 
     public static function getNavigationBadge(): ?string

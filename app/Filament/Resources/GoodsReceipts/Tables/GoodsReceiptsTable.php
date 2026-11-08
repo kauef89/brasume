@@ -54,6 +54,31 @@ class GoodsReceiptsTable
                     }),
             ])
             ->defaultSort('received_at', 'desc')
+                        ->filters([
+                \Filament\Tables\Filters\SelectFilter::make('status')
+                    ->label('Status Fiscal')
+                    ->options([
+                        'pending_invoice' => 'Aguardando NF-e',
+                        'reconciled'      => 'Conciliado (Com NF-e)',
+                        'cancelled'       => 'Cancelado',
+                    ]),
+
+                \Filament\Tables\Filters\SelectFilter::make('supplier_id')
+                    ->label('Fornecedor')
+                    ->relationship('supplier', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                \Filament\Tables\Filters\Filter::make('received_at')
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make('from')->label('De'),
+                        \Filament\Forms\Components\DatePicker::make('until')->label('Até'),
+                    ])
+                    ->query(fn ($query, array $data) => $query
+                        ->when($data['from'], fn ($q, $date) => $q->whereDate('received_at', '>=', $date))
+                        ->when($data['until'], fn ($q, $date) => $q->whereDate('received_at', '<=', $date))
+                    ),
+            ])
             ->actions([
                 EditAction::make(),
             ]);

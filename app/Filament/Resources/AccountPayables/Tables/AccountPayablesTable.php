@@ -50,27 +50,12 @@ class AccountPayablesTable
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
-                    ->badge()
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'pending' => 'Pendente',
-                        'paid' => 'Pago',
-                        'cancelled' => 'Cancelado',
-                        default => $state,
-                    })
-                    ->colors([
-                        'warning' => 'pending',
-                        'success' => 'paid',
-                        'danger' => 'cancelled',
-                    ]),
+                    ->badge(),
             ])
             ->defaultSort('due_date', 'asc')
             ->filters([
                 SelectFilter::make('status')
-                    ->options([
-                        'pending' => 'Pendente',
-                        'paid' => 'Pago',
-                        'cancelled' => 'Cancelado',
-                    ]),
+                    ->options(\App\Enums\PaymentStatus::class),
                 TernaryFilter::make('is_late')
                     ->label('Atrasadas')
                     ->queries(
@@ -86,6 +71,12 @@ class AccountPayablesTable
                     ->visible(fn ($record) => $record->status === 'pending')
                     ->requiresConfirmation()
                     ->form([
+                        \Filament\Forms\Components\Select::make('bank_account_id')
+                            ->label('Conta Bancária / Cofre (Saída)')
+                            ->options(\App\Models\BankAccount::where('is_active', true)->pluck('name', 'id'))
+                            ->required()
+                            ->searchable()
+                            ->preload(),
                         DatePicker::make('payment_date')
                             ->label('Data em que foi pago')
                             ->default(now())
@@ -95,6 +86,17 @@ class AccountPayablesTable
                         $record->update([
                             'status' => 'paid',
                             'payment_date' => $data['payment_date'],
+                            'bank_account_id' => $data['bank_account_id'],
+                        ]);
+
+                        \App\Models\Transaction::create([
+                            'bank_account_id' => $data['bank_account_id'],
+                            'type'            => 'out',
+                            'amount'          => $record->amount,
+                            'description'     => $record->description . ($record->supplier ? ' (' . $record->supplier->name . ')' : ''),
+                            'transaction_date'=> $data['payment_date'],
+                            'supplier_id'     => $record->supplier_id,
+                            'operator_name'   => auth()->user()?->name ?? 'Sistema',
                         ]);
                     }),
 
