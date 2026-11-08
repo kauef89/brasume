@@ -24,13 +24,20 @@ class EmployeeTable
 
                 TextColumn::make('employment_type')
                     ->label('Vínculo')
+                    ->badge()
                     ->sortable(),
 
                 TextColumn::make('work_days')
                     ->label('Escala')
-                    ->visible(fn ($record) => $record?->employment_type === EmploymentType::FREELANCE_FIXED)
-                    ->formatStateUsing(fn ($state) => count($state ?? []) . ' dias/semana')
-                    ->color('primary'),
+                    ->state(function ($record) {
+                        $type = $record->employment_type instanceof \App\Enums\EmploymentType ? $record->employment_type->value : (string) $record->employment_type;
+                        if (!in_array($type, ['freelance_fixed', 'clt'])) return null;
+                        $qtd = count($record->work_days ?? []);
+                        return $qtd > 0 ? "{$qtd} dias/sem" : 'Sem escala';
+                    })
+                    ->badge()
+                    ->placeholder('-')
+                    ->color('gray'),
 
                 TextColumn::make('user.roles.name')
                     ->label('Cargos / Acesso')
@@ -59,7 +66,12 @@ class EmployeeTable
                     ->sortable(),
             ])
             ->filters([
-                //
+                \Filament\Tables\Filters\SelectFilter::make('employment_type')
+                    ->label('Tipo de Vínculo')
+                    ->options(\App\Enums\EmploymentType::class),
+                \Filament\Tables\Filters\TernaryFilter::make('is_active')
+                    ->label('Estado')
+                    ->boolean(),
             ])
             ->actions([
                 ViewAction::make()->iconButton(),

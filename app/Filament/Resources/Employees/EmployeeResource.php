@@ -68,18 +68,7 @@ class EmployeeResource extends Resource
                                 ->columns(3)
                                 ->schema([
                                     TextEntry::make("employment_type")
-                                        ->label("Tipo de Contrato")
-                                        ->formatStateUsing(
-                                            fn($state) => match ($state) {
-                                                "clt_44" => "CLT 44h",
-                                                "clt_40" => "CLT 40h",
-                                                "freelance_fixed"
-                                                    => "Freelancer Fixo",
-                                                "freelance_eventual"
-                                                    => "Freelancer Eventual",
-                                                default => $state,
-                                            },
-                                        )
+                                        ->label("Tipo de Vínculo")
                                         ->badge(),
 
                                     TextEntry::make("base_remuneration")

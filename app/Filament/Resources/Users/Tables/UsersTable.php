@@ -22,11 +22,22 @@ class UsersTable
                     ->label('E-mail')
                     ->searchable(),
 
+                TextColumn::make('employee.name')
+                    ->label('Colaborador Vinculado')
+                    ->searchable()
+                    ->placeholder('Sem vínculo RH')
+                    ->badge()
+                    ->color('gray'),
+
                 TextColumn::make('roles.name')
                     ->label('Cargos')
                     ->badge()
                     ->color('primary')
                     ->searchable(),
+
+                \Filament\Tables\Columns\ToggleColumn::make('is_active')
+                    ->label('Ativo')
+                    ->sortable(),
 
                 TextColumn::make('pin')
                     ->label('Acesso ao PDV')
@@ -41,7 +52,12 @@ class UsersTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                \Filament\Tables\Filters\SelectFilter::make('roles')
+                    ->label('Cargo / Papel')
+                    ->relationship('roles', 'name'),
+                \Filament\Tables\Filters\TernaryFilter::make('is_active')
+                    ->label('Acesso Ativo')
+                    ->boolean(),
             ])
             ->actions([
                 Actions\EditAction::make(),

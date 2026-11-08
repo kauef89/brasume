@@ -70,7 +70,22 @@ class LedgersRelationManager extends RelationManager
             ])
             ->defaultSort("created_at", "desc")
             ->filters([
-                //
+                \Filament\Tables\Filters\SelectFilter::make('type')
+                    ->label('Tipo de Lançamento')
+                    ->options([
+                        'credit' => 'Serviço Prestado / Diária (+)',
+                        'debit'  => 'Pagamento / Vale / Consumo (-)',
+                    ]),
+                \Filament\Tables\Filters\Filter::make('created_at')
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make('from')->label('De'),
+                        \Filament\Forms\Components\DatePicker::make('until')->label('Até'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['from'], fn ($q, $date) => $q->whereDate('created_at', '>=', $date))
+                            ->when($data['until'], fn ($q, $date) => $q->whereDate('created_at', '<=', $date));
+                    }),
             ])
             ->headerActions([
                 // ==========================================

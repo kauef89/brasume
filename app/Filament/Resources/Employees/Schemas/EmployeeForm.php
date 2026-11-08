@@ -30,7 +30,7 @@ class EmployeeForm
 
         $allRoles = array_merge([$primary], $secondaryVals);
 
-        return in_array('courier', $allRoles, true) || in_array('motoboy', $allRoles, true);
+        return in_array('driver', $allRoles, true) || in_array('courier', $allRoles, true) || in_array('motoboy', $allRoles, true);
     }
 
     public static function getFormSchema(): array
