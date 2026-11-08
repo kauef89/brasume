@@ -23,7 +23,7 @@ class PaymentMethodResource extends Resource
     use HasGlobalSearch;
     protected static ?string $model = PaymentMethod::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'PDV & Infraestrutura';
+    protected static string|\UnitEnum|null $navigationGroup = 'Financeiro';
 
     // Usando os Getters
     public static function getNavigationIcon(): string|\BackedEnum|null

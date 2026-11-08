@@ -20,17 +20,7 @@ class TransactionsTable
 
                 Tables\Columns\TextColumn::make('type')
                     ->label('Tipo')
-                    ->badge()
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'in' => 'Entrada',
-                        'out' => 'Saída',
-                        default => $state,
-                    })
-                    ->color(fn (string $state): string => match ($state) {
-                        'in' => 'success',
-                        'out' => 'danger',
-                        default => 'gray',
-                    }),
+                    ->badge(),
 
                 Tables\Columns\TextColumn::make('description')
                     ->label('Descrição')

@@ -87,6 +87,17 @@ class AcquirerTransactionsTable
             ])
             ->defaultSort('transaction_date', 'desc')
             ->filters([
+                \Filament\Tables\Filters\Filter::make('transaction_date_filter')
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make('from')->label('Vendas de'),
+                        \Filament\Forms\Components\DatePicker::make('until')->label('Até'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['from'], fn ($q, $date) => $q->whereDate('transaction_date', '>=', $date))
+                            ->when($data['until'], fn ($q, $date) => $q->whereDate('transaction_date', '<=', $date));
+                    }),
+
                 SelectFilter::make('status')
                     ->label('Status da Venda')
                     ->options(AcquirerMatchStatus::class),

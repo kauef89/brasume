@@ -26,19 +26,7 @@ class PayrollInfolist
 
                         TextEntry::make('status')
                             ->label('Status')
-                            ->badge()
-                            ->color(fn (string $state): string => match ($state) {
-                                'draft'    => 'warning',
-                                'approved' => 'primary',
-                                'paid'     => 'success',
-                                default    => 'gray',
-                            })
-                            ->formatStateUsing(fn (string $state): string => match ($state) {
-                                'draft'    => 'Rascunho / Aberta',
-                                'approved' => 'Aprovada',
-                                'paid'     => 'Paga / Finalizada',
-                                default    => $state,
-                            }),
+                            ->badge(),
 
                         TextEntry::make('payslips_count')
                             ->label('Total de Colaboradores')

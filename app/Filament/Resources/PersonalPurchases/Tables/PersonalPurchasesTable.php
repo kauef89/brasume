@@ -26,19 +26,17 @@ class PersonalPurchasesTable
     {
         return $table
             ->columns([
-                TextColumn::make("nfe_key")
-                    ->label("Data")
-                    ->formatStateUsing(function (string $state) {
-                        $invoice = ReceivedInvoice::where(
-                            "nfe_key",
-                            $state,
-                        )->first();
-                        $dataCompra = $invoice ? $invoice->issue_date : null;
+                TextColumn::make("created_at")
+                    ->label("Data Registro")
+                    ->dateTime("d/m/Y H:i")
+                    ->sortable(),
 
-                        return $dataCompra
-                            ? Carbon::parse($dataCompra)->format("d/m/Y")
-                            : "Desconhecida";
-                    })
+                TextColumn::make("nfe_key")
+                    ->label("Chave NFe")
+                    ->limit(12)
+                    ->fontFamily("mono")
+                    ->copyable()
+                    ->tooltip(fn ($record) => $record->nfe_key)
                     ->searchable(),
 
                 TextColumn::make("supplier.name")

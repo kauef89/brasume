@@ -66,6 +66,30 @@ class BankAccountForm
                                 ->columnSpan(1),
                         ]),
 
+                        Section::make("Configurações do Cartão de Crédito")
+                            ->visible(fn(Get $get) => ($get("type") instanceof \BackedEnum ? $get("type")->value : $get("type")) === "credit_card")
+                            ->schema([
+                                Grid::make(3)->schema([
+                                    TextInput::make("credit_limit")
+                                        ->label("Limite Total do Cartão")
+                                        ->numeric()
+                                        ->prefix("R$")
+                                        ->placeholder("Ex: 10000.00"),
+                                    TextInput::make("closing_day")
+                                        ->label("Dia de Fecho (Melhor Dia)")
+                                        ->numeric()
+                                        ->minValue(1)
+                                        ->maxValue(31)
+                                        ->placeholder("Ex: 3"),
+                                    TextInput::make("due_day")
+                                        ->label("Dia de Vencimento da Fatura")
+                                        ->numeric()
+                                        ->minValue(1)
+                                        ->maxValue(31)
+                                        ->placeholder("Ex: 10"),
+                                ]),
+                            ]),
+
                         Section::make("Dados Bancários & Convênio CNAB 240")
                             ->visible(fn(Get $get) => self::isBankingAccount($get("type")))
                             ->schema([

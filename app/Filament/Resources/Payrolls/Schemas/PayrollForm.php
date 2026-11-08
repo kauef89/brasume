@@ -22,11 +22,8 @@ class PayrollForm
 
             Select::make('status')
                 ->label('Estado')
-                ->options([
-                    'draft'    => 'Rascunho / Aberta',
-                    'approved' => 'Aprovada para Pagamento',
-                    'paid'     => 'Paga / Finalizada',
-                ])
+                ->options(\App\Enums\PayrollStatus::class)
+                ->default(\App\Enums\PayrollStatus::DRAFT->value)
                 ->required(),
         ]);
     }

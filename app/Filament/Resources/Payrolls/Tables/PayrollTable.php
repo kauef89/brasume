@@ -64,18 +64,21 @@ class PayrollTable
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'draft'    => 'warning',
-                        'approved' => 'primary',
-                        'paid'     => 'success',
-                        default    => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'draft'    => 'Rascunho',
-                        'approved' => 'Aprovada',
-                        'paid'     => 'Paga',
-                        default    => $state,
+                    ->badge(),
+            ])
+                        ->filters([
+                Tables\Filters\SelectFilter::make('status')
+                    ->label('Status da Folha')
+                    ->options(\App\Enums\PayrollStatus::class),
+                Tables\Filters\Filter::make('reference_period')
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make('period_from')->label('De'),
+                        \Filament\Forms\Components\DatePicker::make('period_until')->label('Até'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['period_from'], fn ($q, $date) => $q->whereDate('reference_period', '>=', $date))
+                            ->when($data['period_until'], fn ($q, $date) => $q->whereDate('reference_period', '<=', $date));
                     }),
             ])
             ->actions([

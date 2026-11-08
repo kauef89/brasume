@@ -85,7 +85,21 @@ class BankStatementsTable
                     )
                     ->colors(["warning" => "pending", "success" => "reconciled", "gray" => "ignored"]),
             ])
-            ->filters([]) // Filtros removidos pois as Abas assumiram este papel
+            ->filters([
+                Tables\Filters\SelectFilter::make('bank_account_id')
+                    ->label('Conta Bancária')
+                    ->relationship('bankAccount', 'name'),
+                Tables\Filters\Filter::make('bank_date')
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make('from')->label('De'),
+                        \Filament\Forms\Components\DatePicker::make('until')->label('Até'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['from'], fn ($q, $date) => $q->whereDate('bank_date', '>=', $date))
+                            ->when($data['until'], fn ($q, $date) => $q->whereDate('bank_date', '<=', $date));
+                    }),
+            ])
             ->actions([
             Action::make("conciliar")
                 ->label("Conciliar")
