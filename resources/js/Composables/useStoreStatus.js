@@ -11,7 +11,7 @@ export function useStoreStatus() {
         is_open: false,
         is_pre_order: false,
         is_past_closing: false,
-        active_channels: ['delivery', 'counter', 'table'],
+        active_channels: ['delivery', 'pickup', 'counter', 'table'],
         next_open_time: null,
         current_close_time: null,
         last_closed_at: null,

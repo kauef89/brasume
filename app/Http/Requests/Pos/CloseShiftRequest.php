@@ -77,4 +77,39 @@ class CloseShiftRequest extends FormRequest
             'attendees' => $normalized,
         ]);
     }
+
+    public function withValidator(\Illuminate\Validation\Validator $validator): void
+    {
+        $validator->after(function ($validator) {
+            /** @var \App\Services\RestaurantOps\OperationalShiftClosureService $closureService */
+            $closureService = app(\App\Services\RestaurantOps\OperationalShiftClosureService::class);
+            $blockers = $closureService->getPendingShiftBlockers();
+
+            if ($blockers['has_blockers']) {
+                $mensagens = [];
+
+                if (!empty($blockers['unclosed_orders']) && count($blockers['unclosed_orders']) > 0) {
+                    $qtd = count($blockers['unclosed_orders']);
+                    $exemplos = collect($blockers['unclosed_orders'])->take(3)->map(function ($o) {
+                        $ident = $o->table_number ? "Mesa {$o->table_number}" : ($o->customer_name ?: "#{$o->id}");
+                        return "{$ident} ({$o->status})";
+                    })->implode(', ');
+                    $mensagens[] = "Existem {$qtd} pedido(s) em andamento: {$exemplos}. Conclua-os ou cancele-os antes de fechar o caixa.";
+                }
+
+                if (!empty($blockers['unpaid_orders']) && count($blockers['unpaid_orders']) > 0) {
+                    $qtd = count($blockers['unpaid_orders']);
+                    $exemplos = collect($blockers['unpaid_orders'])->take(3)->map(function ($o) {
+                        $ident = $o->table_number ? "Mesa {$o->table_number}" : ($o->customer_name ?: "#{$o->id}");
+                        return "{$ident} (R$ " . number_format($o->total, 2, ',', '.') . ")";
+                    })->implode(', ');
+                    $mensagens[] = "Existem {$qtd} pedido(s) com pagamento pendente: {$exemplos}. Registre o recebimento antes de encerrar o turno.";
+                }
+
+                foreach ($mensagens as $msg) {
+                    $validator->errors()->add('shift_blockers', $msg);
+                }
+            }
+        });
+    }
 }

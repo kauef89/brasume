@@ -29,57 +29,41 @@ class OrderTable {
                 })
                 ->searchable(),
 
-            Tables\Columns\TextColumn::make('type')->label('Modalidade')->badge()
-                ->formatStateUsing(fn (string $state): string => match ($state) {
-                    'delivery' => 'Delivery',
-                    'counter' => 'Balcão',
-                    'pickup' => 'Retirada',
-                    'table' => 'Mesa',
-                    default => $state
-                })
-                ->colors([
-                    'info' => 'delivery',
-                    'warning' => 'counter',
-                    'success' => 'pickup',
-                    'gray' => 'table'
-                ]),
+            Tables\Columns\TextColumn::make('type')->label('Modalidade')->badge(),
 
             Tables\Columns\TextColumn::make('total')->label('Total')->money('BRL')->sortable(),
 
-            Tables\Columns\TextColumn::make('status')->label('Status')->badge()
-                ->formatStateUsing(fn (string $state): string => match ($state) {
-                    'pending' => 'Pendente',
-                    'preparing' => 'Preparando',
-                    'ready' => 'Pronto',
-                    'out_for_delivery' => 'Em Entrega',
-                    'closed' => 'Concluído',
-                    'cancelled' => 'Cancelado',
-                    default => $state
-                })
-                ->colors([
-                    'warning' => 'pending',
-                    'info' => 'preparing',
-                    'success' => fn ($state) => in_array($state, ['ready', 'closed']),
-                    'danger' => 'cancelled',
-                    'primary' => 'out_for_delivery',
-                ]),
+            Tables\Columns\TextColumn::make('status')->label('Status')->badge(),
 
-            Tables\Columns\TextColumn::make('payment_status')->label('Pagamento')->badge()
-                ->formatStateUsing(fn (string $state): string => match ($state) {
-                    'paid' => 'Pago',
-                    'partial' => 'Parcial',
-                    'pending' => 'Pendente',
-                    'cancelled' => 'Cancelado',
-                    default => $state
-                })
-                ->colors([
-                    'success' => 'paid',
-                    'warning' => fn ($state) => in_array($state, ['pending', 'partial']),
-                    'danger' => 'cancelled'
-                ]),
+            Tables\Columns\TextColumn::make('payment_status')->label('Pagamento')->badge(),
 
             Tables\Columns\TextColumn::make('created_at')->label('Data')->dateTime('d/m/Y H:i')->sortable(),
         ])->defaultSort('created_at', 'desc')
+                ->filters([
+            Tables\Filters\SelectFilter::make('status')
+                ->label('Status do Pedido')
+                ->options(\App\Enums\OrderStatus::class)
+                ->multiple(),
+
+            Tables\Filters\SelectFilter::make('type')
+                ->label('Modalidade')
+                ->options(\App\Enums\OrderType::class),
+
+            Tables\Filters\SelectFilter::make('payment_status')
+                ->label('Status Pagamento')
+                ->options(\App\Enums\PaymentStatus::class),
+
+            Tables\Filters\Filter::make('created_at')
+                ->form([
+                    \Filament\Forms\Components\DatePicker::make('created_from')->label('De'),
+                    \Filament\Forms\Components\DatePicker::make('created_until')->label('Até'),
+                ])
+                ->query(function ($query, array $data) {
+                    return $query
+                        ->when($data['created_from'], fn ($q, $date) => $q->whereDate('created_at', '>=', $date))
+                        ->when($data['created_until'], fn ($q, $date) => $q->whereDate('created_at', '<=', $date));
+                }),
+        ])
         ->actions([
             EditAction::make()->iconButton(),
 
@@ -179,7 +163,7 @@ class OrderTable {
                         $sacola->save();
                     }
 
-                    $record->status = 'out_for_delivery';
+                    $record->status = \App\Enums\OrderStatus::OUT_FOR_DELIVERY->value;
                     $record->save();
 
                     Notification::make()

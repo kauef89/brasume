@@ -61,6 +61,7 @@ class OrderForm
                         ->searchable()
                         ->preload()
                         ->live()
+                        ->visible(fn (Get $get) => in_array($get("type"), ["pickup", "delivery", "table"]))
                         ->createOptionForm(
                             \App\Filament\Resources\Customers\Schemas\CustomerForm::getFormSchema(),
                         )
@@ -84,15 +85,17 @@ class OrderForm
                         ->columnSpan(1),
 
                     FormComponents\TextInput::make("customer_name")
-                        ->label("Nome Avulso / Visitante")
-                        ->visible(fn(Get $get) => in_array($get("type"), ["counter", "table", "delivery"]))
+                        ->label("Nome para Retirada / Chamada")
+                        ->required(fn (Get $get) => $get("type") === "pickup" && blank($get("customer_id")))
+                        ->visible(fn (Get $get) => in_array($get("type"), ["pickup", "delivery"]))
                         ->columnSpan(1),
 
                     FormComponents\TextInput::make("customer_phone")
-                        ->label("WhatsApp (Visitante)")
+                        ->label("WhatsApp (Aviso de Pedido)")
                         ->mask("(99) 99999-9999")
                         ->stripCharacters(['(', ')', '-', ' '])
-                        ->visible(fn(Get $get) => in_array($get("type"), ["counter", "delivery"]) && blank($get("customer_id")))
+                        ->required(fn (Get $get) => in_array($get("type"), ["pickup", "delivery"]) && blank($get("customer_id")))
+                        ->visible(fn (Get $get) => in_array($get("type"), ["pickup", "delivery"]) && blank($get("customer_id")))
                         ->columnSpan(1),
 
                     FormComponents\TextInput::make("table_number")

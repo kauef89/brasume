@@ -10,7 +10,7 @@ export function useCashier(props, { onShiftStaged } = {}) {
 
     const showOrders = ref(true);
     const showTransactions = ref(true);
-    const activeOrderTypes = ref(['table', 'counter', 'delivery']);
+    const activeOrderTypes = ref(['table', 'counter', 'pickup', 'delivery']);
     const selectedRows = ref(new Set());
 
     const isLogoutPromptVisible = ref(false);
@@ -30,7 +30,8 @@ export function useCashier(props, { onShiftStaged } = {}) {
     const getOrderTypeInfo = (type) => {
         const map = {
             'table': { label: 'Mesa', icon: 'pi pi-table' },
-            'counter': { label: 'Balcão', icon: 'pi pi-shopping-bag' },
+            'counter': { label: 'Balcão (Rápido)', icon: 'pi pi-bolt' },
+        'pickup': { label: 'Retirada', icon: 'pi pi-shopping-bag' },
             'delivery': { label: 'Delivery', icon: 'pi pi-truck' }
         };
         return map[type] || { label: 'Avulso', icon: 'pi pi-box' };

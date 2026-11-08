@@ -121,7 +121,16 @@ class CashierController extends Controller
             $operatorId = $operator?->id ?? 1;
             $operatorName = $operator?->name ?? 'Operador';
 
-            $cashierService->closeShift($shift, $request->all(), $operatorId, $operatorName);
+            $closedShift = $cashierService->closeShift($shift, $request->all(), $operatorId, $operatorName);
+
+            // 5. Execução do Fechamento Operacional (Diárias, WMS, Spooler e Notificações)
+            try {
+                /** @var \App\Services\RestaurantOps\OperationalShiftClosureService $opClosureService */
+                $opClosureService = app(\App\Services\RestaurantOps\OperationalShiftClosureService::class);
+                $opClosureService->closeShift($closedShift->id, true);
+            } catch (\Throwable $opError) {
+                \Illuminate\Support\Facades\Log::error("⚠️ Falha não impeditiva no fechamento operacional do turno #{$shift->id}: " . $opError->getMessage());
+            }
 
             return back()->with('success', 'Caixa fechado com sucesso.');
         } catch (\Throwable $e) {

@@ -96,7 +96,7 @@
         </div>
 
         <!-- FLUXO RETIRADA NO BALCÃO -->
-        <div v-else-if="currentType === 'counter'" class="p-6 c-glass-card flex flex-col gap-4 animate-in fade-in duration-200">
+        <div v-else-if="currentType === 'pickup' || currentType === 'counter'" class="p-6 c-glass-card flex flex-col gap-4 animate-in fade-in duration-200">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-primary-500/20 text-primary-300 flex items-center justify-center shrink-0">
                     <i class="pi pi-shopping-bag text-lg"></i>
@@ -142,15 +142,15 @@ const availableChannels = computed(() => {
         try { channels = JSON.parse(channels); } catch (e) {}
     }
     if (!Array.isArray(channels) || channels.length === 0) {
-        channels = ['delivery', 'counter'];
+        channels = ['delivery', 'pickup'];
     }
 
     const options = [];
     if (channels.includes('delivery')) {
         options.push({ label: 'Delivery', value: 'delivery', icon: 'pi-truck' });
     }
-    if (channels.includes('counter') || channels.includes('takeaway')) {
-        options.push({ label: 'Retirada', value: 'counter', icon: 'pi-shopping-bag' });
+    if (channels.includes('pickup') || channels.includes('counter') || channels.includes('takeaway')) {
+        options.push({ label: 'Retirada', value: 'pickup', icon: 'pi-shopping-bag' });
     }
     return options;
 });
@@ -172,7 +172,7 @@ const selectChannel = (type) => {
     currentType.value = type;
     emit('update:modelValue', type);
 
-    if (type === 'counter') {
+    if (type === 'pickup' || type === 'counter') {
         activeAddress.value = null;
         emit('routing-change', { type: 'counter', address: null });
     } else if (type === 'delivery') {

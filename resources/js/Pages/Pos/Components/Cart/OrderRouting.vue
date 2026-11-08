@@ -15,7 +15,7 @@
             >
                 <i :class="[
                     'pi text-2xl transition-transform duration-300 relative z-10',
-                    option.icon || (option.value === 'table' ? 'pi-table' : option.value === 'counter' ? 'pi-shopping-bag' : 'pi-truck'),
+                    option.icon || (option.value === 'table' ? 'pi-table' : option.value === 'counter' ? 'pi-bolt' : option.value === 'pickup' ? 'pi-shopping-bag' : 'pi-truck'),
                 ]"></i>
 
                 <span class="font-black text-[10px] md:text-xs uppercase tracking-widest relative z-10 text-center">
@@ -119,7 +119,7 @@ const { draftRouting } = useCart();
 // No TeamApp (garçom), respeita rigorosamente a configuração team_order_channels do tenant.
 const allowedChannels = computed(() => {
     if (!props.isTeamMode && !props.isWaiterMode) {
-        return ['table', 'counter', 'delivery'];
+        return ['table', 'counter', 'pickup', 'delivery'];
     }
 
     const channels = companySettings.value?.team_order_channels;

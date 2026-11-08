@@ -9,6 +9,7 @@ class NeighborhoodTable {
         return $table->columns([
             Tables\Columns\TextColumn::make('name')->label('Nome do Bairro')->searchable()->sortable(),
             Tables\Columns\TextColumn::make('delivery_fee')->label('Taxa de Entrega')->money('BRL')->sortable(),
+            Tables\Columns\TextColumn::make('courier_fee')->label('Repasse Motoboy')->money('BRL')->sortable()->placeholder('Padrão'),
             Tables\Columns\TextColumn::make('free_shipping_over')->label('Frete Grátis Acima de')->money('BRL')->sortable(),
         ])->defaultSort('name')
         ->recordActions([Actions\EditAction::make()->iconButton()])

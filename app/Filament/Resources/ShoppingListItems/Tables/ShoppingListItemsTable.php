@@ -44,7 +44,9 @@ class ShoppingListItemsTable
                 ->placeholder('Sem Fornecedor Fixo')
                 ->label('Fornecedor Preferencial'),
 
-            Columns\BadgeColumn::make('urgency_level')
+            Columns\TextColumn::make('urgency_level')
+                ->label('Urgência')
+                ->badge()
                 ->colors([
                     'danger'  => 'critical',
                     'warning' => 'manual',
@@ -54,24 +56,11 @@ class ShoppingListItemsTable
                     'critical' => 'Ruptura (Crítico)',
                     'manual'   => 'Manual',
                     default    => 'Normal',
-                })
-                ->label('Urgência'),
+                }),
 
-            Columns\BadgeColumn::make('status')
-                ->colors([
-                    'warning' => 'pending',
-                    'primary' => 'ordered',
-                    'success' => 'received',
-                    'danger'  => 'cancelled',
-                ])
-                ->formatStateUsing(fn (string $state) => match ($state) {
-                    'pending'   => 'Pendente',
-                    'ordered'   => 'Pedido Feito',
-                    'received'  => 'Recebido',
-                    'cancelled' => 'Cancelado',
-                    default     => ucfirst($state),
-                })
-                ->label('Status'),
+            Columns\TextColumn::make('status')
+                ->label('Status')
+                ->badge(),
         ];
     }
 

@@ -141,4 +141,64 @@ class OperationalShiftClosureService
 
         return $results;
     }
+
+    /**
+     * Saneia pedidos com valor zero (R$ 0,00) que foram fechados sem registro de pagamento.
+     */
+    public function sanitizeZeroAmountOrders(?int $shiftId = null): int
+    {
+        $shift = $shiftId
+            ? CashShift::find($shiftId)
+            : CashShift::where('status', 'open')->latest('opened_at')->first();
+
+        if (!$shift) return 0;
+
+        return \App\Models\Order::where('cash_shift_id', $shift->id)
+            ->where('total', 0)
+            ->where('payment_status', 'pending')
+            ->update(['payment_status' => \App\Enums\PaymentStatus::PAID->value]);
+    }
+
+    /**
+     * Valida se o turno possui impedimentos operacionais para ser encerrado.
+     * Retorna array com contagens e detalhes dos ofensores.
+     */
+    public function getPendingShiftBlockers(?int $shiftId = null): array
+    {
+        $shift = $shiftId
+            ? CashShift::find($shiftId)
+            : CashShift::where('status', 'open')->latest('opened_at')->first();
+
+        if (!$shift) return ['has_blockers' => false, 'unclosed_orders' => [], 'unpaid_orders' => []];
+
+        // 1. Saneia os zerados antes de checar
+        $this->sanitizeZeroAmountOrders($shift->id);
+
+        // 2. Pedidos em andamento (não finalizados e não cancelados)
+        $unclosed = \App\Models\Order::where('cash_shift_id', $shift->id)
+            ->whereNotIn('status', [
+                \App\Enums\OrderStatus::CLOSED->value,
+                \App\Enums\OrderStatus::CANCELLED->value,
+                'completed'
+            ])
+            ->get(['id', 'type', 'status', 'total', 'customer_name', 'table_number']);
+
+        // 3. Pedidos finalizados ou ativos com valor > 0 cujo pagamento continua pendente
+        $unpaid = \App\Models\Order::where('cash_shift_id', $shift->id)
+            ->where('total', '>', 0)
+            ->where('status', '!=', \App\Enums\OrderStatus::CANCELLED->value)
+            ->whereIn('payment_status', [
+                \App\Enums\PaymentStatus::PENDING->value,
+                \App\Enums\PaymentStatus::PARTIAL->value
+            ])
+            ->get(['id', 'type', 'status', 'total', 'customer_name', 'table_number']);
+
+        $hasBlockers = $unclosed->isNotEmpty() || $unpaid->isNotEmpty();
+
+        return [
+            'has_blockers'    => $hasBlockers,
+            'unclosed_orders' => $unclosed,
+            'unpaid_orders'   => $unpaid,
+        ];
+    }
 }

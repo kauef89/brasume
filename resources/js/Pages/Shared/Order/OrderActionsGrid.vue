@@ -61,7 +61,7 @@
             <OrderContextAction
                 v-if="isTeamMode ? (['counter', 'delivery'].includes(order?.type) && hasPhone) : true"
                 :disabled="!['counter', 'delivery'].includes(order?.type) || !hasPhone"
-                :label="order?.type === 'counter' ? 'Avisar Coleta' : 'Avisar Saída'"
+                :label="order?.type === 'pickup' ? 'Avisar Coleta' : (order?.type === 'counter' ? 'Chamar Balcão' : 'Avisar Saída')"
                 subtitle="Notificar cliente"
                 icon="pi pi-send"
                 icon-color="text-primary-500"
@@ -244,7 +244,7 @@ const canChargePix = computed(() => {
 
 const notifyDispatch = () => {
     if (!hasPhone.value) return;
-    if (props.order?.type === 'counter') notifyPickupReady(props.order);
+    if (props.order?.type === 'pickup' || props.order?.type === 'counter') notifyPickupReady(props.order);
     else notifyDeliveryOut(props.order);
 };
 

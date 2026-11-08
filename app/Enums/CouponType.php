@@ -2,10 +2,11 @@
 
 namespace App\Enums;
 
-use Filament\Support\Contracts\HasLabel;
+use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasIcon;
+use Filament\Support\Contracts\HasLabel;
 
-enum CouponType: string implements HasLabel, HasIcon
+enum CouponType: string implements HasLabel, HasIcon, HasColor
 {
     case FIXED         = 'fixed';
     case PERCENT       = 'percent';
@@ -17,6 +18,15 @@ enum CouponType: string implements HasLabel, HasIcon
             self::FIXED         => 'Fixo (R$)',
             self::PERCENT       => 'Porcentagem (%)',
             self::FREE_DELIVERY => 'Entrega Grátis',
+        };
+    }
+
+    public function getColor(): string|array|null
+    {
+        return match ($this) {
+            self::FIXED         => 'success',
+            self::PERCENT       => 'warning',
+            self::FREE_DELIVERY => 'info',
         };
     }
 
