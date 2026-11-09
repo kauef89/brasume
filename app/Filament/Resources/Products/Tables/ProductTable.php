@@ -2,25 +2,25 @@
 
 namespace App\Filament\Resources\Products\Tables;
 
-
 use App\Enums\ProductStatus;
 use App\Enums\ProductType;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Tables\Table;
-use Filament\Tables;
+use App\Filament\Resources\Products\Actions\MergeProductsBulkAction;
+use App\Filament\Resources\Products\ProductResource;
+use App\Models\Category;
+use App\Models\Product;
+use App\Services\Catalog\AvailabilityService;
+use App\Services\Catalog\ProductCostingService;
 use Filament\Actions;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
-use App\Filament\Resources\Products\Actions\MergeProductsBulkAction;
-use App\Models\Category;
-use App\Models\Product;
-use App\Filament\Resources\Products\ProductResource;
-use Illuminate\Database\Eloquent\Collection;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components as FormComponents;
-use App\Services\Catalog\ProductCostingService;
-use App\Services\Catalog\AvailabilityService;
 use Filament\Notifications\Notification;
-use Illuminate\Validation\ValidationException;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
 class ProductTable
 {
@@ -75,7 +75,12 @@ class ProductTable
                 Tables\Columns\TextColumn::make('lucratividade')
                     ->label('Margem')
                     ->state(function (Product $record) {
-                        if (in_array($record->type, [ProductType::INGREDIENT->value, ProductType::CONSUMABLE->value, ProductType::PACKAGING->value, ProductType::MANUFACTURED->value])) return null;
+                        if (in_array($record->type, [
+                            ProductType::INGREDIENT->value,
+                            ProductType::CONSUMABLE->value,
+                            ProductType::PACKAGING->value,
+                            ProductType::MANUFACTURED->value,
+                        ])) return null;
 
                         $data = ProductCostingService::getMarginData($record);
                         return $data['margin_percentage'] ?? 0;
@@ -100,7 +105,6 @@ class ProductTable
                     ->grow(false)
                     ->width('155px')
                     ->updateStateUsing(function ($record, $state, $livewire) {
-                        // 1. Barreira estrita: Disponível exige saldo físico positivo
                         if ($state === 'available' && $record->track_inventory && (float) $record->current_stock <= 0) {
                             Notification::make()
                                 ->warning()
@@ -112,7 +116,6 @@ class ProductTable
                             return;
                         }
 
-                        // 2. Dispara a máquina de estados completa do AvailabilityService
                         try {
                             app(AvailabilityService::class)->updateAvailability($record->id, $state);
 
@@ -132,14 +135,17 @@ class ProductTable
                         $livewire->dispatch('$refresh');
                     }),
 
+                // 🚀 COLUNA CADEIA DE CUSTOS AGORA ORDENÁVEL VIA SQL
                 Tables\Columns\TextColumn::make('connection_status')
                     ->label('Cadeia de custos')
                     ->state(function (Product $record) {
-                        if ($record->type === ProductType::DISH->value) {
+                        $typeVal = $record->type instanceof ProductType ? $record->type->value : (string) $record->type;
+
+                        if ($typeVal === ProductType::DISH->value) {
                             return $record->technicalSheets()->exists() ? 'Conectado' : 'Desconectado';
                         }
 
-                        if ($record->type === ProductType::RESALE->value) {
+                        if ($typeVal === ProductType::RESALE->value) {
                             return $record->costHistories()->exists() ? 'Conectado' : 'Desconectado';
                         }
 
@@ -156,6 +162,22 @@ class ProductTable
                         'Desconectado' => 'heroicon-m-link-slash',
                         default        => 'heroicon-m-link',
                     })
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        $dishType = ProductType::DISH->value;
+                        $resaleType = ProductType::RESALE->value;
+
+                        return $query->orderByRaw("
+                            CASE
+                                WHEN products.type = '{$dishType}' AND NOT EXISTS (
+                                    SELECT 1 FROM technical_sheets WHERE technical_sheets.parent_product_id = products.id
+                                ) THEN 'Desconectado'
+                                WHEN products.type = '{$resaleType}' AND NOT EXISTS (
+                                    SELECT 1 FROM product_cost_histories WHERE product_cost_histories.product_id = products.id
+                                ) THEN 'Desconectado'
+                                ELSE 'Conectado'
+                            END {$direction}
+                        ");
+                    })
                     ->grow(false),
             ])
             ->filters([
@@ -170,6 +192,43 @@ class ProductTable
                     ->label('Status')
                     ->multiple()
                     ->options(ProductStatus::class),
+
+                // 🚀 FILTRO RÁPIDO: Filtrar produtos Conectados ou Desconectados
+                Tables\Filters\TernaryFilter::make('connection_status')
+                    ->label('Cadeia de Custos')
+                    ->placeholder('Todos')
+                    ->trueLabel('Apenas Conectados')
+                    ->falseLabel('Apenas Desconectados')
+                    ->queries(
+                        true: function (Builder $query): Builder {
+                            $dishType = ProductType::DISH->value;
+                            $resaleType = ProductType::RESALE->value;
+
+                            return $query->where(function (Builder $q) use ($dishType, $resaleType) {
+                                $q->where(function (Builder $sub) use ($dishType) {
+                                    $sub->where('products.type', $dishType)
+                                        ->whereExists(fn ($ts) => $ts->select(DB::raw(1))->from('technical_sheets')->whereColumn('technical_sheets.parent_product_id', 'products.id'));
+                                })->orWhere(function (Builder $sub) use ($resaleType) {
+                                    $sub->where('products.type', $resaleType)
+                                        ->whereExists(fn ($pch) => $pch->select(DB::raw(1))->from('product_cost_histories')->whereColumn('product_cost_histories.product_id', 'products.id'));
+                                })->orWhereNotIn('products.type', [$dishType, $resaleType]);
+                            });
+                        },
+                        false: function (Builder $query): Builder {
+                            $dishType = ProductType::DISH->value;
+                            $resaleType = ProductType::RESALE->value;
+
+                            return $query->where(function (Builder $q) use ($dishType, $resaleType) {
+                                $q->where(function (Builder $sub) use ($dishType) {
+                                    $sub->where('products.type', $dishType)
+                                        ->whereNotExists(fn ($ts) => $ts->select(DB::raw(1))->from('technical_sheets')->whereColumn('technical_sheets.parent_product_id', 'products.id'));
+                                })->orWhere(function (Builder $sub) use ($resaleType) {
+                                    $sub->where('products.type', $resaleType)
+                                        ->whereNotExists(fn ($pch) => $pch->select(DB::raw(1))->from('product_cost_histories')->whereColumn('product_cost_histories.product_id', 'products.id'));
+                                });
+                            });
+                        },
+                    ),
             ])
             ->actions([])
             ->bulkActions([
@@ -186,9 +245,9 @@ class ProductTable
                                 ->options(fn () => Category::pluck('name', 'id'))
                                 ->required(),
                         ])
-                        ->action(fn(Collection $records, array $data) => $records->each->update(['category_id' => $data['category_id']])),
+                        ->action(fn (Collection $records, array $data) => $records->each->update(['category_id' => $data['category_id']])),
 
-                    Actions\BulkAction::make('alterarStatus')
+                    BulkAction::make('alterarStatus')
                         ->label('Alterar Status')
                         ->icon('heroicon-o-check-circle')
                         ->form([
@@ -197,7 +256,7 @@ class ProductTable
                                 ->options(ProductStatus::class)
                                 ->required(),
                         ])
-                        ->action(function(Collection $records, array $data) {
+                        ->action(function (Collection $records, array $data) {
                             $successCount = 0;
                             $skippedCount = 0;
                             $availabilityService = app(AvailabilityService::class);

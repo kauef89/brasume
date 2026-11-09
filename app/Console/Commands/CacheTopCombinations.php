@@ -2,16 +2,18 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
-use Carbon\Carbon;
+use App\Enums\ModifierType;
+use App\Events\CatalogUpdated;
 use App\Models\Tenant;
+use Carbon\Carbon;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class CacheTopCombinations extends Command
 {
     protected $signature = 'catalog:cache-top-combinations {--tenant=} {--days=30}';
-    protected $description = 'Top 10: Ranking geral de produtos expandido nas top 3 variações de ingredientes e atualização do BI preditivo.';
+    protected $description = 'Top 10: Ranking geral expandido nas top variações e atualização estatística de demanda e omissões.';
 
     public function handle()
     {
@@ -27,16 +29,14 @@ class CacheTopCombinations extends Command
 
         foreach ($tenants as $tenant) {
             $this->info("\n==================================================");
-            $this->info("🚀 PROCESSANDO RANKING INTELIGENTE & BI: {$tenant->id}");
+            $this->info("🚀 PROCESSANDO BI & ENGENHARIA DE CARDÁPIO: {$tenant->id}");
             $this->info("   Janela considerada: últimos {$days} dias");
             $this->info("==================================================");
 
             tenancy()->initialize($tenant);
 
             try {
-                // =========================================================================
-                // 0. DICIONÁRIO DE OPÇÕES E GRUPOS DO TIPO 'INGREDIENT'
-                // =========================================================================
+                // 0. Dicionário de Opções
                 $v3Options = DB::table('modifier_options')
                     ->join('modifier_groups', 'modifier_options.modifier_group_id', '=', 'modifier_groups.id')
                     ->whereNull('modifier_options.deleted_at')
@@ -58,17 +58,18 @@ class CacheTopCombinations extends Command
                     }
                 }
 
-                $productsWithIngredients = DB::table('modifier_group_product')
+                $productsWithOptions = DB::table('modifier_group_product')
                     ->join('modifier_groups', 'modifier_group_product.modifier_group_id', '=', 'modifier_groups.id')
                     ->whereNull('modifier_groups.deleted_at')
-                    ->whereIn('modifier_groups.type', ['option', 'ingredient'])
+                    ->whereIn('modifier_groups.type', [
+                        ModifierType::OPTION->value,
+                        'ingredient',
+                    ])
                     ->pluck('modifier_group_product.product_id')
                     ->unique()
                     ->toArray();
 
-                // =========================================================================
-                // 1. CARGA ATUAL (SISTEMA V3)
-                // =========================================================================
+                // 1. Carga Atual (V3)
                 $currentItems = DB::table('order_items')
                     ->join('orders', 'order_items.order_id', '=', 'orders.id')
                     ->join('products', 'order_items.product_id', '=', 'products.id')
@@ -87,11 +88,11 @@ class CacheTopCombinations extends Command
                         'order_items.unit_price'
                     )
                     ->get()
-                    ->map(fn($i) => (array) $i);
+                    ->map(fn ($i) => (array) $i);
 
                 $currentIds = $currentItems->pluck('id')->filter()->toArray();
 
-                // Dicionário Estrito: Só aceita modificadores oficiais do tipo 'ingredient'
+                // Aceita ModifierType::OPTION e ModifierType::OBSERVATION para minerar demanda e omissões
                 $currentModifiers = empty($currentIds) ? collect() : DB::table('order_item_modifiers')
                     ->whereIn('order_item_id', $currentIds)
                     ->get()
@@ -107,14 +108,23 @@ class CacheTopCombinations extends Command
                             $opt = $v3OptionsByName[$cleanKey] ?? null;
                         }
 
-                        if (!$opt || $opt->group_type !== 'ingredient') return null;
+                        if (!$opt) return null;
+
+                        $validTypes = [
+                            ModifierType::OPTION->value,
+                            ModifierType::OBSERVATION->value,
+                            'ingredient',
+                        ];
+
+                        if (!in_array($opt->group_type, $validTypes, true)) return null;
 
                         return [
                             'order_item_id' => $m->order_item_id,
-                            'id' => $opt->id,
-                            'name' => $opt->name,
-                            'quantity' => (float) ($m->quantity ?? 1),
-                            'price' => (float) ($m->price ?? 0),
+                            'id'            => $opt->id,
+                            'name'          => $opt->name,
+                            'quantity'      => (float) ($m->quantity ?? 1),
+                            'price'         => (float) ($m->price ?? 0),
+                            'group_type'    => $opt->group_type,
                         ];
                     })
                     ->filter()
@@ -125,9 +135,7 @@ class CacheTopCombinations extends Command
                     return $item;
                 });
 
-                // =========================================================================
-                // 2. CARGA LEGADA
-                // =========================================================================
+                // 2. Carga Legada
                 $legacyMapped = collect();
                 $schema = DB::getSchemaBuilder();
 
@@ -153,7 +161,7 @@ class CacheTopCombinations extends Command
                             'legacy_order_items.unit_price'
                         )
                         ->get()
-                        ->map(fn($i) => (array) $i);
+                        ->map(fn ($i) => (array) $i);
 
                     $legacyIds = $legacyItems->pluck('id')->filter()->toArray();
 
@@ -174,13 +182,16 @@ class CacheTopCombinations extends Command
                         )
                         ->get()
                         ->map(function ($m) {
-                            if ($m->group_type !== 'ingredient') return null;
+                            $validTypes = [ModifierType::OPTION->value, ModifierType::OBSERVATION->value, 'ingredient'];
+                            if (!in_array($m->group_type, $validTypes, true)) return null;
+
                             return [
                                 'order_item_id' => $m->order_item_id,
-                                'id' => $m->option_id,
-                                'name' => $m->option_name,
-                                'quantity' => (float) ($m->quantity ?? 1),
-                                'price' => (float) ($m->price ?? 0),
+                                'id'            => $m->option_id,
+                                'name'          => $m->option_name,
+                                'quantity'      => (float) ($m->quantity ?? 1),
+                                'price'         => (float) ($m->price ?? 0),
+                                'group_type'    => $m->group_type,
                             ];
                         })
                         ->filter()
@@ -200,9 +211,7 @@ class CacheTopCombinations extends Command
                     continue;
                 }
 
-                // =========================================================================
-                // 3. ATUALIZAÇÃO DO BI PREDITIVO (HISTORICAL_WEIGHT)
-                // =========================================================================
+                // 3. Atualização de Pesos Estatísticos (Demanda de Escolhas e Omissões)
                 $optionVolumes = [];
                 foreach ($allItems as $item) {
                     if (!empty($item['modifiers'])) {
@@ -214,59 +223,61 @@ class CacheTopCombinations extends Command
                 }
 
                 if (!empty($optionVolumes)) {
-                    // Reseta os pesos das opções de ingredientes para refletir a amostra recente
                     DB::table('modifier_options')
                         ->join('modifier_groups', 'modifier_options.modifier_group_id', '=', 'modifier_groups.id')
-                        ->whereIn('modifier_groups.type', ['option', 'ingredient'])
+                        ->whereIn('modifier_groups.type', [
+                            ModifierType::OPTION->value,
+                            ModifierType::OBSERVATION->value,
+                            'ingredient',
+                        ])
                         ->update(['modifier_options.historical_weight' => 0]);
 
-                    // Grava os novos volumes minerados
                     foreach ($optionVolumes as $optId => $volume) {
                         DB::table('modifier_options')
                             ->where('id', $optId)
                             ->update(['historical_weight' => $volume]);
                     }
 
-                    $this->info("📈 BI Atualizado: " . count($optionVolumes) . " opções de ingredientes receberam novos pesos estatísticos.");
+                    $this->info("📈 BI Atualizado: " . count($optionVolumes) . " opções (escolhas e omissões) receberam novos pesos estatísticos.");
                 }
 
-                // =========================================================================
-                // 4. O RANKING INTELIGENTE
-                // =========================================================================
+                // 4. Ranking de Combinações
                 $groupedByProduct = $allItems->groupBy('product_id');
-                $sortedProducts = $groupedByProduct->sortByDesc(fn($items) => $items->count());
-
-                $finalData = [];
+                $sortedProducts   = $groupedByProduct->sortByDesc(fn ($items) => $items->count());
+                $finalData        = [];
 
                 foreach ($sortedProducts as $productId => $productItems) {
                     if (count($finalData) >= 10) break;
 
-                    $requiresIngredients = in_array($productId, $productsWithIngredients);
+                    $requiresOptions = in_array($productId, $productsWithOptions, true);
 
-                    $validItems = $productItems->filter(function($item) use ($requiresIngredients) {
-                        if ($requiresIngredients && empty($item['modifiers'])) {
+                    $validItems = $productItems->filter(function ($item) use ($requiresOptions) {
+                        if ($requiresOptions && empty($item['modifiers'])) {
                             return false;
                         }
                         return true;
                     });
 
-                    if ($validItems->isEmpty()) {
-                        continue;
-                    }
+                    if ($validItems->isEmpty()) continue;
 
                     $combinations = $validItems->groupBy(function ($item) {
-                        if (empty($item['modifiers'])) {
+                        // Considera apenas ModifierType::OPTION para assinar a combinação de sabor
+                        $structuralMods = collect($item['modifiers'] ?? [])
+                            ->filter(fn ($m) => in_array($m['group_type'], [ModifierType::OPTION->value, 'ingredient'], true));
+
+                        if ($structuralMods->isEmpty()) {
                             return $item['product_id'] . '_no_mods';
                         }
-                        $modSignature = collect($item['modifiers'])
-                            ->map(fn($m) => $m['id'] . 'x' . ($m['quantity'] ?? 1))
+
+                        $modSignature = $structuralMods
+                            ->map(fn ($m) => $m['id'] . 'x' . ($m['quantity'] ?? 1))
                             ->sort()
                             ->implode('-');
 
                         return $item['product_id'] . '_mods_' . $modSignature;
                     });
 
-                    $topCombinations = $combinations->sortByDesc(fn($comb) => $comb->count())->take(3);
+                    $topCombinations = $combinations->sortByDesc(fn ($comb) => $comb->count())->take(3);
 
                     foreach ($topCombinations as $signature => $items) {
                         if (count($finalData) >= 10) break;
@@ -274,58 +285,32 @@ class CacheTopCombinations extends Command
                         $sampleItem = $items->first();
 
                         $finalData[] = [
-                            'id' => $sampleItem['product_id'],
+                            'id'                => $sampleItem['product_id'],
                             'variant_signature' => $signature,
-                            'name' => $sampleItem['name'],
-                            'category_name' => $sampleItem['category_name'] ?? 'Mais Pedidos',
-                            'unit_price' => (float) $sampleItem['unit_price'],
-                            'status' => $sampleItem['status'] ?? 'active',
-                            'track_inventory' => (bool) ($sampleItem['track_inventory'] ?? false),
-                            'current_stock' => (float) ($sampleItem['current_stock'] ?? 99),
-                            'modifiers' => collect($sampleItem['modifiers'] ?? [])->map(fn($mod) => [
-                                'id' => $mod['id'],
-                                'name' => $mod['name'],
-                                'quantity' => (float) ($mod['quantity'] ?? 1),
-                                'price' => (float) ($mod['price'] ?? 0),
-                            ])->toArray(),
-                            'sales_count' => $items->count(),
+                            'name'              => $sampleItem['name'],
+                            'category_name'     => $sampleItem['category_name'] ?? 'Mais Pedidos',
+                            'unit_price'        => (float) $sampleItem['unit_price'],
+                            'status'            => $sampleItem['status'] ?? 'active',
+                            'track_inventory'   => (bool) ($sampleItem['track_inventory'] ?? false),
+                            'current_stock'     => (float) ($sampleItem['current_stock'] ?? 99),
+                            'modifiers'         => collect($sampleItem['modifiers'] ?? [])
+                                ->filter(fn ($m) => in_array($m['group_type'], [ModifierType::OPTION->value, 'ingredient'], true))
+                                ->map(fn ($mod) => [
+                                    'id'       => $mod['id'],
+                                    'name'     => $mod['name'],
+                                    'quantity' => (float) ($mod['quantity'] ?? 1),
+                                    'price'    => (float) ($mod['price'] ?? 0),
+                                ])->values()->toArray(),
+                            'sales_count'        => $items->count(),
                             'base_product_sales' => $productItems->count(),
                         ];
                     }
                 }
 
-                // SALVA NO CACHE DO TENANT
                 Cache::store('file')->put('tenant_top_combinations', $finalData, now()->addHours(25));
+                broadcast(new CatalogUpdated());
 
-                // 🚀 AVISA O FRONTEND QUE O CARDÁPIO E O BI MUDARAM
-                broadcast(new \App\Events\CatalogUpdated());
-
-                if (empty($finalData)) {
-                    $this->warn("Nenhuma combinação formada.");
-                } else {
-                    $tableRows = [];
-                    foreach ($finalData as $index => $item) {
-                        $modsSummary = collect($item['modifiers'])->map(function ($m) {
-                            return (int)$m['quantity'] . 'x ' . $m['name'];
-                        })->implode(', ');
-
-                        $tableRows[] = [
-                            $index + 1,
-                            $item['name'],
-                            $modsSummary ?: 'Sem modificadores',
-                            $item['sales_count'] . 'x',
-                            $item['base_product_sales'] . 'x'
-                        ];
-                    }
-
-                    $this->table(
-                        ['#', 'Produto Base', 'Variação Extraída', 'Vendas da Variação', 'Volume Global do Produto'],
-                        $tableRows
-                    );
-
-                    $this->info("✅ Cache e BI Preditivo atualizados! Aplicativos notificados.");
-                }
-
+                $this->info("✅ Ranking inteligente e BI de demanda persistidos com sucesso!");
             } catch (\Exception $e) {
                 $this->error("Erro no processamento: " . $e->getMessage());
             }

@@ -1,0 +1,2825 @@
+=== CONTEXTO: ENGENHARIA DE ALIMENTOS, MODIFICADORES E KARDEX ===
+
+=======================================================
+FILE: app/Models/TechnicalSheet.php
+=======================================================
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class TechnicalSheet extends Model
+{
+    protected $guarded = [];
+
+    protected $casts = [
+        'order_type'  => 'array',
+        'is_active'   => 'boolean',
+        'is_dine_in'  => 'boolean',
+        'is_takeaway' => 'boolean',
+    ];
+
+    public function parentProduct(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'parent_product_id');
+    }
+
+    public function ingredient(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'ingredient_product_id');
+    }
+}
+
+=======================================================
+FILE: app/Models/ProductModifier.php
+=======================================================
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Facades\Cache;
+use App\Events\CatalogUpdated;
+
+/**
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ModifierOption> $options
+ * @property-read int|null $options_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Product> $products
+ * @property-read int|null $products_count
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductModifier newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductModifier newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductModifier onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductModifier query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductModifier withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductModifier withoutTrashed()
+ * @mixin \Illuminate\Database\Eloquent\Builder
+ */
+class ProductModifier extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $table = 'modifier_groups';
+
+    protected $guarded = [];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'allow_quantity' => 'boolean',
+        'min_selections' => 'integer',
+        'max_selections' => 'integer',
+        'max_free' => 'integer',
+    ];
+
+    public function options(): HasMany
+    {
+        return $this->hasMany(ModifierOption::class, 'modifier_group_id');
+    }
+
+    public function products(): BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'modifier_group_product', 'modifier_group_id', 'product_id')
+                    ->withPivot('excluded_options')
+                    ->withTimestamps();
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(function ($modifierGroup) {
+            $tenantId = $modifierGroup->tenant_id ?? tenant('id') ?? 'central';
+
+            try {
+                \Illuminate\Support\Facades\Cache::tags(['catalog'])->flush();
+            } catch (\Exception $e) { }
+
+            broadcast(new CatalogUpdated($tenantId));
+        });
+
+        static::deleted(function ($modifierGroup) {
+            $tenantId = $modifierGroup->tenant_id ?? tenant('id') ?? 'central';
+
+            try {
+                \Illuminate\Support\Facades\Cache::tags(['catalog'])->flush();
+            } catch (\Exception $e) { }
+
+            broadcast(new CatalogUpdated($tenantId));
+        });
+    }
+}
+
+=======================================================
+FILE: app/Models/ProductModifierGroup.php
+=======================================================
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class ProductModifierGroup extends Pivot
+{
+    protected $table = 'modifier_group_product';
+    public $incrementing = true;
+    protected $guarded = [];
+
+    protected $casts = [
+        'excluded_options' => 'array',
+    ];
+
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    public function modifierGroup(): BelongsTo
+    {
+        return $this->belongsTo(ProductModifier::class, 'modifier_group_id');
+    }
+
+    public function isOptionExcluded(int|string $optionId): bool
+    {
+        return in_array((int) $optionId, array_map('intval', $this->excluded_options ?? []), true);
+    }
+}
+=======================================================
+FILE: app/Models/ModifierOption.php
+=======================================================
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * @property-read \App\Models\ProductModifier|null $group
+ * @property-read \App\Models\Product|null $linkedProduct
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ModifierOption newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ModifierOption newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ModifierOption query()
+ * @mixin \Illuminate\Database\Eloquent\Builder
+ */
+class ModifierOption extends Model
+{
+    protected $guarded = [];
+    protected $casts = ['price' => 'float'];
+
+    public function group()
+    {
+        return $this->belongsTo(ProductModifier::class, 'modifier_group_id');
+    }
+    public function linkedProduct()
+    {
+        return $this->belongsTo(Product::class, 'linked_product_id'); // Abate estoque deste cara!
+    }
+}
+
+=======================================================
+FILE: app/Models/ModifierItem.php
+=======================================================
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class ModifierItem extends Model
+{
+    protected $table = 'modifier_items';
+    protected $guarded = [];
+
+    protected $casts = [
+        'extra_price' => 'decimal:2',
+    ];
+
+    public function modifierOption(): BelongsTo
+    {
+        return $this->belongsTo(ModifierOption::class, 'modifier_id');
+    }
+
+    public function ingredientProduct(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'ingredient_product_id');
+    }
+}
+=======================================================
+FILE: app/Models/OrderItem.php
+=======================================================
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
+class OrderItem extends Model
+{
+    protected $guarded = [];
+
+    protected $casts = [
+        'fired_at'          => 'datetime',
+        'prep_time_minutes' => 'integer',
+        'quantity'          => 'integer',
+        'paid_qty'          => 'decimal:4',
+        'unit_price'        => 'decimal:2',
+        'total_price'       => 'decimal:2',
+        'is_takeaway'       => 'boolean',
+    ];
+
+    protected $touches = ['order'];
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
+    }
+
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    public function modifiers(): HasMany
+    {
+        return $this->hasMany(OrderItemModifier::class, "order_item_id");
+    }
+
+    public function kitchen(): BelongsTo
+    {
+        return $this->belongsTo(Kitchen::class);
+    }
+
+    public function subItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class, "parent_item_id");
+    }
+
+    public function parentItem(): BelongsTo
+    {
+        return $this->belongsTo(OrderItem::class, "parent_item_id");
+    }
+
+    // 🚀 CORREÇÃO: Aponta para o Payment oficial da operação
+    public function payments(): BelongsToMany
+    {
+        return $this->belongsToMany(Payment::class, 'order_payment_items', 'order_item_id', 'order_payment_id')
+            ->withPivot('quantity', 'amount')
+            ->withTimestamps();
+    }
+
+    public function paymentAllocations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(OrderPaymentItem::class, 'order_item_id');
+    }
+}
+
+=======================================================
+FILE: app/Models/OrderItemModifier.php
+=======================================================
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * @property-read \App\Models\ModifierOption|null $modifierOption
+ * @property-read \App\Models\OrderItem|null $orderItem
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|OrderItemModifier newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|OrderItemModifier newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|OrderItemModifier query()
+ * @mixin \Illuminate\Database\Eloquent\Builder
+ */
+class OrderItemModifier extends Model
+{
+    protected $guarded = [];
+    protected $casts = ['price' => 'float', 'quantity' => 'integer'];
+
+    public function orderItem() { return $this->belongsTo(OrderItem::class); }
+    public function modifierOption() { return $this->belongsTo(ModifierOption::class); }
+}
+
+=======================================================
+FILE: app/Services/Orders/OrderItemSettlementService.php
+=======================================================
+
+<?php
+
+namespace App\Services\Orders;
+
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Payment;
+use Illuminate\Support\Collection;
+
+class OrderItemSettlementService
+{
+    /**
+     * Executa a quitação granular dos itens selecionados no pagamento.
+     */
+    public function settleItems(Order $order, array $itemsData, ?Payment $targetPayment = null, ?float $fallbackPaymentAmount = null): void
+    {
+        if (empty($itemsData)) {
+            return;
+        }
+
+        foreach ($itemsData as $pItem) {
+            if (!isset($pItem['id']) || !isset($pItem['pay_qty'])) continue;
+
+            $payQty = (float) $pItem['pay_qty'];
+            if ($payQty <= 0) continue;
+
+            $item = OrderItem::where('order_id', $order->id)->find($pItem['id']);
+            if (!$item) continue;
+
+            $available = max(0, (float) $item->quantity - (float) $item->paid_qty);
+            $toAdd = min($payQty, $available);
+
+            if ($toAdd > 0) {
+                $item->paid_qty = round((float) $item->paid_qty + $toAdd, 4);
+                $item->save();
+
+                $itemCoveredAmount = isset($pItem['amount']) && (float) $pItem['amount'] > 0
+                    ? (float) $pItem['amount']
+                    : round($toAdd * (float) $item->unit_price, 2);
+
+                if ($itemCoveredAmount <= 0 && count($itemsData) === 1 && $fallbackPaymentAmount > 0) {
+                    $itemCoveredAmount = $fallbackPaymentAmount;
+                }
+
+                if ($targetPayment) {
+                    $targetPayment->items()->attach($item->id, [
+                        'quantity' => $toAdd,
+                        'amount'   => $itemCoveredAmount
+                    ]);
+                }
+
+                // Rateio proporcional no item pai (Combo)
+                if ($item->parent_item_id) {
+                    $parent = OrderItem::find($item->parent_item_id);
+                    if ($parent && (float) $parent->total_price > 0) {
+                        $proportionalAdvance = ($itemCoveredAmount / (float) $parent->total_price) * (float) $parent->quantity;
+                        $parent->paid_qty = min((float) $parent->quantity, round((float) $parent->paid_qty + $proportionalAdvance, 4));
+                        $parent->save();
+                    }
+                }
+
+                // Baixa proporcional nos subitens
+                $subItems = OrderItem::where('parent_item_id', $item->id)->get();
+                if ($subItems->isNotEmpty() && (float) $item->quantity > 0) {
+                    $ratio = $toAdd / (float) $item->quantity;
+                    foreach ($subItems as $sub) {
+                        $subToAdd = (float) $sub->quantity * $ratio;
+                        $sub->paid_qty = min((float) $sub->quantity, round((float) $sub->paid_qty + $subToAdd, 4));
+                        $sub->save();
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Verifica se todos os itens ativos da comanda foram liquidados.
+     */
+    public function areAllItemsPaid(Order $order): bool
+    {
+        $unpaidCount = $order->items()
+            ->where('status', '!=', 'cancelled')
+            ->where(function ($q) {
+                $q->whereNull('paid_qty')
+                  ->orWhereRaw('paid_qty < quantity - 0.001');
+            })
+            ->count();
+
+        return $unpaidCount === 0;
+    }
+}
+
+=======================================================
+FILE: app/Services/Orders/OrderItemProcessor.php
+=======================================================
+
+<?php
+
+namespace App\Services\Orders;
+
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Product;
+use App\Models\PosAudit;
+use App\Models\ModifierOption;
+use App\Services\Catalog\InventoryService;
+
+class OrderItemProcessor
+{
+    private static array $productCache = [];
+    private static array $modifierOptionCache = [];
+
+    public function __construct(
+        protected InventoryService $inventoryService,
+        protected ComboItemProcessor $comboProcessor
+    ) {}
+
+    protected function getProduct(int $id): ?Product
+    {
+        if (!isset(self::$productCache[$id])) {
+            self::$productCache[$id] = Product::find($id);
+        }
+        return self::$productCache[$id];
+    }
+
+    protected function getModifierOption(int $id): ?ModifierOption
+    {
+        if (!isset(self::$modifierOptionCache[$id])) {
+            self::$modifierOptionCache[$id] = ModifierOption::find($id);
+        }
+        return self::$modifierOptionCache[$id];
+    }
+
+    public function process(Order $order, array $itemData): OrderItem
+    {
+        $isReplacement = !empty($itemData["replaces_item_id"]);
+
+        if ($isReplacement) {
+            $oldItem = OrderItem::with(['modifiers', 'subItems.modifiers'])->find($itemData["replaces_item_id"]);
+            if ($oldItem && !empty($oldItem->parent_item_id)) {
+                return $this->comboProcessor->processChildReplacement($order, $itemData, $oldItem);
+            }
+
+            if ($oldItem) {
+                $this->handleRootReplacement($order, $itemData, $oldItem);
+            }
+        }
+
+        // Suporta 'id' ou 'product_id' vindos do payload
+        $productId = $itemData["product_id"] ?? $itemData["id"] ?? null;
+        $productModel = $productId ? $this->getProduct((int)$productId) : null;
+
+        // O nome canônico vem do banco (Product Model), evitando perda de nomenclatura
+        $resolvedName = $productModel?->name
+            ?? $productModel?->title
+            ?? $itemData["name"]
+            ?? $itemData["product_name"]
+            ?? 'Produto';
+
+        // Detecção e aplicação uniforme de takeaway
+        $isTakeaway = (bool) (!empty($itemData["isTakeaway"]) || !empty($itemData["is_takeaway"]));
+
+        if ($isTakeaway && !str_contains($resolvedName, '(Viagem)')) {
+            $resolvedName .= " (Viagem)";
+        }
+
+        $notes = !empty($itemData["notes"]) ? trim((string) $itemData["notes"]) : null;
+        if ($isReplacement) {
+            $notes = trim(($notes ? $notes . " " : "") . "*** ATENÇÃO: ITEM MODIFICADO NO SISTEMA ***");
+        }
+
+        $hasComboItems = !empty($itemData["comboItems"]) && is_array($itemData["comboItems"]);
+        $qty = (float) ($itemData["qty"] ?? ($itemData["quantity"] ?? 1));
+        $unitPrice = (float) ($itemData["price"] ?? ($itemData["unit_price"] ?? ($productModel?->price ?? 0)));
+
+        $mainOrderItem = $order->items()->create([
+            "parent_item_id"    => null,
+            "product_id"        => $productId,
+            "product_name"      => $resolvedName,
+            "quantity"          => $qty,
+            "unit_price"        => $unitPrice,
+            "total_price"       => round($unitPrice * $qty, 2),
+            "kitchen_id"        => $productModel?->kitchen_id,
+            "prep_time_minutes" => $productModel?->prep_time_minutes,
+            "notes"             => $notes,
+            "user_name"         => auth()->user()?->name ?? 'Sistema',
+            "is_combo_item"     => $hasComboItems,
+            "is_takeaway"       => $isTakeaway,
+            "status"            => 'active',
+            "production_status" => 'pending',
+        ]);
+
+        if ($productModel) {
+            $mainOrderItem->setRelation('product', $productModel);
+            $this->inventoryService->deductStock($productModel, $qty);
+        }
+
+        if (!empty($itemData["structuredModifiers"]) && is_array($itemData["structuredModifiers"])) {
+            $this->comboProcessor->attachModifiers($mainOrderItem, $itemData["structuredModifiers"], $qty);
+        }
+
+        if ($hasComboItems) {
+            $this->comboProcessor->processChildren($order, $mainOrderItem, $itemData["comboItems"], $qty);
+        }
+
+        return $mainOrderItem;
+    }
+
+    private function handleRootReplacement(Order $order, array $itemData, OrderItem $oldItem): void
+    {
+        if ($oldItem->status === 'cancelled') return;
+
+        if ((float) $oldItem->total_price > 0) {
+            $order->decrement('subtotal', $oldItem->total_price);
+            $order->decrement('total', $oldItem->total_price);
+        }
+
+        $oldProduct = $this->getProduct($oldItem->product_id);
+        if ($oldProduct) {
+            $this->inventoryService->deductStock($oldProduct, -$oldItem->quantity);
+        }
+
+        foreach ($oldItem->modifiers as $mod) {
+            if (!empty($mod->modifier_option_id)) {
+                $modifierOption = $this->getModifierOption($mod->modifier_option_id);
+                if ($modifierOption && $modifierOption->linked_product_id) {
+                    $linkedProduct = $this->getProduct($modifierOption->linked_product_id);
+                    if ($linkedProduct) {
+                        $deduction = ((float) ($modifierOption->linked_qty ?? 1)) * ((float) ($mod->quantity ?? 1));
+                        $this->inventoryService->deductStock($linkedProduct, -$deduction);
+                    }
+                }
+            }
+        }
+
+        if (!empty($itemData['is_loss']) && $oldProduct) {
+            $this->inventoryService->registerLoss(
+                $oldProduct,
+                $oldItem->quantity,
+                'Substituição de Pedido: ' . ($itemData["auth_reason"] ?? 'Não especificado'),
+                'Lançamento automático de cancelamento de item pai.',
+                auth()->id(),
+                $oldItem->id
+            );
+        }
+
+        $oldItem->update(['status' => 'cancelled', 'production_status' => 'cancelled']);
+
+        OrderItem::where('parent_item_id', $oldItem->id)->update([
+            'status'            => 'cancelled',
+            'production_status' => 'cancelled'
+        ]);
+
+        PosAudit::create([
+            'action'        => 'edit_item',
+            'operator_id'   => auth()->id(),
+            'authorizer_id' => auth()->id(),
+            'reason'        => $itemData["auth_reason"] ?? 'Edição de Item',
+            'context'       => ['old_item_id' => $oldItem->id, 'new_product' => $itemData["name"] ?? 'Produto', 'is_loss' => $itemData["is_loss"] ?? false]
+        ]);
+    }
+}
+
+=======================================================
+FILE: app/Services/Catalog/ProductCostingService.php
+=======================================================
+
+<?php
+
+namespace App\Services\Catalog;
+
+use App\Models\Product;
+use App\Models\CompanySetting;
+use Illuminate\Support\Facades\DB;
+
+class ProductCostingService
+{
+    private static array $costCache = [];
+
+    public static function clearCache(): void
+    {
+        self::$costCache = [];
+    }
+
+    public static function getMarginData(Product $product): array
+    {
+        // 1. CMV por Modo de Consumo Real
+        $costDineIn   = self::calculateBaseCost($product, "dine_in");
+        $costTakeaway = self::calculateBaseCost($product, "takeaway");
+
+        // Preços Praticados
+        $dineInPrice   = (float) ($product->dine_in_price ?? 0);
+        $deliveryPrice = (float) ($product->delivery_price ?? 0);
+
+        // Preço e Custo primário a exibir no topo
+        $sellPrice = $dineInPrice > 0 ? $dineInPrice : $deliveryPrice;
+        $primaryCmv = $dineInPrice > 0 ? $costDineIn : $costTakeaway;
+
+        // Injeção do Custo Preditivo de Ingredientes/Modificadores
+        $predictiveCost = self::getPredictiveModifiersCost($product);
+        $baseCost = $primaryCmv + $predictiveCost;
+
+        // 2. Parâmetros Fiscais (Simples Nacional)
+        $settings = CompanySetting::getCached();
+        $simplesRate = (float) ($settings?->simples_rate ?? 0);
+
+        $effectiveSimplesRate = $simplesRate;
+        if ($product->is_monofasico) {
+            $effectiveSimplesRate = $simplesRate * (1 - 0.34);
+        }
+
+        $simplesAmount = $sellPrice * ($effectiveSimplesRate / 100);
+
+        // 3. Taxas de Cartão
+        $avgFeeResult = DB::table("bank_accounts")
+            ->where("is_active", true)
+            ->where(function ($q) {
+                $q->where('credit_fee', '>', 0)->orWhere('debit_fee', '>', 0);
+            })
+            ->selectRaw("AVG((credit_fee + debit_fee) / 2) as avg_fee")
+            ->first();
+
+        $cardFeePercentage = (float) ($avgFeeResult->avg_fee ?? 0);
+        $cardFeeAmount = $sellPrice * ($cardFeePercentage / 100);
+
+        $totalVariables = $simplesAmount + $cardFeeAmount;
+
+        // 4. Margem de Contribuição
+        $contributionMargin = $sellPrice - $baseCost - $totalVariables;
+        $marginPercentage   = $sellPrice > 0 ? ($contributionMargin / $sellPrice) * 100 : 0;
+
+        $fmt = fn($val) => 'R$ ' . number_format($val, 2, ",", ".");
+
+        return [
+            "sell_price"          => $sellPrice,
+            "base_cost"           => $baseCost,
+            // Sub-métricas para os cartões
+            "cost_dine_in"        => $costDineIn,
+            "cost_takeaway"       => $costTakeaway,
+            "cost_table"          => $costDineIn,   // alias para compatibilidade
+            "cost_delivery"       => $costTakeaway, // alias para compatibilidade
+            "predictive_cost"     => $predictiveCost,
+            "total_variables"     => $totalVariables,
+            "simples_amount"      => $simplesAmount,
+            "icms_amount"         => 0,
+            "simples_display"     => ($settings?->tax_regime === "mei") ? "ISENTO" : $fmt($simplesAmount),
+            "icms_display"        => $product->is_monofasico ? "MONOFÁSICO" : "ISENTO",
+            "card_fee_amount"     => $cardFeeAmount,
+            "contribution_margin" => $contributionMargin,
+            "marginPercentage"    => $marginPercentage,
+            "margin_percentage"   => $marginPercentage,
+            "simples_rate"        => $simplesRate,
+            "icms_rate"           => 0,
+            "card_fee_percentage" => $cardFeePercentage,
+        ];
+    }
+
+    /**
+     * Calcula o custo base recursivo filtrando pelo Modo de Consumo:
+     * 'all' (geral), 'dine_in' (Consumo no Local) ou 'takeaway' (Para Viagem)
+     */
+    public static function calculateBaseCost(Product $product, string $consumptionMode = "all"): float
+    {
+        $cacheKey = $product->id . '_' . $consumptionMode;
+
+        if (isset(self::$costCache[$cacheKey])) {
+            return self::$costCache[$cacheKey];
+        }
+
+        $query = \App\Models\TechnicalSheet::where("parent_product_id", $product->id)
+            ->where("is_active", true);
+
+        // Filtro estrito pelo modo de consumo real
+        if ($consumptionMode === 'dine_in') {
+            $query->where('is_dine_in', true);
+        } elseif ($consumptionMode === 'takeaway') {
+            $query->where('is_takeaway', true);
+        }
+
+        $sheetItems = $query->get();
+
+        if ($sheetItems->isEmpty()) {
+            $latestHistory = \App\Models\ProductCostHistory::where("product_id", $product->id)
+                ->latest("id")
+                ->first();
+
+            if ($latestHistory) {
+                $cost = (float) $latestHistory->unit_cost;
+                self::$costCache[$cacheKey] = $cost;
+                return $cost;
+            }
+
+            $cost = (float) ($product->base_cost ?? 0);
+            self::$costCache[$cacheKey] = $cost;
+            return $cost;
+        }
+
+        $cost = 0;
+        foreach ($sheetItems as $item) {
+            $child = Product::find($item->ingredient_product_id);
+            if ($child) {
+                $childCost = self::calculateBaseCost($child, $consumptionMode);
+                $cost += $childCost * (float) $item->quantity;
+            }
+        }
+
+        $yield = max((float) ($product->recipe_yield ?? 1), 1);
+        $finalCost = $cost / $yield;
+
+        self::$costCache[$cacheKey] = $finalCost;
+
+        return $finalCost;
+    }
+
+    public static function getPredictiveModifiersCost(Product $product): float
+    {
+        $totalPredictiveCost = 0;
+        $modifierGroups = $product->modifiers()->where("type", "ingredient")->get();
+
+        foreach ($modifierGroups as $group) {
+            $options = $group->options()->get();
+            if ($options->isEmpty()) continue;
+
+            $groupExpectedCost = 0;
+            $totalWeight = 0;
+
+            // 1. Identifica se o grupo já possui histórico de vendas
+            $groupHasHistory = $options->sum('historical_weight') > 0;
+
+            foreach ($options as $option) {
+                // Opções com acréscimo pago à parte não compõem o custo do prato base
+                if ((float) $option->price > 0 && ($group->max_free ?? 0) <= 0) {
+                    continue;
+                }
+
+                $optionCost = 0;
+                if (!empty($option->linked_product_id)) {
+                    $linkedInsumo = Product::find($option->linked_product_id);
+                    if ($linkedInsumo) {
+                        $actualCost = self::calculateBaseCost($linkedInsumo);
+                        $optionCost = $actualCost * (float) ($option->linked_qty ?? 1);
+                    }
+                }
+
+                // Se houver histórico, usa o peso real da base de dados.
+                // Se o item for novo (peso 0), atribui peso 0.1 para compor a cauda longa.
+                // Se ninguém do grupo tiver histórico, usa peso 1 para todos (média simples).
+                if ($groupHasHistory) {
+                    $weight = (float) $option->historical_weight > 0 ? (float) $option->historical_weight : 0.1;
+                } else {
+                    $weight = 1.0;
+                }
+
+                $groupExpectedCost += $optionCost * $weight;
+                $totalWeight += $weight;
+            }
+
+            if ($totalWeight > 0) {
+                $averageOptionCost = $groupExpectedCost / $totalWeight;
+                $includedQty = $group->max_free > 0 ? (int) $group->max_free : 1;
+                $totalPredictiveCost += $averageOptionCost * $includedQty;
+            }
+        }
+
+        return $totalPredictiveCost;
+    }
+
+    public static function simulatePricing(Product $product, array $selectedAddons, ?string $activeMode, ?float $customValue): array
+    {
+        $marginData = self::getMarginData($product);
+        $modifierGroups = $product->modifiers()->whereIn('type', ['add_on', 'option', 'ingredient'])->with('options')->get();
+
+        $predictiveCostTotal = self::getPredictiveModifiersCost($product);
+        $simulatedCost = $marginData['base_cost'] - $predictiveCostTotal;
+        $addonSellPriceTotal = 0;
+
+        foreach ($modifierGroups as $group) {
+            $groupIsSimulated = false;
+            $groupSimulatedCost = 0;
+
+            foreach ($group->options as $option) {
+                if (in_array($option->id, $selectedAddons)) {
+                    $groupIsSimulated = true;
+                    $addonSellPriceTotal += (float) $option->price;
+
+                    if ($option->linked_product_id) {
+                        $linkedInsumo = Product::find($option->linked_product_id);
+                        if ($linkedInsumo) {
+                            $actualCost = self::calculateBaseCost($linkedInsumo);
+                            $groupSimulatedCost += $actualCost * (float) ($option->linked_qty ?? 1);
+                        }
+                    }
+                }
+            }
+
+            if ($groupIsSimulated) {
+                $simulatedCost += $groupSimulatedCost;
+            } else {
+                if ($group->type === 'ingredient') {
+                    $groupExpectedCost = 0;
+                    $totalWeight = 0;
+                    foreach ($group->options as $opt) {
+                        $optCost = 0;
+                        if ($opt->linked_product_id) {
+                            $linked = Product::find($opt->linked_product_id);
+                            if ($linked) {
+                                $optCost = self::calculateBaseCost($linked) * (float) ($opt->linked_qty ?? 1);
+                            }
+                        }
+                        $weight = max((float) ($opt->historical_weight ?? 1), 0.001);
+                        $groupExpectedCost += ($optCost * $weight);
+                        $totalWeight += $weight;
+                    }
+                    if ($totalWeight > 0) {
+                        $simulatedCost += ($groupExpectedCost / $totalWeight) * ($group->max_free > 0 ? $group->max_free : 1);
+                    }
+                }
+            }
+        }
+
+        $simplesRate = $marginData['simples_rate'] ?? 0;
+        $cardFeePercentage = $marginData['card_fee_percentage'] ?? 0;
+        $totalTaxRate = $simplesRate + $cardFeePercentage;
+
+        $simulatedSellPrice = $marginData['sell_price'];
+
+        if ($activeMode === null) {
+            $simulatedSellPrice += $addonSellPriceTotal;
+        } elseif ($activeMode === 'margin' && $customValue !== null) {
+            $divisor = 1 - (($totalTaxRate + $customValue) / 100);
+            $simulatedSellPrice = $divisor > 0 ? ($simulatedCost / $divisor) : 0;
+        } elseif ($activeMode === 'price' && $customValue !== null) {
+            $simulatedSellPrice = $customValue;
+        }
+
+        $simplesAmount = $simulatedSellPrice * ($simplesRate / 100);
+        $cardFeeAmount = $simulatedSellPrice * ($cardFeePercentage / 100);
+        $totalVariableCosts = $simplesAmount + $cardFeeAmount;
+
+        $netProfit = $simulatedSellPrice - $simulatedCost - $totalVariableCosts;
+        $marginPercentage = $simulatedSellPrice > 0 ? ($netProfit / $simulatedSellPrice) * 100 : 0;
+
+        return [
+            'sell_price'          => $simulatedSellPrice,
+            'cost'                => $simulatedCost,
+            'net_profit'          => $netProfit,
+            'contribution_margin' => $netProfit,
+            'margin_percentage'   => $marginPercentage,
+            'simples_amount'      => $simplesAmount,
+            'icms_amount'         => 0,
+            'card_fee_amount'     => $cardFeeAmount,
+            'total_variable_costs'=> $totalVariableCosts,
+        ];
+    }
+
+    public static function recordPriceSnapshot(Product $product, string $trigger = 'price_change'): void
+    {
+        self::clearCache();
+        $marginData = self::getMarginData($product);
+
+        $modes = [
+            'dine_in' => [
+                'price' => (float) ($product->dine_in_price ?? 0),
+                'cost'  => (float) $marginData['cost_dine_in'] + (float) $marginData['predictive_cost'],
+            ],
+            'takeaway' => [
+                'price' => (float) ($product->delivery_price ?? ($product->dine_in_price ?? 0)),
+                'cost'  => (float) $marginData['cost_takeaway'] + (float) $marginData['predictive_cost'],
+            ],
+        ];
+
+        foreach ($modes as $channelName => $ch) {
+            if ($ch['price'] <= 0) continue;
+
+            $currentLog = \App\Models\ProductPriceLog::where('product_id', $product->id)
+                ->where('channel', $channelName)
+                ->whereNull('ended_at')
+                ->latest('id')
+                ->first();
+
+            $cost = round($ch['cost'], 4);
+            $simples = $ch['price'] * (($marginData['simples_rate'] ?? 0) / 100);
+            $card = $ch['price'] * (($marginData['card_fee_percentage'] ?? 0) / 100);
+            $variables = $simples + $card;
+            $margin = $ch['price'] - $cost - $variables;
+            $marginPct = $ch['price'] > 0 ? round(($margin / $ch['price']) * 100, 2) : 0;
+
+            if ($currentLog &&
+                abs((float) $currentLog->price - $ch['price']) < 0.01 &&
+                abs((float) $currentLog->cost - $cost) < 0.01) {
+                continue;
+            }
+
+            if ($currentLog) {
+                $currentLog->update(['ended_at' => now()]);
+            }
+
+            \App\Models\ProductPriceLog::create([
+                'product_id'          => $product->id,
+                'channel'             => $channelName,
+                'price'               => $ch['price'],
+                'cost'                => $cost,
+                'total_variables'     => $variables,
+                'contribution_margin' => $margin,
+                'margin_percentage'   => $marginPct,
+                'started_at'          => now(),
+                'ended_at'            => null,
+                'trigger_reason'      => $trigger,
+            ]);
+        }
+    }
+
+    /**
+     * Gera o raio-x de variação de CMV, oscilação de margem e identificação de ofensores.
+     */
+    public static function getCostVarianceAnalysis(Product $product, int $days = 30): array
+    {
+        $currentMargin = self::getMarginData($product);
+        $currentCmv = (float) $currentMargin['base_cost'];
+        $currentMarginPct = (float) $currentMargin['margin_percentage'];
+
+        // 1. Busca condição anterior no histórico (ProductPriceLog)
+        $previousLog = \App\Models\ProductPriceLog::where('product_id', $product->id)
+            ->whereNotNull('ended_at')
+            ->where('started_at', '>=', now()->subDays($days))
+            ->orderBy('id', 'desc')
+            ->first();
+
+        // Se não houver log recente dentro dos X dias, busca o último encerrado como fallback
+        if (!$previousLog) {
+            $previousLog = \App\Models\ProductPriceLog::where('product_id', $product->id)
+                ->whereNotNull('ended_at')
+                ->orderBy('id', 'desc')
+                ->first();
+        }
+
+        $prevCmv = $previousLog ? (float) $previousLog->cost : $currentCmv;
+        $prevMarginPct = $previousLog ? (float) $previousLog->margin_percentage : $currentMarginPct;
+
+        $cmvDiffNominal = $currentCmv - $prevCmv;
+        $cmvDiffPct = $prevCmv > 0 ? (($currentCmv - $prevCmv) / $prevCmv) * 100 : 0;
+        $marginDiffPp = $currentMarginPct - $prevMarginPct;
+
+        // 2. Análise Itemizada da Ficha Técnica (BOM Explosion & Detecção de Ofensores)
+        $sheetItems = \App\Models\TechnicalSheet::where('parent_product_id', $product->id)
+            ->where('is_active', true)
+            ->with(['ingredient.costHistories'])
+            ->get();
+
+        $ingredientsAnalysis = [];
+        $alerts = [];
+        $totalRecipeCost = 0;
+
+        foreach ($sheetItems as $item) {
+            $ing = $item->ingredient;
+            if (!$ing) continue;
+
+            $unitCost = self::calculateBaseCost($ing);
+            $totalCost = $unitCost * (float) $item->quantity;
+            $totalRecipeCost += $totalCost;
+
+            // Histórico de compras para pegar variação da última NF-e vs penúltima
+            $recentPurchases = $ing->costHistories->sortByDesc('id')->take(2)->values();
+            $latestPurchaseCost = $recentPurchases->get(0)?->unit_cost;
+            $previousPurchaseCost = $recentPurchases->get(1)?->unit_cost;
+
+            $itemInflationPct = 0;
+            if ($latestPurchaseCost && $previousPurchaseCost && (float) $previousPurchaseCost > 0) {
+                $itemInflationPct = (((float) $latestPurchaseCost - (float) $previousPurchaseCost) / (float) $previousPurchaseCost) * 100;
+            }
+
+            $ingredientsAnalysis[] = [
+                'id'            => $ing->id,
+                'name'          => $ing->name,
+                'quantity'      => (float) $item->quantity,
+                'uom'           => $ing->unit_of_measure,
+                'unit_cost'     => $unitCost,
+                'total_cost'    => $totalCost,
+                'inflation_pct' => $itemInflationPct,
+            ];
+        }
+
+        // Calcula share no CMV e classifica alertas/ofensores
+        foreach ($ingredientsAnalysis as &$ingData) {
+            $sharePct = $totalRecipeCost > 0 ? ($ingData['total_cost'] / $totalRecipeCost) * 100 : 0;
+            $ingData['share_pct'] = $sharePct;
+
+            // Critérios de Alerta: inflação > 5% na última compra OU concentra > 35% do custo do prato
+            if ($ingData['inflation_pct'] >= 5) {
+                $alerts[] = [
+                    'name'     => $ingData['name'],
+                    'type'     => 'inflation',
+                    'badge'    => '+' . number_format($ingData['inflation_pct'], 1, ',', '.') . '% na NF-e',
+                    'detail'   => 'Alta de preço detectada nas últimas notas fiscais.',
+                    'severity' => $ingData['inflation_pct'] >= 15 ? 'danger' : 'warning',
+                ];
+            } elseif ($sharePct >= 35) {
+                $alerts[] = [
+                    'name'     => $ingData['name'],
+                    'type'     => 'concentration',
+                    'badge'    => number_format($sharePct, 1, ',', '.') . '% do CMV',
+                    'detail'   => 'Insumo âncora: grande sensibilidade na margem.',
+                    'severity' => 'info',
+                ];
+            }
+        }
+        unset($ingData);
+
+        // Ordena ingredientes pelo maior custo total
+        usort($ingredientsAnalysis, fn($a, $b) => $b['total_cost'] <=> $a['total_cost']);
+
+        return [
+            'has_history'       => $previousLog !== null,
+            'period_days'       => $days,
+            'current_cmv'       => $currentCmv,
+            'cmv_diff_nominal'  => $cmvDiffNominal,
+            'cmv_diff_pct'      => $cmvDiffPct,
+            'cmv_status'        => $cmvDiffPct > 0.5 ? 'rising' : ($cmvDiffPct < -0.5 ? 'falling' : 'stable'),
+            'current_margin'    => $currentMarginPct,
+            'margin_diff_pp'    => $marginDiffPp,
+            'margin_status'     => $marginDiffPp >= 0 ? 'gaining' : 'dropping',
+            'top_ingredients'   => array_slice($ingredientsAnalysis, 0, 5),
+            'alerts'            => $alerts,
+        ];
+    }
+}
+
+=======================================================
+FILE: app/Services/Catalog/TopSellingCombinationsService.php
+=======================================================
+
+<?php
+
+namespace App\Services\Catalog;
+
+use App\Models\OrderItem;
+
+class TopSellingCombinationsService
+{
+    public function getTopCombinations(int $limit = 10): array
+    {
+        $items = OrderItem::with(['modifiers', 'product.category'])
+            ->whereHas('order', function ($query) {
+                $query->whereIn('orders.status', ['completed', 'closed', 'delivered']);
+            })
+            ->orderBy('id', 'desc')
+            ->limit(500)
+            ->get();
+
+        $grouped = $items->groupBy(function ($item) {
+            $modIds = $item->modifiers->map(function($m) {
+                return $m->modifier_option_id ?? $m->id;
+            })->sort()->implode('-');
+
+            return $item->product_id . '_mods_' . $modIds;
+        });
+
+        $ranked = $grouped->sortByDesc(fn($group) => $group->count())->take($limit);
+
+        return $ranked->map(function ($group, $signature) {
+            $baseItem = $group->first();
+
+            return [
+                'id' => $baseItem->product_id,
+                'variant_signature' => $signature,
+                'name' => $baseItem->product_name ?? $baseItem->name ?? $baseItem->product?->name ?? 'Destaque',
+                'category_name' => $baseItem->product?->category?->name ?? 'Mais Pedidos',
+                'unit_price' => (float) $baseItem->unit_price,
+                'status' => $baseItem->product?->status ?? 'active',
+                'track_inventory' => (bool) ($baseItem->product?->track_inventory ?? false),
+                'current_stock' => $baseItem->product?->current_stock ?? 99,
+                'modifiers' => collect($baseItem->modifiers)->map(fn($mod) => [
+                    'id' => $mod->modifier_option_id ?? $mod->id,
+                    'name' => $mod->name ?? '',
+                    'quantity' => (float) ($mod->quantity ?? 1),
+                    'price' => (float) ($mod->price ?? 0),
+                ])->toArray(),
+                'sales_count' => $group->count(),
+            ];
+        })->values()->toArray();
+    }
+}
+
+=======================================================
+FILE: app/Services/Catalog/InventoryService.php
+=======================================================
+
+<?php
+
+namespace App\Services\Catalog;
+
+use App\Models\Product;
+use App\Models\TechnicalSheet;
+use App\Models\InventoryLoss;
+use App\Models\OrderItem;
+use App\Models\ModifierOption;
+use App\Models\StorageLocation;
+use App\Events\StockLowDetected;
+use App\Events\CatalogUpdated;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+
+class InventoryService
+{
+    private function deductFromStorageLocations(Product $product, float $qty): void
+    {
+        // Contorna a ausência da função FIELD() no SQLite verificando o driver
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+
+        $locations = $product->storageLocations()
+            ->when(!$isSqlite, function ($query) {
+                // Ordenação original no MySQL
+                return $query->orderByRaw("FIELD(type, 'display', 'intermediate', 'storage')");
+            })
+            ->when($isSqlite, function ($query) {
+                // Ordenação simplificada para SQLite (baseada no sort_order, por exemplo)
+                return $query->orderBy('sort_order');
+            })
+            ->get();
+
+        foreach ($locations as $location) {
+            if ($qty <= 0) break;
+
+            $stock = (float) $location->pivot->current_stock;
+            if ($stock > 0) {
+                $take = min($stock, $qty);
+                $product->storageLocations()->updateExistingPivot($location->id, [
+                    'current_stock' => $stock - $take
+                ]);
+                $qty -= $take;
+            }
+        }
+    }
+
+    private function addToStorageLocations(Product $product, float $qtyToAdd): ?int
+    {
+        // 🚀 OTIMIZAÇÃO: Evita a query de verificação caso não tenha localizações
+        if (!$product->relationLoaded('storageLocations') && DB::table('product_storage_locations')->where('product_id', $product->id)->count() === 0) {
+            return null;
+        }
+
+        $locations = $product->storageLocations()
+            ->orderByRaw("FIELD(type, 'storage', 'intermediate', 'display')")
+            ->get();
+
+        if ($locations->isEmpty()) return null;
+
+        $targetLoc = $locations->first();
+        $currentLocal = (float) $targetLoc->pivot->current_stock;
+        $product->storageLocations()->updateExistingPivot($targetLoc->id, [
+            'current_stock' => $currentLocal + $qtyToAdd
+        ]);
+
+        return (int) $targetLoc->id;
+    }
+
+    /**
+     * Registra o movimento imutável no Livro-Razão Kardex
+     */
+    public function logMovement(
+        Product $product,
+        string $type,
+        float $quantity,
+        float $newBalance,
+        string $description,
+        $originModel = null,
+        ?int $locationId = null
+    ): void {
+        DB::table('inventory_movements')->insert([
+            'product_id'          => $product->id,
+            'storage_location_id' => $locationId,
+            'type'                => $type,
+            'quantity'            => $quantity,
+            'balance_after'       => $newBalance,
+            'unit_cost'           => (float) ($product->base_cost ?? 0),
+            'origin_type'         => $originModel ? get_class($originModel) : null,
+            'origin_id'           => $originModel ? $originModel->id : null,
+            'description'         => $description,
+            'user_id'             => auth()->id(),
+            'created_at'          => now(),
+            'updated_at'          => now(),
+        ]);
+    }
+
+    public function addStock(Product $product, float $quantity, string $origin = 'compra', $originModel = null, ?int $locationId = null): void
+    {
+        if ($quantity <= 0) return;
+
+        DB::transaction(function () use ($product, $quantity, $origin, $originModel, $locationId) {
+            $wasOutOfStock = $product->status === 'out_of_stock' || (float) $product->current_stock <= 0;
+            $newStock = (float) $product->current_stock + $quantity;
+
+            $resolvedLocationId = $locationId;
+            if ($resolvedLocationId) {
+                $pivot = DB::table('product_storage_locations')
+                    ->where('product_id', $product->id)
+                    ->where('storage_location_id', $resolvedLocationId)
+                    ->first();
+
+                if ($pivot) {
+                    DB::table('product_storage_locations')
+                        ->where('id', $pivot->id)
+                        ->update([
+                            'current_stock' => (float) $pivot->current_stock + $quantity,
+                            'updated_at'    => now(),
+                        ]);
+                } else {
+                    DB::table('product_storage_locations')->insert([
+                        'product_id'          => $product->id,
+                        'storage_location_id' => $resolvedLocationId,
+                        'source_location_id'  => null,
+                        'max_capacity'        => 100,
+                        'current_stock'       => $quantity,
+                        'restock_threshold'   => 10,
+                        'created_at'          => now(),
+                        'updated_at'          => now(),
+                    ]);
+                }
+            } else {
+                $resolvedLocationId = $this->addToStorageLocations($product, $quantity);
+            }
+
+            $this->logMovement($product, 'in', $quantity, $newStock, "Entrada via {$origin}", $originModel, $resolvedLocationId);
+
+            $product->update(['current_stock' => $newStock]);
+
+            if ($wasOutOfStock && $newStock > 0 && $product->status !== 'paused' && $product->status !== 'archived') {
+                $this->triggerStockRestored($product);
+            } else {
+                $tenantId = tenant('id') ?? 'central';
+                broadcast(new CatalogUpdated($tenantId));
+            }
+        });
+    }
+
+    public function deductStock(Product $product, float $qtySold, $originModel = null, ?string $description = null): void
+    {
+        if ($product->track_inventory) {
+            $newStock = (float) $product->current_stock - $qtySold;
+            $movementDesc = $description ?? "Saída operacional";
+
+            $this->logMovement($product, 'out', -$qtySold, $newStock, $movementDesc, $originModel);
+
+            // 🚀 OTIMIZAÇÃO: Atualização em massa em vez de requerer transações extras
+            $product->updateQuietly(['current_stock' => $newStock]);
+            $this->deductFromStorageLocations($product, $qtySold);
+
+            if ($qtySold > 0) {
+                // Removemos o fresh() que gerava mais uma query N+1; passamos os novos dados pelo objecto
+                $product->current_stock = $newStock;
+                $this->checkThresholds($product);
+            }
+
+            if ($newStock <= 0 && $product->status === 'available') {
+                $this->triggerStockRupture($product);
+            }
+        }
+
+        // 🚀 OTIMIZAÇÃO: Eager loading de 'ingredient' evita dezenas de queries find() na tabela de produtos
+        $sheets = TechnicalSheet::with('ingredient')
+            ->where('parent_product_id', $product->id)
+            ->where('is_active', true)
+            ->get();
+
+        if ($sheets->isEmpty()) return;
+
+        foreach ($sheets as $sheet) {
+            $ingredient = $sheet->ingredient;
+            if ($ingredient && $ingredient->track_inventory) {
+
+                $ingQty = (float) $sheet->quantity * $qtySold;
+                $newIngStock = (float) $ingredient->current_stock - $ingQty;
+
+                $this->logMovement($ingredient, 'out', -$ingQty, $newIngStock, "Saída via Ficha Técnica", $originModel);
+
+                $ingredient->updateQuietly(['current_stock' => $newIngStock]);
+                $this->deductFromStorageLocations($ingredient, $ingQty);
+
+                if ($qtySold > 0) {
+                    $ingredient->current_stock = $newIngStock;
+                    $this->checkThresholds($ingredient);
+                }
+
+                if ($newIngStock <= 0 && $ingredient->status === 'available') {
+                    $this->triggerStockRupture($ingredient);
+                }
+            }
+        }
+    }
+
+    public function deductLoss(InventoryLoss $loss): void
+    {
+        $loss->loadMissing('product');
+        $product = $loss->product;
+
+        if (!$product || !$product->track_inventory || (float) $loss->quantity <= 0) {
+            return;
+        }
+
+        DB::transaction(function () use ($product, $loss) {
+            $qty = (float) $loss->quantity;
+            $newStock = (float) $product->current_stock - $qty;
+
+            $this->logMovement(
+                product: $product,
+                type: 'loss',
+                quantity: -$qty,
+                newBalance: $newStock,
+                description: "Perda: {$loss->reason} ({$loss->formatted_type})",
+                originModel: $loss,
+                locationId: $loss->storage_location_id
+            );
+
+            $product->update(['current_stock' => $newStock]);
+
+            if ($loss->storage_location_id) {
+                $pivot = DB::table('product_storage_locations')
+                    ->where('product_id', $product->id)
+                    ->where('storage_location_id', $loss->storage_location_id)
+                    ->first();
+                if ($pivot) {
+                    $currentLoc = (float) $pivot->current_stock;
+                    $product->storageLocations()->updateExistingPivot($loss->storage_location_id, [
+                        'current_stock' => $currentLoc - $qty
+                    ]);
+                }
+            } else {
+                $this->deductFromStorageLocations($product, $qty);
+            }
+
+            if ($qty > 0) {
+                $product->current_stock = $newStock;
+                $this->checkThresholds($product);
+            }
+
+            if ($newStock <= 0 && $product->status === 'available') {
+                $this->triggerStockRupture($product);
+            }
+        });
+    }
+
+    public function restoreLoss(InventoryLoss $loss): void
+    {
+        $loss->loadMissing('product');
+        $product = $loss->product;
+
+        if (!$product || !$product->track_inventory || (float) $loss->quantity <= 0) {
+            return;
+        }
+
+        DB::transaction(function () use ($product, $loss) {
+            $qty = (float) $loss->quantity;
+            $newStock = (float) $product->current_stock + $qty;
+
+            $this->logMovement(
+                product: $product,
+                type: 'adjustment',
+                quantity: $qty,
+                newBalance: $newStock,
+                description: "Estorno de Perda #{$loss->id}: {$loss->reason}",
+                originModel: $loss,
+                locationId: $loss->storage_location_id
+            );
+
+            $product->update(['current_stock' => $newStock]);
+
+            if ($loss->storage_location_id) {
+                $pivot = DB::table('product_storage_locations')
+                    ->where('product_id', $product->id)
+                    ->where('storage_location_id', $loss->storage_location_id)
+                    ->first();
+                if ($pivot) {
+                    $currentLoc = (float) $pivot->current_stock;
+                    $product->storageLocations()->updateExistingPivot($loss->storage_location_id, [
+                        'current_stock' => $currentLoc + $qty
+                    ]);
+                }
+            } else {
+                $this->addToStorageLocations($product, $qty);
+            }
+
+            if ($newStock > 0 && $product->status === 'out_of_stock') {
+                $product->current_stock = $newStock;
+                $this->triggerStockRestored($product);
+            }
+        });
+    }
+
+    public function restoreStock(Product $product, float $qtyReturned, $originModel = null): void
+    {
+        if ($product->track_inventory) {
+            $newStock = (float) $product->current_stock + $qtyReturned;
+
+            $this->logMovement($product, 'in', $qtyReturned, $newStock, "Estorno/Devolução", $originModel);
+
+            $product->updateQuietly(['current_stock' => $newStock]);
+            $this->addToStorageLocations($product, $qtyReturned);
+
+            if ($newStock > 0 && $product->status === 'out_of_stock') {
+                $product->current_stock = $newStock;
+                $this->triggerStockRestored($product);
+            }
+        }
+
+        $sheets = TechnicalSheet::with('ingredient')
+            ->where('parent_product_id', $product->id)
+            ->where('is_active', true)
+            ->get();
+
+        if ($sheets->isEmpty()) return;
+
+        foreach ($sheets as $sheet) {
+            $ingredient = $sheet->ingredient;
+            if ($ingredient && $ingredient->track_inventory) {
+                $ingQty = (float) $sheet->quantity * $qtyReturned;
+                $newIngStock = (float) $ingredient->current_stock + $ingQty;
+
+                $this->logMovement($ingredient, 'in', $ingQty, $newIngStock, "Estorno via Ficha Técnica", $originModel);
+
+                $ingredient->updateQuietly(['current_stock' => $newIngStock]);
+                $this->addToStorageLocations($ingredient, $ingQty);
+
+                if ($newIngStock > 0 && $ingredient->status === 'out_of_stock') {
+                    $ingredient->current_stock = $newIngStock;
+                    $this->triggerStockRestored($ingredient);
+                }
+            }
+        }
+    }
+
+    public function processOrderItemStock(OrderItem $item, string $action = 'deduct'): void
+    {
+        $multiplier = $action === 'restore' ? -1 : 1;
+
+        if ($item->product_id) {
+            $product = Product::find($item->product_id);
+            if ($product) {
+                if ($multiplier === 1) {
+                    $this->deductStock($product, $item->quantity, $item);
+                } else {
+                    $this->restoreStock($product, $item->quantity, $item);
+                }
+            }
+        }
+
+        foreach ($item->modifiers as $mod) {
+            if ($mod->modifier_option_id) {
+                $opt = ModifierOption::find($mod->modifier_option_id);
+                if ($opt && $opt->linked_product_id) {
+                    $linked = Product::find($opt->linked_product_id);
+                    $qtyToProcess = $opt->linked_qty * $mod->quantity;
+                    if ($linked) {
+                        if ($multiplier === 1) $this->deductStock($linked, $qtyToProcess, $item);
+                        else $this->restoreStock($linked, $qtyToProcess, $item);
+                    }
+                }
+            }
+        }
+
+        foreach ($item->subItems as $sub) {
+            if ($sub->product_id) {
+                $subProd = Product::find($sub->product_id);
+                if ($subProd) {
+                    if ($multiplier === 1) $this->deductStock($subProd, $sub->quantity, $item);
+                    else $this->restoreStock($subProd, $sub->quantity, $item);
+                }
+            }
+            foreach ($sub->modifiers as $mod) {
+                if ($mod->modifier_option_id) {
+                    $opt = ModifierOption::find($mod->modifier_option_id);
+                    if ($opt && $opt->linked_product_id) {
+                        $linked = Product::find($opt->linked_product_id);
+                        $qtyToProcess = $opt->linked_qty * $mod->quantity;
+                        if ($linked) {
+                            if ($multiplier === 1) $this->deductStock($linked, $qtyToProcess, $item);
+                            else $this->restoreStock($linked, $qtyToProcess, $item);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public function adjustStock(Product $product, float $newStock, string $reason, ?int $userId = null): void
+    {
+        DB::transaction(function () use ($product, $newStock, $reason, $userId) {
+            $oldStock = (float) $product->current_stock;
+            $diff = $newStock - $oldStock;
+
+            $this->logMovement($product, 'adjustment', $diff, $newStock, "Ajuste: {$reason}");
+
+            $product->update(['current_stock' => $newStock]);
+
+            if ($diff < 0) {
+                $this->deductFromStorageLocations($product, abs($diff));
+                $this->registerLoss(
+                    product: $product,
+                    qty: abs($diff),
+                    reason: 'Ajuste Manual: ' . $reason,
+                    notes: "Estoque alterado de {$oldStock} para {$newStock}",
+                    userId: $userId,
+                    orderItemId: null,
+                    lossType: InventoryLoss::TYPE_INVENTORY_AUDIT,
+                    storageLocationId: null,
+                    skipDeduction: true
+                );
+            } elseif ($diff > 0) {
+                $this->addToStorageLocations($product, $diff);
+            }
+
+            if ($newStock <= 0) {
+                if ($product->status === 'available') {
+                    $this->triggerStockRupture($product);
+                }
+            } else {
+                if ($product->status === 'out_of_stock') {
+                    $this->triggerStockRestored($product);
+                } else {
+                    $this->checkThresholds($product);
+                    broadcast(new CatalogUpdated(tenant('id') ?? 'central'));
+                }
+            }
+        });
+    }
+
+    public function batchAdjust(array $items, string $reason, int $userId): array
+    {
+        $lossesCount = 0;
+        $totalLossAmount = 0.0;
+
+        DB::transaction(function () use ($items, $userId, $reason, &$lossesCount, &$totalLossAmount) {
+            foreach ($items as $entry) {
+                \Illuminate\Support\Facades\Log::info("🔍 [PROBE ITEM PROCESSANDO]", $entry);
+                $product = Product::find($entry['product_id']);
+                if (!$product || !$product->track_inventory) {
+                    continue;
+                }
+
+                $locationId = !empty($entry['location_id']) ? (int) $entry['location_id'] : null;
+                $newLocationStock = (float) $entry['counted_stock'];
+
+                if ($locationId) {
+                    $pivot = DB::table('product_storage_locations')
+                        ->where('product_id', $product->id)
+                        ->where('storage_location_id', $locationId)
+                        ->first();
+
+                    $oldLocationStock = $pivot ? (float) $pivot->current_stock : 0.0;
+                    $locationDelta = round($newLocationStock - $oldLocationStock, 4);
+
+                    DB::table('product_storage_locations')->updateOrInsert(
+                        ['product_id' => $product->id, 'storage_location_id' => $locationId],
+                        ['current_stock' => $newLocationStock, 'updated_at' => now()]
+                    );
+
+                    $sumLocations = (float) DB::table('product_storage_locations')
+                        ->where('product_id', $product->id)
+                        ->sum('current_stock');
+
+                    $loc = StorageLocation::find($locationId);
+                    $locName = $loc?->name ?? "Local #{$locationId}";
+
+                    // Registro de Kardex
+                    $this->logMovement(
+                        product: $product,
+                        type: 'adjustment',
+                        quantity: $locationDelta,
+                        newBalance: $sumLocations,
+                        description: "Balanço Mobile ({$locName}): {$reason}",
+                        locationId: $locationId
+                    );
+
+                    $product->update(['current_stock' => $sumLocations]);
+                    \Illuminate\Support\Facades\Log::info("🔍 [PROBE SALDO ATUALIZADO]", [
+                        "product_id" => $product->id,
+                        "product_name" => $product->name,
+                        "location_id" => $locationId,
+                        "newLocationStock" => $newLocationStock,
+                        "sumLocations" => $sumLocations,
+                        "product_current_stock_before_fresh" => $product->current_stock
+                    ]);
+
+                    if ($locationDelta < 0) {
+                        $lossQty = abs($locationDelta);
+
+                        $lossRecord = $this->registerLoss(
+                            product: $product,
+                            qty: $lossQty,
+                            reason: "Furo de Balanço: {$locName}",
+                            notes: "Contagem física: {$newLocationStock} {$product->unit_of_measure} (Anterior: {$oldLocationStock}). Motivo: {$reason}",
+                            userId: $userId,
+                            orderItemId: null,
+                            lossType: InventoryLoss::TYPE_INVENTORY_AUDIT,
+                            storageLocationId: $locationId,
+                            skipDeduction: true
+                        );
+
+                        $lossesCount++;
+                        $totalLossAmount += (float) $lossRecord->total_cost;
+                    }
+                } else {
+                    $oldStock = (float) $product->current_stock;
+                    $delta = round($newLocationStock - $oldStock, 4);
+
+                    $this->adjustStock($product, $newLocationStock, $reason, $userId);
+
+                    if ($delta < 0) {
+                        $lossesCount++;
+                    }
+                }
+
+                // Avaliação de Ruptura ou Restauração
+                $freshStock = (float) $product->fresh()->current_stock;
+                if ($freshStock <= 0 && $product->status === 'available') {
+                    $this->triggerStockRupture($product);
+                } elseif ($freshStock > 0 && $product->status === 'out_of_stock') {
+                    $this->triggerStockRestored($product);
+                }
+            }
+        });
+
+        broadcast(new CatalogUpdated(function_exists('tenant') && tenant('id') ? tenant('id') : 'central'));
+
+        return [
+            'losses_count'      => $lossesCount,
+            'total_loss_amount' => $totalLossAmount,
+            'transfers_summary' => $transfersSummary ?? [],
+        ];
+    }
+
+    public function registerLoss(
+        Product $product,
+        float $qty,
+        string $reason,
+        string $notes,
+        ?int $userId = null,
+        ?int $orderItemId = null,
+        string $lossType = InventoryLoss::TYPE_OPERATIONAL,
+        ?int $storageLocationId = null,
+        bool $skipDeduction = false
+    ): InventoryLoss {
+        $unitCost = class_exists(\App\Services\SupplyChain\ProductCostingService::class)
+            ? \App\Services\SupplyChain\ProductCostingService::calculateBaseCost($product)
+            : (float) ($product->base_cost ?? 0);
+
+        $loss = new InventoryLoss([
+            'product_id'          => $product->id,
+            'order_item_id'       => $orderItemId,
+            'user_id'             => $userId,
+            'storage_location_id' => $storageLocationId,
+            'loss_type'           => $lossType,
+            'quantity'            => $qty,
+            'unit_cost'           => $unitCost,
+            'total_cost'          => round($unitCost * $qty, 5),
+            'reason'              => $reason,
+            'notes'               => $notes,
+        ]);
+
+        $loss->skipInventoryDeduction = $skipDeduction;
+        $loss->save();
+
+        return $loss;
+    }
+
+    public function auditStorageLocation(int $locationId, array $countedItems, int $userId): array
+    {
+        $location = StorageLocation::findOrFail($locationId);
+        $divergences = [];
+        $totalLossBrl = 0.0;
+
+        DB::transaction(function () use ($location, $countedItems, $userId, &$divergences, &$totalLossBrl) {
+            foreach ($countedItems as $entry) {
+                $productId = (int) $entry['product_id'];
+                $countedQty = (float) $entry['counted_stock'];
+
+                $product = Product::find($productId);
+                if (!$product || !$product->track_inventory) continue;
+
+                $pivotData = DB::table('product_storage_locations')
+                    ->where('product_id', $productId)
+                    ->where('storage_location_id', $location->id)
+                    ->first();
+
+                $localSystemQty = $pivotData ? (float) $pivotData->current_stock : 0;
+                $delta = round($countedQty - $localSystemQty, 4);
+
+                if ($delta === 0.0) continue;
+
+                if ($pivotData) {
+                    $product->storageLocations()->updateExistingPivot($location->id, ['current_stock' => $countedQty]);
+                } else {
+                    $product->storageLocations()->attach($location->id, ['current_stock' => $countedQty]);
+                }
+
+                $newGlobalStock = (float) DB::table('product_storage_locations')
+                    ->where('product_id', $productId)
+                    ->sum('current_stock');
+
+                $this->logMovement($product, 'adjustment', $delta, $newGlobalStock, "Balanço Local: {$location->name}", null, $location->id);
+
+                $product->update(['current_stock' => $newGlobalStock]);
+
+                if ($delta < 0) {
+                    $lossQty = abs($delta);
+                    $lossRecord = $this->registerLoss(
+                        product: $product,
+                        qty: $lossQty,
+                        reason: "Furo de Balanço: {$location->name}",
+                        notes: "Contagem física: {$countedQty}. Sistema esperava: {$localSystemQty}.",
+                        userId: $userId,
+                        orderItemId: null,
+                        lossType: InventoryLoss::TYPE_INVENTORY_AUDIT,
+                        storageLocationId: $location->id,
+                        skipDeduction: true
+                    );
+
+                    if ($newGlobalStock <= 0) {
+                        $this->triggerStockRupture($product);
+                    }
+
+                    $totalLossBrl += (float) $lossRecord->total_cost;
+                    $divergences[] = [
+                        'product' => $product->name,
+                        'type'    => 'loss',
+                        'delta'   => $delta,
+                        'uom'     => $product->unit_of_measure,
+                        'cost'    => (float) $lossRecord->total_cost
+                    ];
+                } elseif ($delta > 0) {
+                    if ($product->status === 'out_of_stock' && $newGlobalStock > 0) {
+                        $this->triggerStockRestored($product);
+                    }
+                    $divergences[] = [
+                        'product' => $product->name,
+                        'type'    => 'surplus',
+                        'delta'   => $delta,
+                        'uom'     => $product->unit_of_measure,
+                        'cost'    => 0
+                    ];
+                }
+            }
+        });
+
+        broadcast(new CatalogUpdated(tenant('id') ?? 'central'));
+
+        return [
+            'location'       => $location->name,
+            'divergences'    => $divergences,
+            'total_loss_brl' => round($totalLossBrl, 2),
+        ];
+    }
+
+    public function triggerStockRupture(Product $product): void
+    {
+        $product->updateQuietly(['status' => 'out_of_stock']);
+
+        ModifierOption::where('linked_product_id', $product->id)->update(['is_active' => false]);
+
+        $parentIds = TechnicalSheet::where('ingredient_product_id', $product->id)->where('is_active', true)->pluck('parent_product_id')->unique();
+        if ($parentIds->isNotEmpty()) {
+            Product::whereIn('id', $parentIds)->whereNotIn('status', ['paused', 'archived'])->update(['status' => 'out_of_stock']);
+        }
+
+        event(new StockLowDetected($product, 'critical'));
+        broadcast(new CatalogUpdated(tenant('id') ?? 'central'));
+
+        Log::warning("🚨 [Estoque Ruptura] '{$product->name}' esgotou. Adicionais e pratos bloqueados.");
+    }
+
+    public function triggerStockRestored(Product $product): void
+    {
+        if (in_array($product->status, ['paused', 'archived'], true)) {
+            return;
+        }
+
+        $hasMissingIngredients = TechnicalSheet::where('parent_product_id', $product->id)->where('is_active', true)
+            ->whereHas('ingredient', function ($query) {
+                $query->whereIn('status', ['out_of_stock', 'unavailable', 'paused', 'archived']);
+            })
+            ->exists();
+
+        if (!$hasMissingIngredients) {
+            $product->updateQuietly(['status' => 'available']);
+        }
+
+        ModifierOption::where('linked_product_id', $product->id)->update(['is_active' => true]);
+
+        $parentIds = TechnicalSheet::where('ingredient_product_id', $product->id)->where('is_active', true)->pluck('parent_product_id')->unique();
+        foreach ($parentIds as $parentId) {
+            $parent = Product::find($parentId);
+            if (!$parent || in_array($parent->status, ['paused', 'archived'], true)) continue;
+
+            $parentMissing = TechnicalSheet::where('parent_product_id', $parentId)->where('is_active', true)
+                ->whereHas('ingredient', fn($q) => $q->whereIn('status', ['out_of_stock', 'unavailable', 'paused', 'archived']))
+                ->exists();
+
+            $parentPhysical = $parent->track_inventory && (float) $parent->current_stock <= 0;
+
+            if (!$parentMissing && !$parentPhysical) {
+                $parent->updateQuietly(['status' => 'available']);
+            }
+        }
+
+        broadcast(new CatalogUpdated(tenant('id') ?? 'central'));
+    }
+
+    private function checkThresholds(Product $product): void
+    {
+        if ($product->min_stock !== null && $product->current_stock <= $product->min_stock) {
+            Log::info("⚠️ [Estoque Baixo] Produto {$product->name} atingiu o limite mínimo.");
+            event(new StockLowDetected($product, $product->current_stock <= 0 ? 'critical' : 'normal'));
+        }
+    }
+}
+
+=======================================================
+FILE: app/Filament/Resources/Products/Widgets/ProductCostAnalysisWidget.php
+=======================================================
+
+<?php
+
+namespace App\Filament\Resources\Products\Widgets;
+
+use App\Services\Catalog\ProductCostingService;
+use Filament\Widgets\Widget;
+use Illuminate\Database\Eloquent\Model;
+use Livewire\Attributes\On;
+
+class ProductCostAnalysisWidget extends Widget
+{
+    public ?Model $record = null;
+    public ?Model $ownerRecord = null;
+    public int $selectedDays = 30;
+
+    protected string $view = 'filament.resources.products.widgets.product-cost-analysis-widget';
+    protected int | string | array $columnSpan = 'full';
+
+    #[On('update-margin-widget')]
+    public function refreshAnalysis(): void
+    {
+        // Auto-refresh quando a ficha técnica ou o preço mudar
+    }
+
+    public function setDays(int $days): void
+    {
+        $this->selectedDays = $days;
+    }
+
+    protected function getViewData(): array
+    {
+        $target = $this->record ?? $this->ownerRecord;
+
+        if (!$target || !in_array($target->type, ['dish', 'combo', 'manufactured', 'resale'])) {
+            return ['analysis' => null];
+        }
+
+        return [
+            'record'   => $target,
+            'analysis' => ProductCostingService::getCostVarianceAnalysis($target, $this->selectedDays),
+        ];
+    }
+}
+
+=======================================================
+FILE: app/Filament/Resources/Products/Widgets/ProductMarginWidget.php
+=======================================================
+
+<?php
+
+namespace App\Filament\Resources\Products\Widgets;
+
+use App\Services\Catalog\ProductCostingService;
+use App\Enums\ProductType;
+use Filament\Widgets\Widget;
+use Illuminate\Database\Eloquent\Model;
+use Livewire\Attributes\On;
+
+class ProductMarginWidget extends Widget
+{
+    public ?Model $record = null;
+    public ?Model $ownerRecord = null;
+
+    public ?array $simulatedData = null;
+
+    protected string $view = 'filament.resources.products.widgets.product-margin-widget';
+    protected int | string | array $columnSpan = 'full';
+
+    #[On('update-margin-widget')]
+    public function applySimulation(?array $simulatedData = null): void
+    {
+        $this->simulatedData = $simulatedData;
+    }
+
+    #[On('reset-margin-widget')]
+    public function resetSimulation(): void
+    {
+        $this->simulatedData = null;
+    }
+
+    protected function getViewData(): array
+    {
+        $targetRecord = $this->record ?? $this->ownerRecord;
+
+        if (!$targetRecord) {
+            return ['marginData' => null];
+        }
+
+        $hasRecipe = $targetRecord->technicalSheets()->exists();
+        $isComplexType = in_array($targetRecord->type, [
+            ProductType::DISH->value,
+            ProductType::COMBO->value,
+            ProductType::MANUFACTURED->value,
+            ProductType::RESALE->value,
+        ]);
+
+        if (!$isComplexType && !$hasRecipe) {
+            return ['marginData' => null];
+        }
+
+        $marginData = ProductCostingService::getMarginData($targetRecord);
+
+        // Se houver simulação ativa pelo usuário no Simulador
+        if ($this->simulatedData) {
+            $costDiff = $this->simulatedData['cost'] - $marginData['base_cost'];
+
+            $marginData['sell_price']          = $this->simulatedData['sell_price'];
+            $marginData['base_cost']           = $this->simulatedData['cost'];
+            $marginData['contribution_margin'] = $this->simulatedData['contribution_margin'];
+            $marginData['margin_percentage']   = $this->simulatedData['margin_percentage'];
+            $marginData['marginPercentage']    = $this->simulatedData['margin_percentage'];
+            $marginData['simples_amount']      = $this->simulatedData['simples_amount'];
+            $marginData['card_fee_amount']     = $this->simulatedData['card_fee_amount'];
+            $marginData['total_variables']     = $this->simulatedData['total_variable_costs'];
+            $marginData['is_simulated']        = true;
+
+            $marginData['channels']['dine_in']['price']               = $this->simulatedData['sell_price'];
+            $marginData['channels']['dine_in']['cmv']                 += $costDiff;
+            $marginData['channels']['dine_in']['contribution_margin'] = $this->simulatedData['contribution_margin'];
+            $marginData['channels']['dine_in']['margin_percentage']   = $this->simulatedData['margin_percentage'];
+        }
+
+        return [
+            'record'     => $targetRecord,
+            'marginData' => $marginData,
+        ];
+    }
+}
+
+=======================================================
+FILE: app/Filament/Resources/Products/RelationManagers/TechnicalSheetsRelationManager.php
+=======================================================
+
+<?php
+
+namespace App\Filament\Resources\Products\RelationManagers;
+
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Schema;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Actions;
+use Filament\Tables;
+use Filament\Tables\Table;
+use App\Models\Product;
+use Filament\Schemas\Components\Utilities\Get;
+use App\Services\Catalog\ProductCostingService;
+use Illuminate\Support\Facades\DB;
+use Filament\Notifications\Notification;
+use Filament\Tables\Filters\TernaryFilter;
+
+class TechnicalSheetsRelationManager extends RelationManager
+{
+    protected static string $relationship = "technicalSheets";
+    protected static ?string $title = "Ficha Técnica";
+    protected static ?string $modelLabel = "Item da Ficha Técnica";
+    protected static ?string $pluralModelLabel = "Itens da Ficha Técnica";
+
+    public function form(Schema $schema): Schema
+    {
+        $isFinalProduct = in_array($this->getOwnerRecord()->type, [
+            "dish",
+            "combo",
+            "resale",
+        ]);
+
+        return $schema
+            ->components([
+                Select::make("ingredient_product_id")
+                    ->label("Componente (Insumo, Preparado ou Embalagem)")
+                    ->options(function () {
+                        return Product::query()
+                            ->whereIn("type", [
+                                \App\Enums\ProductType::INGREDIENT->value,
+                                \App\Enums\ProductType::MANUFACTURED->value,
+                                \App\Enums\ProductType::PACKAGING->value,
+                                \App\Enums\ProductType::CONSUMABLE->value,
+                                \App\Enums\ProductType::RESALE->value,
+                            ])
+                            ->with("category")
+                            ->get()
+                            ->groupBy(fn($p) => $p->category?->name ?? "Outros / Sem Categoria")
+                            ->map(fn($prods) => $prods->pluck("name", "id"))
+                            ->toArray();
+                    })
+                    ->searchable()
+                    ->preload()
+                    ->required()
+                    ->live()
+                    ->columnSpan(1),
+
+                TextInput::make("quantity")
+                    ->label("Quantidade")
+                    ->numeric()
+                    ->inputMode("decimal")
+                    ->required()
+                    ->suffix(fn(Get $get) => Product::find($get("ingredient_product_id"))?->unit_of_measure)
+                    ->columnSpan(1),
+
+                // 🚀 O MODO DE CONSUMO REAL:
+                Toggle::make("is_dine_in")
+                    ->label("Consumo no Local (Salão)")
+                    ->default(true)
+                    ->helperText("Ative se este item é servido no consumo dentro da loja.")
+                    ->visible($isFinalProduct)
+                    ->columnSpan(1),
+
+                Toggle::make("is_takeaway")
+                    ->label("Para Viagem (Embalagem)")
+                    ->default(true)
+                    ->helperText("Ative se este item compõe a entrega ou retirada.")
+                    ->visible($isFinalProduct)
+                    ->columnSpan(1),
+
+                Toggle::make("is_active")
+                    ->label("Ativo na Receita")
+                    ->default(true)
+                    ->columnSpan(2),
+            ])
+            ->columns(2);
+    }
+
+    public function table(Table $table): Table
+    {
+        $isFinalProduct = in_array($this->getOwnerRecord()->type, [
+            "dish",
+            "combo",
+            "resale",
+        ]);
+
+        return $table
+            ->recordTitleAttribute("ingredient_product_id")
+            ->columns([
+                Tables\Columns\ToggleColumn::make("is_active")
+                    ->label("Ativo")
+                    ->afterStateUpdated(function ($record, $state, $livewire) {
+                        $livewire->dispatch("update-margin-widget");
+                        \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($livewire->getOwnerRecord(), 'recipe_update');
+                    }),
+
+                Tables\Columns\TextColumn::make("ingredient.name")
+                    ->label("Ingrediente / Material")
+                    ->searchable()
+                    ->sortable()
+                    ->weight("bold")
+                    ->color(fn ($record) => $record->is_active ? null : 'gray')
+                    ->description(fn ($record) => $record->is_active ? '' : 'Insumo desativado'),
+
+                Tables\Columns\TextColumn::make("quantity")
+                    ->label("Quantidade")
+                    ->state(function ($record) {
+                        $val = (float) $record->quantity;
+                        $um = strtolower($record->ingredient?->unit_of_measure ?? "");
+                        $numStr = (floor($val) == $val) ? number_format($val, 0, ",", ".") : rtrim(rtrim(number_format($val, 4, ",", "."), "0"), ",");
+                        return "{$numStr} {$um}";
+                    })
+                    ->badge()
+                    ->color('gray'),
+
+                Tables\Columns\TextColumn::make("cost")
+                    ->label("Custo Total")
+                    ->state(function ($record) {
+                        $ingredient = $record->ingredient;
+                        if (!$ingredient) return 0;
+                        return (float) $record->quantity * ProductCostingService::calculateBaseCost($ingredient);
+                    })
+                    ->money("BRL")
+                    ->weight("bold")
+                    ->color(fn ($record) => $record->is_active ? 'danger' : 'gray'),
+
+                // 🚀 COLUNA DE MODO DE CONSUMO:
+                Tables\Columns\TextColumn::make("consumption_mode")
+                    ->label("Aplicação")
+                    ->badge()
+                    ->state(function ($record) {
+                        if ($record->is_dine_in && $record->is_takeaway) return 'Salão & Viagem';
+                        if ($record->is_dine_in) return 'Apenas Salão';
+                        if ($record->is_takeaway) return 'Apenas Viagem';
+                        return 'Inativo';
+                    })
+                    ->color(fn (string $state): string => match ($state) {
+                        'Salão & Viagem' => 'gray',
+                        'Apenas Salão'   => 'info',
+                        'Apenas Viagem'  => 'warning',
+                        default          => 'danger',
+                    })
+                    ->visible($isFinalProduct),
+            ])
+            ->filters([
+                TernaryFilter::make('is_active')
+                    ->label('Status do Insumo')
+                    ->placeholder('Todos')
+                    ->trueLabel('Apenas Ativos')
+                    ->falseLabel('Apenas Inativos')
+                    ->default(true),
+            ])
+            ->headerActions([
+                Actions\CreateAction::make()
+                    ->label("Adicionar Insumo")
+                    ->after(function($livewire) {
+                        $livewire->dispatch("update-margin-widget");
+                        \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($livewire->getOwnerRecord(), 'recipe_update');
+                    }),
+
+                Actions\ActionGroup::make([
+                    Actions\Action::make("cloneFrom")
+                        ->label("Clonar de...")
+                        ->icon("heroicon-o-arrow-down-tray")
+                        ->color("info")
+                        ->form([
+                            Select::make("source_product_id")
+                                ->label("Puxar receita de qual produto?")
+                                ->searchable()
+                                ->preload()
+                                ->options(fn($livewire) => Product::whereHas("technicalSheets")
+                                    ->where("id", "!=", $livewire->getOwnerRecord()->id)
+                                    ->pluck("name", "id"))
+                                ->required(),
+
+                            Toggle::make("clear_current")
+                                ->label("Limpar ficha atual?")
+                                ->default(false),
+                        ])
+                        ->action(function (array $data, $livewire) {
+                            $ownerRecord = $livewire->getOwnerRecord();
+                            $sourceProduct = Product::with("technicalSheets")->find($data["source_product_id"]);
+
+                            if (!$sourceProduct || $sourceProduct->technicalSheets->isEmpty()) {
+                                Notification::make()->warning()->title("Ficha Vazia!")->send();
+                                return;
+                            }
+
+                            if ($data["clear_current"]) {
+                                DB::table("technical_sheets")->where("parent_product_id", $ownerRecord->id)->delete();
+                            }
+
+                            foreach ($sourceProduct->technicalSheets as $item) {
+                                if (!$data["clear_current"]) {
+                                    $exists = DB::table("technical_sheets")
+                                        ->where("parent_product_id", $ownerRecord->id)
+                                        ->where("ingredient_product_id", $item->ingredient_product_id)
+                                        ->exists();
+                                    if ($exists) continue;
+                                }
+
+                                DB::table("technical_sheets")->insert([
+                                    "parent_product_id"     => $ownerRecord->id,
+                                    "ingredient_product_id" => $item->ingredient_product_id,
+                                    "quantity"              => $item->quantity,
+                                    "is_dine_in"            => $item->is_dine_in ?? true,
+                                    "is_takeaway"           => $item->is_takeaway ?? true,
+                                    "order_type"            => $item->order_type,
+                                    "is_active"             => $item->is_active ?? true,
+                                    "created_at"            => now(),
+                                    "updated_at"            => now(),
+                                ]);
+                            }
+
+                            $livewire->dispatch("update-margin-widget");
+                            \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($ownerRecord, 'recipe_update');
+
+                            Notification::make()->success()->title("Receita Importada!")->send();
+                        }),
+
+                    Actions\Action::make("cloneSheet")
+                        ->label("Clonar para...")
+                        ->icon("heroicon-o-arrow-up-tray")
+                        ->color("warning")
+                        ->form([
+                            Select::make("target_product_ids")
+                                ->label("Copiar para quais produtos?")
+                                ->multiple()
+                                ->searchable()
+                                ->preload()
+                                ->options(fn($livewire) => Product::where("id", "!=", $livewire->getOwnerRecord()->id)
+                                    ->whereIn("type", ["dish", "combo", "manufactured", "ingredient"])
+                                    ->pluck("name", "id"))
+                                ->required(),
+
+                            Toggle::make("clear_target")
+                                ->label("Substituir ficha existente nos destinos?")
+                                ->default(false),
+                        ])
+                        ->action(function (array $data, $livewire) {
+                            $ownerRecord = $livewire->getOwnerRecord();
+                            $items = $ownerRecord->technicalSheets;
+
+                            if ($items->isEmpty()) {
+                                Notification::make()->warning()->title("Ficha Vazia")->send();
+                                return;
+                            }
+
+                            foreach ($data["target_product_ids"] as $targetId) {
+                                if ($data["clear_target"]) {
+                                    DB::table("technical_sheets")->where("parent_product_id", $targetId)->delete();
+                                }
+
+                                foreach ($items as $item) {
+                                    if (!$data["clear_target"]) {
+                                        $exists = DB::table("technical_sheets")
+                                            ->where("parent_product_id", $targetId)
+                                            ->where("ingredient_product_id", $item->ingredient_product_id)
+                                            ->exists();
+                                        if ($exists) continue;
+                                    }
+
+                                    DB::table("technical_sheets")->insert([
+                                        "parent_product_id"     => $targetId,
+                                        "ingredient_product_id" => $item->ingredient_product_id,
+                                        "quantity"              => $item->quantity,
+                                        "is_dine_in"            => $item->is_dine_in ?? true,
+                                        "is_takeaway"           => $item->is_takeaway ?? true,
+                                        "order_type"            => $item->order_type,
+                                        "is_active"             => $item->is_active ?? true,
+                                        "created_at"            => now(),
+                                        "updated_at"            => now(),
+                                    ]);
+                                }
+
+                                $targetProduct = Product::find($targetId);
+                                if ($targetProduct && in_array($targetProduct->type, ['dish', 'combo', 'resale'])) {
+                                    \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($targetProduct, 'recipe_update');
+                                }
+                            }
+
+                            Notification::make()->success()->title("Receita Copiada!")->send();
+                        }),
+                ])
+                    ->label("Ferramentas")
+                    ->icon("heroicon-m-wrench-screwdriver")
+                    ->button()
+                    ->color("gray"),
+            ])
+            ->actions([
+                Actions\EditAction::make()->after(function($livewire) {
+                    $livewire->dispatch("update-margin-widget");
+                    \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($livewire->getOwnerRecord(), 'recipe_update');
+                }),
+                Actions\DeleteAction::make()->after(function($livewire) {
+                    $livewire->dispatch("update-margin-widget");
+                    \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($livewire->getOwnerRecord(), 'recipe_update');
+                }),
+            ])
+            ->bulkActions([
+                Actions\BulkActionGroup::make([
+                    Actions\BulkAction::make('activate')
+                        ->label('Ativar selecionados')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, $livewire) {
+                            $records->each->update(['is_active' => true]);
+                            $livewire->dispatch("update-margin-widget");
+                            \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($livewire->getOwnerRecord(), 'recipe_update');
+                        }),
+
+                    Actions\BulkAction::make('deactivate')
+                        ->label('Desativar selecionados')
+                        ->icon('heroicon-o-x-circle')
+                        ->color('gray')
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, $livewire) {
+                            $records->each->update(['is_active' => false]);
+                            $livewire->dispatch("update-margin-widget");
+                            \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($livewire->getOwnerRecord(), 'recipe_update');
+                        }),
+
+                    Actions\DeleteBulkAction::make()->after(function($livewire) {
+                        $livewire->dispatch("update-margin-widget");
+                        \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($livewire->getOwnerRecord(), 'recipe_update');
+                    }),
+                ]),
+            ])
+            ->contentFooter(fn() => view("filament.components.tech-sheet-footer", [
+                "ownerRecord"    => $this->getOwnerRecord(),
+                "isFinalProduct" => $isFinalProduct,
+            ]))
+            ->paginationPageOptions(["all"]);
+    }
+
+    public static function canViewForRecord($ownerRecord, $pageClass): bool
+    {
+        return in_array($ownerRecord->type, ["dish", "combo", "manufactured"]);
+    }
+}
+
+=======================================================
+FILE: app/Filament/Resources/Products/RelationManagers/ProductModifiersRelationManager.php
+=======================================================
+
+<?php
+
+namespace App\Filament\Resources\Products\RelationManagers;
+
+use Filament\Forms\Form;
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Forms\Components\CheckboxList;
+
+// 🚀 IMPORTAÇÕES CORRETAS PARA FILAMENT V4 (Arquitetura Unificada)
+use Filament\Actions\Action;
+use Filament\Actions\AttachAction;
+use Filament\Actions\DetachAction;
+use Filament\Actions\DetachBulkAction;
+use Filament\Actions\BulkActionGroup;
+
+class ProductModifiersRelationManager extends RelationManager
+{
+    protected static string $relationship = 'modifiers';
+    protected static ?string $title = 'Modificadores';
+    protected static string|\BackedEnum|null $icon = 'heroicon-o-queue-list';
+
+    public function table(Table $table): Table
+    {
+        return $table
+            ->recordTitleAttribute('name')
+            ->columns([
+                TextColumn::make('name')
+                    ->label('Grupo')
+                    ->weight('bold')
+                    ->searchable(),
+
+                TextColumn::make('type')
+                    ->label('Tipo')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'option' => 'info',
+                        'ingredient' => 'info',
+                        'add_on' => 'success',
+                        'removal' => 'danger',
+                        default => 'gray',
+                    }),
+
+                // 🚀 INDICADOR DE EXCEÇÕES LOCAIS
+                TextColumn::make('pivot.excluded_options')
+                    ->label('Opções Ocultadas Neste Produto')
+                    ->state(function ($record) {
+                        $excluded = json_decode($record->pivot->excluded_options ?? '[]', true) ?? [];
+                        if (empty($excluded)) return 'Todas Disponíveis';
+                        return count($excluded) . ' opção(ões) oculta(s)';
+                    })
+                    ->badge()
+                    ->color(fn ($state) => $state === 'Todas Disponíveis' ? 'success' : 'warning'),
+            ])
+            ->headerActions([
+                // 🚀 USANDO A AÇÃO NATIVA DO V4
+                AttachAction::make()
+                    ->label('Vincular Novo Grupo')
+                    ->preloadRecordSelect(),
+            ])
+            ->actions([
+                // 🚀 A MÁGICA LOCAL: Ligar/Desligar itens apenas para este produto
+                Action::make('toggle_options')
+                    ->label('Ocultar Opções')
+                    ->icon('heroicon-o-adjustments-horizontal')
+                    ->color('warning')
+                    ->modalHeading('Ocultar Opções Neste Produto')
+                    ->modalDescription('Desmarque as opções que NÃO devem aparecer quando o cliente for comprar este produto específico.')
+                    ->form(function ($record) {
+                        // Busca todas as opções cadastradas neste grupo
+                        $options = $record->options()->pluck('name', 'id')->toArray();
+
+                        return [
+                            CheckboxList::make('active_options')
+                                ->label('Opções Disponíveis')
+                                ->options($options)
+                                ->default(function () use ($record, $options) {
+                                    // Puxa as que estão excluídas na Pivot
+                                    $excluded = json_decode($record->pivot->excluded_options ?? '[]', true) ?? [];
+                                    // Marca as que NÃO estão excluídas
+                                    return array_diff(array_keys($options), $excluded);
+                                })
+                                ->columns(2)
+                        ];
+                    })
+                    ->action(function ($record, array $data, $livewire) {
+                        $active = $data['active_options'] ?? [];
+                        $all = $record->options()->pluck('id')->toArray();
+
+                        // O que sobrou (não está ativo) vai para o array de excluídos
+                        $excluded = array_values(array_diff($all, $active));
+
+                        // Salva a exceção na Pivot do Produto!
+                        $livewire->getOwnerRecord()->modifiers()->updateExistingPivot($record->id, [
+                            'excluded_options' => json_encode($excluded)
+                        ]);
+                    }),
+
+                DetachAction::make()->label('Desvincular Grupo'),
+            ])
+            ->bulkActions([
+                BulkActionGroup::make([
+                    DetachBulkAction::make()->label('Desvincular Selecionados'),
+                ]),
+            ]);
+    }
+}
+
+=======================================================
+FILE: app/Filament/Resources/Products/Schemas/Sections/ProductionSection.php
+=======================================================
+
+<?php
+
+namespace App\Filament\Resources\Products\Schemas\Sections;
+
+use Filament\Forms;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+
+class ProductionSection
+{
+    public static function make(): Section
+    {
+        return Section::make("Produção")
+            ->icon("heroicon-o-fire")
+            ->visible(fn(Get $get) => $get("type") !== "combo")
+            ->schema([
+                Grid::make(2)->schema([
+                    Forms\Components\Select::make("kitchen_id")
+                        ->label("Setor de Preparo (Cozinha)")
+                        ->relationship("kitchen", "name")
+                        ->searchable()
+                        ->preload(),
+                    Forms\Components\Select::make("print_station_id")
+                        ->label("Impressora de Produção")
+                        ->relationship("printer", "name")
+                        ->searchable()
+                        ->preload(),
+                ]),
+                Grid::make(3)->schema([
+                    Forms\Components\TextInput::make("prep_time_minutes")
+                        ->label("Tempo de Preparo (Minutos)")
+                        ->numeric(),
+                    Forms\Components\Toggle::make("requires_preparation")
+                        ->label("Exige Preparo?")
+                        ->default(true),
+                ]),
+            ])
+            ->columnSpanFull();
+    }
+}
+
+=======================================================
+FILE: app/Console/Commands/CacheTopCombinations.php
+=======================================================
+
+<?php
+
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+use Carbon\Carbon;
+use App\Models\Tenant;
+
+class CacheTopCombinations extends Command
+{
+    protected $signature = 'catalog:cache-top-combinations {--tenant=} {--days=30}';
+    protected $description = 'Top 10: Ranking geral de produtos expandido nas top 3 variações de ingredientes e atualização do BI preditivo.';
+
+    public function handle()
+    {
+        $days = (int) $this->option('days');
+        $cutoffDate = Carbon::now()->subDays($days);
+        $tenantId = $this->option('tenant');
+        $tenants = $tenantId ? Tenant::where('id', $tenantId)->get() : Tenant::all();
+
+        if ($tenants->isEmpty()) {
+            $this->error("Nenhum tenant encontrado.");
+            return Command::FAILURE;
+        }
+
+        foreach ($tenants as $tenant) {
+            $this->info("\n==================================================");
+            $this->info("🚀 PROCESSANDO RANKING INTELIGENTE & BI: {$tenant->id}");
+            $this->info("   Janela considerada: últimos {$days} dias");
+            $this->info("==================================================");
+
+            tenancy()->initialize($tenant);
+
+            try {
+                // =========================================================================
+                // 0. DICIONÁRIO DE OPÇÕES E GRUPOS DO TIPO 'INGREDIENT'
+                // =========================================================================
+                $v3Options = DB::table('modifier_options')
+                    ->join('modifier_groups', 'modifier_options.modifier_group_id', '=', 'modifier_groups.id')
+                    ->whereNull('modifier_options.deleted_at')
+                    ->whereNull('modifier_groups.deleted_at')
+                    ->select(
+                        'modifier_options.id',
+                        'modifier_options.name',
+                        'modifier_groups.type as group_type'
+                    )
+                    ->get();
+
+                $v3OptionsById = [];
+                $v3OptionsByName = [];
+                foreach ($v3Options as $opt) {
+                    $v3OptionsById[$opt->id] = $opt;
+                    $cleanName = mb_strtolower(trim($opt->name));
+                    if (!isset($v3OptionsByName[$cleanName])) {
+                        $v3OptionsByName[$cleanName] = $opt;
+                    }
+                }
+
+                $productsWithIngredients = DB::table('modifier_group_product')
+                    ->join('modifier_groups', 'modifier_group_product.modifier_group_id', '=', 'modifier_groups.id')
+                    ->whereNull('modifier_groups.deleted_at')
+                    ->whereIn('modifier_groups.type', ['option', 'ingredient'])
+                    ->pluck('modifier_group_product.product_id')
+                    ->unique()
+                    ->toArray();
+
+                // =========================================================================
+                // 1. CARGA ATUAL (SISTEMA V3)
+                // =========================================================================
+                $currentItems = DB::table('order_items')
+                    ->join('orders', 'order_items.order_id', '=', 'orders.id')
+                    ->join('products', 'order_items.product_id', '=', 'products.id')
+                    ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
+                    ->whereNull('products.deleted_at')
+                    ->whereIn('orders.status', ['completed', 'closed', 'delivered', 'paid', 'finished'])
+                    ->where('orders.created_at', '>=', $cutoffDate)
+                    ->select(
+                        'order_items.id',
+                        'products.id as product_id',
+                        'products.name',
+                        'categories.name as category_name',
+                        'products.status',
+                        'products.track_inventory',
+                        'products.current_stock',
+                        'order_items.unit_price'
+                    )
+                    ->get()
+                    ->map(fn($i) => (array) $i);
+
+                $currentIds = $currentItems->pluck('id')->filter()->toArray();
+
+                // Dicionário Estrito: Só aceita modificadores oficiais do tipo 'ingredient'
+                $currentModifiers = empty($currentIds) ? collect() : DB::table('order_item_modifiers')
+                    ->whereIn('order_item_id', $currentIds)
+                    ->get()
+                    ->map(function ($m) use ($v3OptionsById, $v3OptionsByName) {
+                        $name = trim($m->name ?? '');
+                        if (str_starts_with($name, '[') || empty($name)) return null;
+
+                        $opt = null;
+                        if (!empty($m->modifier_option_id) && isset($v3OptionsById[$m->modifier_option_id])) {
+                            $opt = $v3OptionsById[$m->modifier_option_id];
+                        } else {
+                            $cleanKey = mb_strtolower($name);
+                            $opt = $v3OptionsByName[$cleanKey] ?? null;
+                        }
+
+                        if (!$opt || $opt->group_type !== 'ingredient') return null;
+
+                        return [
+                            'order_item_id' => $m->order_item_id,
+                            'id' => $opt->id,
+                            'name' => $opt->name,
+                            'quantity' => (float) ($m->quantity ?? 1),
+                            'price' => (float) ($m->price ?? 0),
+                        ];
+                    })
+                    ->filter()
+                    ->groupBy('order_item_id');
+
+                $currentMapped = $currentItems->map(function ($item) use ($currentModifiers) {
+                    $item['modifiers'] = $currentModifiers->get($item['id'], collect())->toArray();
+                    return $item;
+                });
+
+                // =========================================================================
+                // 2. CARGA LEGADA
+                // =========================================================================
+                $legacyMapped = collect();
+                $schema = DB::getSchemaBuilder();
+
+                if ($schema->hasTable('legacy_orders') && $schema->hasTable('legacy_order_items')) {
+                    $legacyItems = DB::table('legacy_order_items')
+                        ->join('legacy_orders', 'legacy_order_items.legacy_order_id', '=', 'legacy_orders.id')
+                        ->join('legacy_products', 'legacy_order_items.legacy_product_id', '=', 'legacy_products.id')
+                        ->join('products', 'legacy_products.current_product_id', '=', 'products.id')
+                        ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
+                        ->whereNull('products.deleted_at')
+                        ->where('legacy_products.is_ignored', 0)
+                        ->whereIn('legacy_orders.status', ['completed', 'closed', 'delivered', 'paid', 'finished', 'authorized', 'processed'])
+                        ->where('legacy_orders.issue_date', '>=', $cutoffDate)
+                        ->whereNotNull('legacy_products.current_product_id')
+                        ->select(
+                            'legacy_order_items.id',
+                            'products.id as product_id',
+                            'products.name',
+                            'categories.name as category_name',
+                            'products.status',
+                            'products.track_inventory',
+                            'products.current_stock',
+                            'legacy_order_items.unit_price'
+                        )
+                        ->get()
+                        ->map(fn($i) => (array) $i);
+
+                    $legacyIds = $legacyItems->pluck('id')->filter()->toArray();
+
+                    $legacyModifiers = empty($legacyIds) ? collect() : DB::table('legacy_order_item_modifiers')
+                        ->join('legacy_modifiers', 'legacy_order_item_modifiers.legacy_modifier_id', '=', 'legacy_modifiers.id')
+                        ->join('modifier_options', 'legacy_modifiers.modifier_option_id', '=', 'modifier_options.id')
+                        ->join('modifier_groups', 'modifier_options.modifier_group_id', '=', 'modifier_groups.id')
+                        ->whereIn('legacy_order_item_modifiers.legacy_order_item_id', $legacyIds)
+                        ->where('legacy_modifiers.is_ignored', 0)
+                        ->whereNotNull('legacy_modifiers.modifier_option_id')
+                        ->select(
+                            'legacy_order_item_modifiers.legacy_order_item_id as order_item_id',
+                            'modifier_options.id as option_id',
+                            'modifier_options.name as option_name',
+                            'legacy_order_item_modifiers.quantity',
+                            'legacy_order_item_modifiers.price',
+                            'modifier_groups.type as group_type'
+                        )
+                        ->get()
+                        ->map(function ($m) {
+                            if ($m->group_type !== 'ingredient') return null;
+                            return [
+                                'order_item_id' => $m->order_item_id,
+                                'id' => $m->option_id,
+                                'name' => $m->option_name,
+                                'quantity' => (float) ($m->quantity ?? 1),
+                                'price' => (float) ($m->price ?? 0),
+                            ];
+                        })
+                        ->filter()
+                        ->groupBy('order_item_id');
+
+                    $legacyMapped = $legacyItems->map(function ($item) use ($legacyModifiers) {
+                        $item['modifiers'] = $legacyModifiers->get($item['id'], collect())->toArray();
+                        return $item;
+                    });
+                }
+
+                $allItems = $currentMapped->merge($legacyMapped);
+
+                if ($allItems->isEmpty()) {
+                    $this->warn("⚠️ Nenhum item válido encontrado para o tenant {$tenant->id}.");
+                    tenancy()->end();
+                    continue;
+                }
+
+                // =========================================================================
+                // 3. ATUALIZAÇÃO DO BI PREDITIVO (HISTORICAL_WEIGHT)
+                // =========================================================================
+                $optionVolumes = [];
+                foreach ($allItems as $item) {
+                    if (!empty($item['modifiers'])) {
+                        foreach ($item['modifiers'] as $mod) {
+                            $optId = $mod['id'];
+                            $optionVolumes[$optId] = ($optionVolumes[$optId] ?? 0) + (float) ($mod['quantity'] ?? 1);
+                        }
+                    }
+                }
+
+                if (!empty($optionVolumes)) {
+                    // Reseta os pesos das opções de ingredientes para refletir a amostra recente
+                    DB::table('modifier_options')
+                        ->join('modifier_groups', 'modifier_options.modifier_group_id', '=', 'modifier_groups.id')
+                        ->whereIn('modifier_groups.type', ['option', 'ingredient'])
+                        ->update(['modifier_options.historical_weight' => 0]);
+
+                    // Grava os novos volumes minerados
+                    foreach ($optionVolumes as $optId => $volume) {
+                        DB::table('modifier_options')
+                            ->where('id', $optId)
+                            ->update(['historical_weight' => $volume]);
+                    }
+
+                    $this->info("📈 BI Atualizado: " . count($optionVolumes) . " opções de ingredientes receberam novos pesos estatísticos.");
+                }
+
+                // =========================================================================
+                // 4. O RANKING INTELIGENTE
+                // =========================================================================
+                $groupedByProduct = $allItems->groupBy('product_id');
+                $sortedProducts = $groupedByProduct->sortByDesc(fn($items) => $items->count());
+
+                $finalData = [];
+
+                foreach ($sortedProducts as $productId => $productItems) {
+                    if (count($finalData) >= 10) break;
+
+                    $requiresIngredients = in_array($productId, $productsWithIngredients);
+
+                    $validItems = $productItems->filter(function($item) use ($requiresIngredients) {
+                        if ($requiresIngredients && empty($item['modifiers'])) {
+                            return false;
+                        }
+                        return true;
+                    });
+
+                    if ($validItems->isEmpty()) {
+                        continue;
+                    }
+
+                    $combinations = $validItems->groupBy(function ($item) {
+                        if (empty($item['modifiers'])) {
+                            return $item['product_id'] . '_no_mods';
+                        }
+                        $modSignature = collect($item['modifiers'])
+                            ->map(fn($m) => $m['id'] . 'x' . ($m['quantity'] ?? 1))
+                            ->sort()
+                            ->implode('-');
+
+                        return $item['product_id'] . '_mods_' . $modSignature;
+                    });
+
+                    $topCombinations = $combinations->sortByDesc(fn($comb) => $comb->count())->take(3);
+
+                    foreach ($topCombinations as $signature => $items) {
+                        if (count($finalData) >= 10) break;
+
+                        $sampleItem = $items->first();
+
+                        $finalData[] = [
+                            'id' => $sampleItem['product_id'],
+                            'variant_signature' => $signature,
+                            'name' => $sampleItem['name'],
+                            'category_name' => $sampleItem['category_name'] ?? 'Mais Pedidos',
+                            'unit_price' => (float) $sampleItem['unit_price'],
+                            'status' => $sampleItem['status'] ?? 'active',
+                            'track_inventory' => (bool) ($sampleItem['track_inventory'] ?? false),
+                            'current_stock' => (float) ($sampleItem['current_stock'] ?? 99),
+                            'modifiers' => collect($sampleItem['modifiers'] ?? [])->map(fn($mod) => [
+                                'id' => $mod['id'],
+                                'name' => $mod['name'],
+                                'quantity' => (float) ($mod['quantity'] ?? 1),
+                                'price' => (float) ($mod['price'] ?? 0),
+                            ])->toArray(),
+                            'sales_count' => $items->count(),
+                            'base_product_sales' => $productItems->count(),
+                        ];
+                    }
+                }
+
+                // SALVA NO CACHE DO TENANT
+                Cache::store('file')->put('tenant_top_combinations', $finalData, now()->addHours(25));
+
+                // 🚀 AVISA O FRONTEND QUE O CARDÁPIO E O BI MUDARAM
+                broadcast(new \App\Events\CatalogUpdated());
+
+                if (empty($finalData)) {
+                    $this->warn("Nenhuma combinação formada.");
+                } else {
+                    $tableRows = [];
+                    foreach ($finalData as $index => $item) {
+                        $modsSummary = collect($item['modifiers'])->map(function ($m) {
+                            return (int)$m['quantity'] . 'x ' . $m['name'];
+                        })->implode(', ');
+
+                        $tableRows[] = [
+                            $index + 1,
+                            $item['name'],
+                            $modsSummary ?: 'Sem modificadores',
+                            $item['sales_count'] . 'x',
+                            $item['base_product_sales'] . 'x'
+                        ];
+                    }
+
+                    $this->table(
+                        ['#', 'Produto Base', 'Variação Extraída', 'Vendas da Variação', 'Volume Global do Produto'],
+                        $tableRows
+                    );
+
+                    $this->info("✅ Cache e BI Preditivo atualizados! Aplicativos notificados.");
+                }
+
+            } catch (\Exception $e) {
+                $this->error("Erro no processamento: " . $e->getMessage());
+            }
+
+            tenancy()->end();
+        }
+
+        return Command::SUCCESS;
+    }
+}

@@ -2,103 +2,106 @@
 
 namespace App\Filament\Resources\ProductModifiers\RelationManagers;
 
-use Filament\Schemas\Schema;
+use App\Filament\Resources\Ingredients\Schemas\IngredientForm;
+use App\Models\Product;
+use Filament\Actions;
 use Filament\Forms\Components as FormComponents;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Actions;
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Schemas\Components\Utilities\Get;
-use App\Filament\Resources\Ingredients\Schemas\IngredientForm;
 
 class OptionsRelationManager extends RelationManager
 {
     protected static string $relationship = "options";
-    protected static ?string $title = "Opções";
+    protected static ?string $title = "Opções do Grupo";
 
     public function form(Schema $schema): Schema
     {
         return $schema->schema([
             FormComponents\TextInput::make("name")
                 ->label("Nome da Opção")
+                ->placeholder("Ex: Sem Cebola, ou Bacon Extra, ou Carne Moída")
                 ->required()
-                ->maxLength(255),
+                ->maxLength(255)
+                ->columnSpan(2),
 
             FormComponents\TextInput::make("price")
                 ->label('Preço Adicional (R$)')
                 ->numeric()
                 ->default(0)
-                ->required(),
+                ->required()
+                ->columnSpan(1),
 
-            // 🚀 NOSSA NOVA INJEÇÃO AQUI: A QUANTIDADE MÁXIMA
             FormComponents\TextInput::make("max_quantity")
                 ->label("Qtd. Máxima")
                 ->numeric()
                 ->default(1)
-                ->helperText("Limite por pedido.")
-                ->required(),
+                ->helperText("Limite por pedido")
+                ->required()
+                ->columnSpan(1),
 
+            // CASO A: ADICIONAIS / RECHEIOS (DEBITAM DO ESTOQUE)
             FormComponents\Select::make("linked_product_id")
-                ->label("Abater Estoque de Qual Insumo? (Opcional)")
+                ->label("Adicional: Debitar Insumo do Estoque")
                 ->relationship(
                     name: "linkedProduct",
                     titleAttribute: "name",
-                    modifyQueryUsing: fn(Builder $query) => $query->whereIn(
-                        "type",
-                        ["ingredient", "manufactured"],
-                    ),
+                    modifyQueryUsing: fn (Builder $query) => $query->whereIn("type", ["ingredient", "manufactured"]),
                 )
                 ->searchable()
                 ->preload()
                 ->live()
-                ->createOptionForm(IngredientForm::getFormSchema())
-                ->createOptionAction(function (Actions\Action $action) {
-                    return $action
-                        ->modalHeading("Cadastrar Novo Insumo")
-                        ->modalSubmitActionLabel("Salvar e Selecionar")
-                        ->modalWidth("4xl");
-                }),
+                ->helperText("Use quando esta opção adicionar insumo (ex: Queijo Extra ou Recheio de Pastel).")
+                ->columnSpan(2),
 
             FormComponents\TextInput::make("linked_qty")
-                ->label("Quantidade da Porção")
+                ->label("Porção a Debitar")
                 ->numeric()
                 ->step("0.0001")
-                ->hidden(fn(Get $get) => blank($get("linked_product_id")))
-                ->suffix(function (Get $get) {
-                    $productId = $get("linked_product_id");
-                    if (blank($productId)) {
-                        return null;
-                    }
+                ->visible(fn (Get $get) => filled($get("linked_product_id")))
+                ->suffix(fn (Get $get) => Product::find($get("linked_product_id"))?->unit_of_measure)
+                ->columnSpan(2),
 
-                    $product = \App\Models\Product::find($productId);
-                    return $product
-                        ? strtoupper($product->unit_of_measure)
-                        : null;
-                }),
+            // CASO B: OBSERVAÇÕES / REMOÇÕES (ANULAM A BAIXA DA FICHA TÉCNICA)
+            FormComponents\Select::make("removes_ingredient_id")
+                ->label("Omissão: Anular Insumo da Ficha Técnica (Sem isto)")
+                ->relationship(
+                    name: "removesIngredient",
+                    titleAttribute: "name",
+                    modifyQueryUsing: fn (Builder $query) => $query->whereIn("type", ["ingredient", "manufactured"]),
+                )
+                ->searchable()
+                ->preload()
+                ->helperText("Se o cliente pedir este item (Ex: 'Sem Cebola'), o insumo selecionado NÃO será baixado no Kardex.")
+                ->columnSpan(4),
 
             FormComponents\TextInput::make("sort_order")
-                ->label("Ordem")
+                ->label("Ordem de Exibição")
                 ->numeric()
-                ->default(0),
+                ->default(0)
+                ->columnSpan(1),
 
             FormComponents\Toggle::make("show_on_pos")
-                ->label("Exibir no PDV / Salão (TeamApp)")
-                ->helperText("Visível para os garçons e atendentes.")
+                ->label("PDV / Salão")
                 ->default(true)
-                ->inline(false),
+                ->inline(false)
+                ->columnSpan(1),
 
             FormComponents\Toggle::make("show_on_customer_app")
-                ->label("Exibir no Delivery (App Cliente)")
-                ->helperText("Visível no cardápio online do cliente.")
+                ->label("Delivery")
                 ->default(true)
-                ->inline(false),
+                ->inline(false)
+                ->columnSpan(1),
 
             FormComponents\Toggle::make("is_active")
-                ->label("Ativo?")
+                ->label("Ativa?")
                 ->default(true)
-                ->inline(false),
-        ]);
+                ->inline(false)
+                ->columnSpan(1),
+        ])->columns(4);
     }
 
     public function table(Table $table): Table
@@ -111,88 +114,68 @@ class OptionsRelationManager extends RelationManager
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make("name")
-                    ->label("Nome da Opção")
-                    ->searchable(),
+                    ->label("Opção")
+                    ->searchable()
+                    ->weight("bold"),
 
                 Tables\Columns\TextColumn::make("price")
-                    ->label("Preço Venda")
+                    ->label("Preço Extra")
                     ->money("BRL")
-                    ->sortable()
-                    ->color("primary"),
+                    ->sortable(),
 
-                Tables\Columns\TextColumn::make("max_quantity")
-                    ->label("Máximo")
+                Tables\Columns\TextColumn::make("operation_type")
+                    ->label("Comportamento no Kardex")
+                    ->state(function ($record) {
+                        if ($record->removes_ingredient_id) {
+                            return '🚫 Anula: ' . ($record->removesIngredient?->name ?? 'Insumo');
+                        }
+                        if ($record->linked_product_id) {
+                            $qty = (float) ($record->linked_qty ?? 1);
+                            $uom = strtoupper($record->linkedProduct?->unit_of_measure ?? '');
+                            return "➕ Debita: {$qty} {$uom} ({$record->linkedProduct?->name})";
+                        }
+                        return '⚪ Informativo (Sem baixa)';
+                    })
                     ->badge()
-                    ->color("info")
-                    ->formatStateUsing(fn ($state) => $state . "x"),
-
-                Tables\Columns\TextColumn::make("linkedProduct.name")
-                    ->label("Insumo (Baixa)")
-                    ->searchable()
-                    ->placeholder("⚠️ Sem baixa")
-                    ->description(fn ($record) => $record->linked_product_id ? "Debita {$record->linked_qty} " . strtoupper($record->linkedProduct?->unit_of_measure ?? '') : 'Não movimenta estoque')
-                    ->color(fn ($record) => $record->linked_product_id ? 'success' : 'gray'),
-
-                Tables\Columns\TextColumn::make("linked_qty")
-                    ->label("Porção")
-                    ->formatStateUsing(function ($state, $record) {
-                        if (blank($state) || !$record->linked_product_id) {
-                            return "-";
-                        }
-
-                        $val = (float) $state;
-                        $formatted = rtrim(
-                            rtrim(number_format($val, 4, ",", "."), "0"),
-                            ",",
-                        );
-                        if ($formatted === "") {
-                            $formatted = "0";
-                        }
-
-                        return $formatted .
-                            " " .
-                            strtoupper(
-                                $record->linkedProduct->unit_of_measure ?? "",
-                            );
+                    ->color(function ($record) {
+                        if ($record->removes_ingredient_id) return 'danger';
+                        if ($record->linked_product_id) return 'success';
+                        return 'gray';
                     }),
 
-                Tables\Columns\TextColumn::make("cost")
-                    ->label("Custo da Porção")
+                Tables\Columns\TextColumn::make("portion_cost")
+                    ->label("Custo Unit.")
                     ->state(function ($record) {
-                        if (
-                            !$record->linked_product_id ||
-                            blank($record->linked_qty)
-                        ) {
-                            return null;
+                        if ($record->linked_product_id && $record->linkedProduct) {
+                            $unitCost = \App\Services\Catalog\ProductCostingService::calculateBaseCost($record->linkedProduct);
+                            return (float) $record->linked_qty * $unitCost;
                         }
-
-                        $unitCost = \App\Services\Catalog\ProductCostingService::calculateBaseCost(
-                            $record->linkedProduct,
-                        );
-
-                        $portionCost = $unitCost * (float) $record->linked_qty;
-
-                        return $portionCost;
+                        if ($record->removes_ingredient_id && $record->removesIngredient) {
+                            return \App\Services\Catalog\ProductCostingService::calculateBaseCost($record->removesIngredient);
+                        }
+                        return null;
                     })
                     ->money("BRL")
                     ->placeholder("-")
-                    ->color("warning"),
+                    ->color(fn ($record) => $record->removes_ingredient_id ? 'danger' : 'warning'),
 
-                Tables\Columns\ToggleColumn::make("show_on_pos")
-                    ->label("PDV / Salão"),
-
-                Tables\Columns\ToggleColumn::make("show_on_customer_app")
-                    ->label("Delivery"),
+                Tables\Columns\TextColumn::make("historical_weight")
+                    ->label("Demanda Recente")
+                    ->numeric(0)
+                    ->suffix(" pedidos")
+                    ->badge()
+                    ->color("info")
+                    ->sortable(),
 
                 Tables\Columns\ToggleColumn::make("is_active")->label("Ativa"),
             ])
             ->defaultSort("sort_order")
             ->headerActions([Actions\CreateAction::make()])
-            ->recordActions([
+            ->actions([
                 Actions\EditAction::make(),
                 Actions\DeleteAction::make(),
             ])
-            ->toolbarActions([
+            ->bulkActions([
                 Actions\BulkActionGroup::make([
                     Actions\DeleteBulkAction::make(),
                 ]),

@@ -77,7 +77,7 @@ class SuppliersTable
                     ]),
             ])
             ->actions([
-                Tables\Actions\EditAction::make()->iconButton(),
+                \Filament\Actions\EditAction::make()->iconButton(),
             ])
             ->bulkActions([
                 \Filament\Actions\BulkActionGroup::make([

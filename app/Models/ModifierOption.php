@@ -3,26 +3,32 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * @property-read \App\Models\ProductModifier|null $group
- * @property-read \App\Models\Product|null $linkedProduct
- * @method static \Illuminate\Database\Eloquent\Builder<static>|ModifierOption newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|ModifierOption newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|ModifierOption query()
- * @mixin \Illuminate\Database\Eloquent\Builder
- */
 class ModifierOption extends Model
 {
     protected $guarded = [];
-    protected $casts = ['price' => 'float'];
 
-    public function group()
+    protected $casts = [
+        'price'             => 'float',
+        'historical_weight' => 'float',
+        'is_active'         => 'boolean',
+        'show_on_pos'       => 'boolean',
+        'show_on_customer_app' => 'boolean',
+    ];
+
+    public function group(): BelongsTo
     {
         return $this->belongsTo(ProductModifier::class, 'modifier_group_id');
     }
-    public function linkedProduct()
+
+    public function linkedProduct(): BelongsTo
     {
-        return $this->belongsTo(Product::class, 'linked_product_id'); // Abate estoque deste cara!
+        return $this->belongsTo(Product::class, 'linked_product_id');
+    }
+
+    public function removesIngredient(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'removes_ingredient_id');
     }
 }

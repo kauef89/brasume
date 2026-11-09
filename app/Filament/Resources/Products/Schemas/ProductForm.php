@@ -2,20 +2,20 @@
 
 namespace App\Filament\Resources\Products\Schemas;
 
-use App\Enums\ProductStatus;
 use App\Enums\ProductType;
 use App\Enums\UnitOfMeasure;
+use App\Filament\Resources\Products\Schemas\Sections\BasicSection;
+use App\Filament\Resources\Products\Schemas\Sections\ComboSection;
+use App\Filament\Resources\Products\Schemas\Sections\FiscalSection;
+use App\Filament\Resources\Products\Schemas\Sections\ModifiersDemandSection;
+use App\Filament\Resources\Products\Schemas\Sections\PriceAndStockSection;
+use App\Filament\Resources\Products\Schemas\Sections\ProductionSection;
+use App\Filament\Resources\Products\Schemas\Sections\WmsSection;
+use App\Models\Category;
 use Filament\Forms;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
-use App\Models\Category;
-use App\Filament\Resources\Products\Schemas\Sections\BasicSection;
-use App\Filament\Resources\Products\Schemas\Sections\PriceAndStockSection;
-use App\Filament\Resources\Products\Schemas\Sections\ProductionSection;
-use App\Filament\Resources\Products\Schemas\Sections\FiscalSection;
-use App\Filament\Resources\Products\Schemas\Sections\ComboSection;
-use App\Filament\Resources\Products\Schemas\Sections\WmsSection;
 
 class ProductForm
 {
@@ -28,6 +28,7 @@ class ProductForm
             FiscalSection::make(),
             WmsSection::make(),
             ComboSection::make(),
+            ModifiersDemandSection::make(), // 🚀 Seção de Demanda, CMV Real e Omissões
         ];
     }
 
@@ -36,15 +37,12 @@ class ProductForm
         return $schema->schema(self::getFormSchema());
     }
 
-    /**
-     * Formulário enxuto utilizado em modais rápidos (Ex: Importação de NFe)
-     */
     public static function getQuickCreateSchema(): array
     {
         return [
             Forms\Components\TextInput::make("name")
                 ->label("Nome do Produto")
-                ->default(fn(Get $get) => $get("xml_name"))
+                ->default(fn (Get $get) => $get("xml_name"))
                 ->required(),
 
             Forms\Components\Select::make("type")
@@ -52,24 +50,19 @@ class ProductForm
                 ->options(ProductType::class)
                 ->default(ProductType::INGREDIENT->value)
                 ->live()
-                ->afterStateUpdated(fn(Set $set) => $set("category_id", null))
+                ->afterStateUpdated(fn (Set $set) => $set("category_id", null))
                 ->required(),
 
             Forms\Components\Select::make("category_id")
                 ->label("Categoria")
                 ->options(function (Get $get) {
                     $rawType = $get("type");
+                    if (!$rawType) return [];
 
-                    if (!$rawType) {
-                        return [];
-                    }
-
-                    // 🚀 Normalização segura: aceita tanto Enum quanto String
-                    $enumType = $rawType instanceof \App\Enums\ProductType
+                    $enumType = $rawType instanceof ProductType
                         ? $rawType
-                        : \App\Enums\ProductType::tryFrom((string) $rawType);
+                        : ProductType::tryFrom((string) $rawType);
 
-                    // Puxa 'external', 'internal' ou 'supply' via método de domínio
                     $categoryGroup = $enumType?->defaultCategoryType() ?? 'internal';
 
                     return Category::query()

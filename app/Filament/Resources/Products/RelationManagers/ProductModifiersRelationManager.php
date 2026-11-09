@@ -2,19 +2,16 @@
 
 namespace App\Filament\Resources\Products\RelationManagers;
 
-use Filament\Forms\Form;
-use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Forms\Components\CheckboxList;
-
-// 🚀 IMPORTAÇÕES CORRETAS PARA FILAMENT V4 (Arquitetura Unificada)
+use App\Enums\ModifierType;
 use Filament\Actions\Action;
 use Filament\Actions\AttachAction;
+use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DetachAction;
 use Filament\Actions\DetachBulkAction;
-use Filament\Actions\BulkActionGroup;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class ProductModifiersRelationManager extends RelationManager
 {
@@ -35,15 +32,8 @@ class ProductModifiersRelationManager extends RelationManager
                 TextColumn::make('type')
                     ->label('Tipo')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'option' => 'info',
-                        'ingredient' => 'info',
-                        'add_on' => 'success',
-                        'removal' => 'danger',
-                        default => 'gray',
-                    }),
+                    ->sortable(),
 
-                // 🚀 INDICADOR DE EXCEÇÕES LOCAIS
                 TextColumn::make('pivot.excluded_options')
                     ->label('Opções Ocultadas Neste Produto')
                     ->state(function ($record) {
@@ -55,13 +45,11 @@ class ProductModifiersRelationManager extends RelationManager
                     ->color(fn ($state) => $state === 'Todas Disponíveis' ? 'success' : 'warning'),
             ])
             ->headerActions([
-                // 🚀 USANDO A AÇÃO NATIVA DO V4
                 AttachAction::make()
                     ->label('Vincular Novo Grupo')
                     ->preloadRecordSelect(),
             ])
             ->actions([
-                // 🚀 A MÁGICA LOCAL: Ligar/Desligar itens apenas para este produto
                 Action::make('toggle_options')
                     ->label('Ocultar Opções')
                     ->icon('heroicon-o-adjustments-horizontal')
@@ -69,7 +57,6 @@ class ProductModifiersRelationManager extends RelationManager
                     ->modalHeading('Ocultar Opções Neste Produto')
                     ->modalDescription('Desmarque as opções que NÃO devem aparecer quando o cliente for comprar este produto específico.')
                     ->form(function ($record) {
-                        // Busca todas as opções cadastradas neste grupo
                         $options = $record->options()->pluck('name', 'id')->toArray();
 
                         return [
@@ -77,24 +64,19 @@ class ProductModifiersRelationManager extends RelationManager
                                 ->label('Opções Disponíveis')
                                 ->options($options)
                                 ->default(function () use ($record, $options) {
-                                    // Puxa as que estão excluídas na Pivot
                                     $excluded = json_decode($record->pivot->excluded_options ?? '[]', true) ?? [];
-                                    // Marca as que NÃO estão excluídas
                                     return array_diff(array_keys($options), $excluded);
                                 })
-                                ->columns(2)
+                                ->columns(2),
                         ];
                     })
                     ->action(function ($record, array $data, $livewire) {
                         $active = $data['active_options'] ?? [];
                         $all = $record->options()->pluck('id')->toArray();
-
-                        // O que sobrou (não está ativo) vai para o array de excluídos
                         $excluded = array_values(array_diff($all, $active));
 
-                        // Salva a exceção na Pivot do Produto!
                         $livewire->getOwnerRecord()->modifiers()->updateExistingPivot($record->id, [
-                            'excluded_options' => json_encode($excluded)
+                            'excluded_options' => json_encode($excluded),
                         ]);
                     }),
 
