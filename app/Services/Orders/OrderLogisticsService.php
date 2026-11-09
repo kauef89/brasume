@@ -54,7 +54,7 @@ class OrderLogisticsService
                 }
 
                 $order->delivery_fee = 0;
-                $order->driver_id = null;
+                $order->courier_id = null;
                 $order->address_id = null;
                 $order->address_snapshot = null;
                 $order->address = null;
@@ -65,7 +65,7 @@ class OrderLogisticsService
                 $order->dining_table_id = null;
                 $order->table_number = null;
                 $order->delivery_fee = 0;
-                $order->driver_id = null;
+                $order->courier_id = null;
                 $order->address_id = null;
                 $order->address_snapshot = null;
                 $order->address = null;

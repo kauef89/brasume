@@ -66,19 +66,25 @@ class OrderLogisticsController extends Controller
     public function assignCourier(Order $order, Request $request)
     {
         $validated = $request->validate([
-            'driver_id'            => 'required|integer|exists:users,id',
+            'driver_id'            => 'nullable|integer',
+            'courier_id'           => 'nullable|integer',
             'delivery_distance_km' => 'nullable|numeric|min:0',
         ]);
 
         try {
-            $userId = (int) $validated['driver_id'];
+            $rawId = (int) ($validated['courier_id'] ?? $validated['driver_id']);
+            $userFound = \App\Models\User::find($rawId);
+            $courier = $userFound?->employee ?? \App\Models\Employee::find($rawId);
+            $userId = $courier?->user_id ?? $rawId;
 
             // 1. Atualização via serviço de logística operacional existente
             $this->logisticsService->assignCourier($order, $userId);
 
             // 2. Localiza o registo de Employee correspondente ao User
-            $courier = Employee::where('user_id', $userId)->first()
-                ?? Employee::where('id', $userId)->first();
+            $userFound = User::find($userId);
+            $courier = ($userFound && $userFound->employee_id)
+                ? Employee::find($userFound->employee_id)
+                : Employee::find($userId);
 
             if ($courier) {
                 if (isset($validated['delivery_distance_km'])) {

@@ -27,8 +27,8 @@ class OrderStatusService
         broadcast(new OrderUpdated($order->fresh()));
 
         if ($newStatus === 'dispatched' || $newStatus === 'out_for_delivery') {
-            if ($order->driver_id) {
-                $driver = User::find($order->driver_id);
+            $driver = $order->courier?->user ?? ($order->driver_id ? User::find($order->driver_id) : null);
+            if ($driver) {
                 if ($driver) {
                     $driver->notify(new OrderDispatchedNotification($order));
                 }
@@ -117,8 +117,8 @@ class OrderStatusService
         if ($newStatus === 'ready') {
             if ($order->type === 'counter') {
                 return "✅ Tudo pronto! Já pode vir retirar o seu pedido no balcão.";
-            } elseif ($order->type === 'delivery' && $order->driver_id) {
-                $driver = User::find($order->driver_id);
+            } elseif ($order->type === 'delivery' && ($order->courier_id || $order->driver_id)) {
+                $driver = $order->courier?->user ?? User::find($order->driver_id);
                 if ($driver) {
                     $driver->notify(new OrderStatusUpdated($order, "🛵 O pedido de {$order->customer_name} está pronto no balcão para entregar!"));
                 }

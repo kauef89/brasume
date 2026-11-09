@@ -441,8 +441,24 @@ const {
 } = useOrderDetailsOrchestrator(props, activeItemsExploded);
 
 const assignedCourier = computed(() => {
-    if (!props.order?.driver_id) return null;
-    return props.couriers.find(c => c.id === props.order.driver_id);
+    const driverId = props.order?.driver_id;
+    const courierId = props.order?.courier_id;
+
+    if (driverId) {
+        const byDriver = props.couriers.find(c => c.id === driverId);
+        if (byDriver) return byDriver;
+    }
+
+    if (courierId) {
+        const byCourier = props.couriers.find(c => c.employee_id === courierId || c.id === courierId);
+        if (byCourier) return byCourier;
+    }
+
+    if (props.order?.courier) {
+        return props.order.courier;
+    }
+
+    return null;
 });
 
 const pendingDispatch = ref(false);

@@ -218,7 +218,8 @@ class AcquirerReconciliationEngine
 
             // 🎯 B. Vínculo de Usuário / Entregador (Até 20 pts)
             if ($device?->default_user_id) {
-                if ($scope === 'delivery' && $order?->driver_id === $device->default_user_id) {
+                $courierUserId = $order?->courier?->user_id ?? $order?->courier?->user?->id ?? $order?->driver_id;
+                if ($scope === 'delivery' && $courierUserId === $device->default_user_id) {
                     $score += 20;
                 } elseif (in_array($scope, ['counter', 'waiter']) && $order?->user_id === $device->default_user_id) {
                     $score += 20;

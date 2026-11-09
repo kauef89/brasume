@@ -33,7 +33,7 @@
             >
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-                         :class="(order?.driver_id === courier.id || order?.courier_id === courier.id) ? 'bg-primary-500 text-white shadow-sm' : 'bg-surface-2 border border-surface-border text-surface-muted'">
+                         :class="(order?.driver_id === courier.id || order?.courier_id === courier.id || order?.courier_id === courier.employee_id) ? 'bg-primary-500 text-white shadow-sm' : 'bg-surface-2 border border-surface-border text-surface-muted'">
                         <i class="pi pi-truck text-sm"></i>
                     </div>
                     <div class="flex flex-col flex-1 min-w-0">

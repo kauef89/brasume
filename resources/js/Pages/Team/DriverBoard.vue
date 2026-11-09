@@ -186,7 +186,7 @@ const myDeliveries = computed(() => {
     const userId = authUser.value.id;
     return localOrders.value.filter(o =>
         o.type === 'delivery' &&
-        Number(o.driver_id) === Number(userId) &&
+        (Number(o.driver_id) === Number(userId) || Number(o.courier_id) === Number(authUser.value?.employee_id) || Number(o.courier?.user_id) === Number(userId)) &&
         o.status !== 'closed' &&
         o.status !== 'cancelled' && o.status !== 'delivered'
     );
@@ -196,7 +196,7 @@ const myDeliveries = computed(() => {
 const readyDeliveries = computed(() => {
     return localOrders.value.filter(o =>
         o.type === 'delivery' &&
-        !o.driver_id &&
+        !o.driver_id && !o.courier_id &&
         o.status === 'ready'
     );
 });
@@ -208,7 +208,7 @@ const tabOptions = computed(() => [
 ]);
 
 const assignToMe = (orderId) => {
-    router.post(route('operations.orders.assign-courier', orderId), { driver_id: authUser.value.id }, {
+    router.post(route('operations.orders.assign-courier', orderId), { courier_id: authUser.value.employee_id || authUser.value.id, driver_id: authUser.value.id }, {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => toast.add({
