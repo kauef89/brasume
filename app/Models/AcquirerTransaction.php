@@ -34,6 +34,11 @@ class AcquirerTransaction extends Model
         return $this->belongsTo(Payment::class);
     }
 
+    public function payments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Payment::class, 'acquirer_transaction_id');
+    }
+
     public function accountReceivable(): BelongsTo
     {
         return $this->belongsTo(AccountReceivable::class);

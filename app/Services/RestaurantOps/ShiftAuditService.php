@@ -50,20 +50,36 @@ class ShiftAuditService
         $sysPix = 0.0;
         $sysVoucher = 0.0;
 
-        foreach ($payments as $p) {
+                foreach ($payments as $p) {
             $engine = $p->paymentMethod?->engine_type;
-            $engineVal = is_object($engine) ? $engine->value : (string) $engine;
-            $name = mb_strtolower($p->method ?? '');
+            $engineEnum = $engine instanceof \App\Enums\PaymentEngineType 
+                ? $engine 
+                : \App\Enums\PaymentEngineType::tryFrom((string) $engine);
 
-            if ($engineVal === 'money' || $engineVal === 'loss' || str_contains($name, 'dinheiro') || str_contains($name, 'cash') || str_contains($name, 'consumo') || str_contains($name, 'interno')) {
+            // Ignora dinheiro físico, fiado/convênio e abatimentos/cortesias/consumo RH
+            if (!$engineEnum || $engineEnum->isCash() || $engineEnum->isDeductibleOrInternal() || $engineEnum === \App\Enums\PaymentEngineType::CUSTOMER_CREDIT) {
                 continue;
             }
 
-            if (str_contains($name, 'voucher') || str_contains($name, 'refei') || str_contains($name, 'alimenta') || $engineVal === 'voucher') {
-                $sysVoucher += (float) $p->amount;
-            } elseif (str_contains($name, 'pix') && (str_contains($name, 'm') || str_contains($name, 'pos') || $engineVal === 'pix_machine')) {
+            // Ignora Pix por Chave Estática ou API Bancária (são contas bancárias diretas, não passam por maquininhas POS)
+            if ($engineEnum === \App\Enums\PaymentEngineType::PIX_STATIC || $engineEnum === \App\Enums\PaymentEngineType::BANK_API) {
+                continue;
+            }
+
+            // Pix na Maquininha (QR Code impresso/gerado no terminal SiTef/APOS)
+            if ($engineEnum === \App\Enums\PaymentEngineType::PIX_MACHINE) {
                 $sysPix += (float) $p->amount;
-            } else {
+                continue;
+            }
+
+            // Vouchers / Vale-Alimentação
+            if ($engineEnum === \App\Enums\PaymentEngineType::ALLOWANCE) {
+                $sysVoucher += (float) $p->amount;
+                continue;
+            }
+
+            // Cartões de Débito, Crédito e Terminais Físicos
+            if (in_array($engineEnum, [\App\Enums\PaymentEngineType::POS_MANUAL, \App\Enums\PaymentEngineType::SMART_POS, \App\Enums\PaymentEngineType::TEF])) {
                 $sysCards += (float) $p->amount;
             }
         }

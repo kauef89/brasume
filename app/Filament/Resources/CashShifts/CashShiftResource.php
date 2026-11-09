@@ -39,6 +39,7 @@ class CashShiftResource extends Resource
         return [
             // Como é ManageRecords, só precisamos do index!
             'index' => Pages\ManageCashShifts::route('/'),
+            'audit' => Pages\AuditCashShift::route('/{record}/auditoria'),
         ];
     }
 }

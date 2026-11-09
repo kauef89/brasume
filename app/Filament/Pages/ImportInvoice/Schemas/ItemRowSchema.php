@@ -256,17 +256,36 @@ class ItemRowSchema
         return Placeholder::make("total_entrada")
             ->label("Entrada Real")
             ->content(function (Get $get) {
-                if (!$get("product_id")) {
+                $productId = $get("product_id");
+                if (!$productId) {
                     return new HtmlString('<span class="text-gray-400">-</span>');
                 }
-                $total = ((float) ($get("xml_qty") ?: 0)) * ((float) ($get("conversion_factor") ?: 1));
-                $uom = Product::find($get("product_id"))?->unit_of_measure ?? "UN";
+                $factor = (float) ($get("conversion_factor") ?: 1);
+                if ($factor <= 0) $factor = 1.0;
+
+                $total = ((float) ($get("xml_qty") ?: 0)) * $factor;
+                $product = Product::find($productId);
+                $uom = $product?->unit_of_measure ?? "UN";
                 $formattedTotal = Number::format($total, maxPrecision: 4);
+
+                // Cálculo preventivo do custo unitário resultante
+                $xmlCost = (float) ($get("xml_cost") ?: 0);
+                $unitCostResult = round($xmlCost / $factor, 4);
+
+                // Compara com a última compra
+                $lastCost = (float) (\App\Models\ProductCostHistory::where('product_id', $productId)->latest('id')->value('unit_cost') ?? 0);
+                $spikeAlert = "";
+                if ($lastCost > 0 && $unitCostResult > 0) {
+                    $variationPct = (($unitCostResult - $lastCost) / $lastCost) * 100;
+                    if ($variationPct > 50) {
+                        $spikeAlert = "<div class='text-[9px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-800 px-1.5 py-0.5 rounded mt-1' title='Última compra foi R$ " . number_format($lastCost, 2, ',', '.') . "'>🚨 Custo R$ " . number_format($unitCostResult, 2, ',', '.') . " (+" . number_format($variationPct, 0) . "%)! Verifique Fator</div>";
+                    }
+                }
 
                 $receiptId = $get('goods_receipt_item_id');
                 $badge = $receiptId ? "<span class='text-[9px] font-black uppercase text-amber-500 bg-amber-500/10 px-1 py-0.5 rounded'>Conciliação</span>" : "";
 
-                return new HtmlString("<div class='flex flex-col gap-0.5 mt-1'><div class='flex items-baseline gap-1'><span class='text-sm font-black text-primary-600 dark:text-primary-400'>{$formattedTotal}</span><span class='text-xs font-medium text-gray-500'>{$uom}</span></div>{$badge}</div>");
+                return new HtmlString("<div class='flex flex-col gap-0.5 mt-1'><div class='flex items-baseline gap-1'><span class='text-sm font-black text-primary-600 dark:text-primary-400'>{$formattedTotal}</span><span class='text-xs font-medium text-gray-500'>{$uom}</span></div>{$badge}{$spikeAlert}</div>");
             })
             ->visible(fn(Get $get) => ($get("destination_type") ?? 'stock') === 'stock')
             ->columnSpan(1);

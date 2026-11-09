@@ -83,9 +83,9 @@ class Payment extends Model
         return $this->status === 'cancelled';
     }
 
-    public function acquirerTransaction(): HasOne
+    public function acquirerTransaction(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
-        return $this->hasOne(AcquirerTransaction::class);
+        return $this->belongsTo(AcquirerTransaction::class, 'acquirer_transaction_id');
     }
 
     public function paymentItems(): \Illuminate\Database\Eloquent\Relations\HasMany

@@ -13,7 +13,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
-use Filament\Forms\Components\Section;
+use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -60,7 +60,7 @@ class CashShiftTable
                     ->label('Auditoria / Integridade')
                     ->badge()
                     ->state(function (CashShift $record): string {
-                        $isClosed = $record->status === ShiftStatus::CLOSED || $record->status?->value === 'closed' || $record->status === 'closed';
+                        $isClosed = ($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'closed';
                         if (! $isClosed) {
                             return 'Em Operação';
                         }
@@ -102,7 +102,7 @@ class CashShiftTable
                         };
                     })
                     ->description(function (CashShift $record): ?string {
-                        if ($record->status === ShiftStatus::OPEN || $record->status?->value === 'open' || $record->status === 'open') {
+                        if (($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'open') {
                             return null;
                         }
 
@@ -124,14 +124,14 @@ class CashShiftTable
                     ->label('Dif. Cofre')
                     ->money('BRL')
                     ->color(fn ($state) => $state < 0 ? 'danger' : ($state > 0 ? 'info' : 'gray'))
-                    ->visible(fn ($record) => $record && ($record->status === ShiftStatus::CLOSED || $record->status?->value === 'closed' || $record->status === 'closed'))
+                    ->visible(fn ($record) => $record && (($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'closed'))
                     ->sortable(),
 
                 TextColumn::make('apos_breakage_amount')
                     ->label('Dif. Adquirente')
                     ->money('BRL')
                     ->color(fn ($state) => abs((float) $state) >= 0.05 ? 'warning' : 'gray')
-                    ->visible(fn ($record) => $record && ($record->status === ShiftStatus::CLOSED || $record->status?->value === 'closed' || $record->status === 'closed'))
+                    ->visible(fn ($record) => $record && (($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'closed'))
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('opened_at', 'desc')
@@ -159,7 +159,7 @@ class CashShiftTable
                     ->label('Suprimento')
                     ->icon('heroicon-m-arrow-down-tray')
                     ->color('success')
-                    ->visible(fn (CashShift $record) => $record->status === ShiftStatus::OPEN || $record->status?->value === 'open' || $record->status === 'open')
+                    ->visible(fn (CashShift $record) => ($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'open')
                     ->form([
                         TextInput::make('amount')->label('Valor (R$)')->numeric()->prefix('R$')->required(),
                         TextInput::make('description')->label('Motivo')->default('Troco extra / Suprimento')->required(),
@@ -181,7 +181,7 @@ class CashShiftTable
                     ->label('Sangria')
                     ->icon('heroicon-m-arrow-up-tray')
                     ->color('warning')
-                    ->visible(fn (CashShift $record) => $record->status === ShiftStatus::OPEN || $record->status?->value === 'open' || $record->status === 'open')
+                    ->visible(fn (CashShift $record) => ($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'open')
                     ->form([
                         TextInput::make('amount')->label('Valor (R$)')->numeric()->prefix('R$')->required(),
                         TextInput::make('description')->label('Motivo')->default('Retirada de excesso / Sangria')->required(),
@@ -203,7 +203,7 @@ class CashShiftTable
                     ->label('Fechar Caixa')
                     ->icon('heroicon-m-lock-closed')
                     ->color('danger')
-                    ->visible(fn (CashShift $record) => $record->status === ShiftStatus::OPEN || $record->status?->value === 'open' || $record->status === 'open')
+                    ->visible(fn (CashShift $record) => ($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'open')
                     ->form(function (CashShift $record) {
                         $entradas = Transaction::where('bank_account_id', $record->bank_account_id)
                             ->where('transaction_date', '>=', $record->opened_at)
@@ -271,113 +271,8 @@ class CashShiftTable
                     ->label('Auditoria')
                     ->icon('heroicon-m-magnifying-glass-circle')
                     ->color(fn (CashShift $record) => $record->has_breakage || abs((float) $record->difference) >= 0.05 ? 'danger' : 'gray')
-                    ->visible(fn (CashShift $record) => $record->status === ShiftStatus::CLOSED || $record->status?->value === 'closed' || $record->status === 'closed')
-                    ->modalHeading(fn (CashShift $record) => "Auditoria de Fechamento - Turno #{$record->id}")
-                    ->modalDescription('Diagnóstico cruzado entre dinheiro em cofre, recebimentos em maquininhas (POS) e pedidos.')
-                    ->modalSubmitActionLabel('Salvar Parecer / Aplicar')
-                    ->form(function (CashShift $record) {
-                        /** @var ShiftAuditService $auditService */
-                        $auditService = app(ShiftAuditService::class);
-                        $diag = $auditService->diagnose(
-                            $record,
-                            (float) $record->closing_balance_actual,
-                            $record->terminal_settlements ?? []
-                        );
-
-                        $cashDiff = (float) $diag['cash_difference'];
-                        $elecDiff = (float) $diag['electronic_difference'];
-                        $suggestion = $diag['suggestion'];
-
-                        $diffHtml = "<div class='grid grid-cols-2 gap-4 p-4 rounded-xl border " . ($diag['has_discrepancy'] ? 'bg-danger-50 border-danger-200 dark:bg-danger-950/30 dark:border-danger-800' : 'bg-success-50 border-success-200 dark:bg-success-950/30 dark:border-success-800') . "'>";
-                        $diffHtml .= "<div><span class='text-xs uppercase font-bold text-gray-500'>Cofre Físico (Dinheiro):</span><br><strong class='text-base " . ($cashDiff < 0 ? 'text-danger-600' : ($cashDiff > 0 ? 'text-info-600' : 'text-success-600')) . "'>R$ " . number_format($cashDiff, 2, ',', '.') . "</strong></div>";
-                        $diffHtml .= "<div><span class='text-xs uppercase font-bold text-gray-500'>Maquininhas (POS / Fitas):</span><br><strong class='text-base " . ($elecDiff < 0 ? 'text-danger-600' : ($elecDiff > 0 ? 'text-info-600' : 'text-success-600')) . "'>R$ " . number_format($elecDiff, 2, ',', '.') . "</strong></div>";
-                        $diffHtml .= "</div>";
-
-                        $fields = [
-                            Placeholder::make('resumo_financeiro')
-                                ->label('Resultado da Conferência')
-                                ->content(new HtmlString($diffHtml)),
-                        ];
-
-                        if ($suggestion) {
-                            $sugHtml = "<div class='p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-lg text-amber-900 dark:text-amber-200 text-xs leading-relaxed'>";
-                            $sugHtml .= "<strong>💡 Inteligência Detectou Troca de Modalidade:</strong><br>";
-                            $sugHtml .= e($suggestion['reason']) . "<br>";
-                            $sugHtml .= "<span class='font-semibold underline'>Ação Sugerida:</span> Alterar o Pedido #{$suggestion['order_id']} de <strong>{$suggestion['current_method_name']}</strong> para <strong>{$suggestion['suggested_method_name']}</strong>.";
-                            $sugHtml .= "</div>";
-
-                            $fields[] = Section::make('Sugestão de Correção Automática')
-                                ->schema([
-                                    Placeholder::make('sugestao_troca')
-                                        ->label('')
-                                        ->content(new HtmlString($sugHtml)),
-
-                                    Radio::make('apply_suggested_fix')
-                                        ->label('Deseja que o sistema corrija este lançamento agora?')
-                                        ->options([
-                                            'yes' => 'Sim, aplicar correção de modalidade no pedido',
-                                            'no'  => 'Não, manter como está e apenas justificar',
-                                        ])
-                                        ->default('yes')
-                                        ->required(),
-                                ]);
-                        }
-
-                        $fields[] = Section::make('Parecer do Gestor / Ciência de Fechamento')
-                            ->schema([
-                                Textarea::make('manager_notes')
-                                    ->label('Justificativa / Registro de Ciência do Turno')
-                                    ->placeholder('Ex: Conferido com o operador. Quebra real de cofre devido a erro de troco / comprovante anexado.')
-                                    ->rows(3)
-                                    ->default($record->notes),
-                            ]);
-
-                        return $fields;
-                    })
-                    ->action(function (CashShift $record, array $data) {
-                        /** @var ShiftAuditService $auditService */
-                        $auditService = app(ShiftAuditService::class);
-                        $operatorName = auth()->user()?->name ?? 'Gestor Administrativo';
-
-                        // 1. Aplica a correção de meio trocado se confirmado pelo usuário
-                        if (($data['apply_suggested_fix'] ?? 'no') === 'yes') {
-                            $diag = $auditService->diagnose(
-                                $record,
-                                (float) $record->closing_balance_actual,
-                                $record->terminal_settlements ?? []
-                            );
-
-                            if (! empty($diag['suggestion']['payment_id']) && ! empty($diag['suggestion']['suggested_method_id'])) {
-                                $auditService->applyCorrection(
-                                    $record,
-                                    (int) $diag['suggestion']['payment_id'],
-                                    (int) $diag['suggestion']['suggested_method_id'],
-                                    $operatorName
-                                );
-
-                                Notification::make()
-                                    ->title('Correção Aplicada com Sucesso!')
-                                    ->body("O meio de pagamento do pedido #{$diag['suggestion']['order_id']} foi retificado e a quebra foi eliminada.")
-                                    ->success()
-                                    ->send();
-                            }
-                        }
-
-                        // 2. Salva o parecer do gestor e atualiza as notas
-                        if (! empty($data['manager_notes']) && $data['manager_notes'] !== $record->notes) {
-                            $timestamp = now()->format('d/m/Y H:i');
-                            $auditNote = "Ciência {$timestamp} por {$operatorName}: " . trim($data['manager_notes']);
-
-                            $record->notes = $record->notes ? $record->notes . " | " . $auditNote : $auditNote;
-                            $record->save();
-
-                            Notification::make()
-                                ->title('Parecer Registrado!')
-                                ->body('Ciência e justificativa do turno gravadas no histórico.')
-                                ->info()
-                                ->send();
-                        }
-                    }),
+                    ->visible(fn (CashShift $record) => ($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'closed')
+                    ->url(fn (CashShift $record) => \App\Filament\Resources\CashShifts\CashShiftResource::getUrl('audit', ['record' => $record])),
 
                 ViewAction::make()->iconButton(),
             ]);
