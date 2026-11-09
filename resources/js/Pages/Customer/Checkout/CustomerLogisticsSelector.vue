@@ -147,7 +147,7 @@ const availableChannels = computed(() => {
 
     const options = [];
     if (channels.includes('delivery')) {
-        options.push({ label: 'Delivery', value: 'delivery', icon: 'pi-truck' });
+        options.push({ label: 'Entrega', value: 'delivery', icon: 'pi-truck' });
     }
     if (channels.includes('pickup') || channels.includes('counter') || channels.includes('takeaway')) {
         options.push({ label: 'Retirada', value: 'pickup', icon: 'pi-shopping-bag' });
@@ -174,7 +174,7 @@ const selectChannel = (type) => {
 
     if (type === 'pickup' || type === 'counter') {
         activeAddress.value = null;
-        emit('routing-change', { type: 'counter', address: null });
+        emit('routing-change', { type: 'pickup', address: null });
     } else if (type === 'delivery') {
         if (!activeAddress.value && customerAddresses.value.length > 0) {
             const defaultAddr = customerAddresses.value.find(a => a.is_default) || customerAddresses.value[0];
@@ -191,7 +191,7 @@ const confirmDeliveryStep = () => {
 };
 
 const confirmCounterStep = () => {
-    emit('apply', { type: 'counter', address: null });
+    emit('apply', { type: 'pickup', address: null });
 };
 
 // ==============================================================

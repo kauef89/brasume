@@ -334,7 +334,7 @@ export function useTeamSubmit(state) {
 
         const tableId = currentMeta.dining_table_id || currentMeta.table_id || currentMeta.table?.id;
         const hasTable = currentType === 'table' && Boolean(tableId);
-        const hasCounter = currentType === 'counter' && Boolean(currentMeta.customer || currentMeta.customer_name || currentMeta.identifier);
+        const hasCounter = (currentType === 'counter' || currentType === 'pickup') && Boolean(currentMeta.customer || currentMeta.customer_name || currentMeta.identifier);
         const hasDelivery = currentType === 'delivery' && Boolean(currentMeta.address || currentMeta.address_id);
 
         if (!state.cartRoutingValid.value && !hasTable && !hasCounter && !hasDelivery) {

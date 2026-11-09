@@ -89,7 +89,7 @@ class Employee extends Model
     {
         $roles = $this->getAllRoles();
 
-        return in_array(EmployeeRole::DRIVER->value, $roles, true)
+        return in_array(EmployeeRole::COURIER->value, $roles, true)
             || in_array(EmployeeRole::COURIER->value, $roles, true)
             || in_array('motoboy', $roles, true);
     }
@@ -222,8 +222,8 @@ class Employee extends Model
     public function scopeCouriers($query)
     {
         return $query->where(function ($q) {
-            $q->whereIn('role', [EmployeeRole::DRIVER->value, EmployeeRole::COURIER->value, 'motoboy'])
-              ->orWhereJsonContains('secondary_roles', EmployeeRole::DRIVER->value)
+            $q->whereIn('role', [EmployeeRole::COURIER->value, EmployeeRole::COURIER->value, 'motoboy'])
+              ->orWhereJsonContains('secondary_roles', EmployeeRole::COURIER->value)
               ->orWhereJsonContains('secondary_roles', EmployeeRole::COURIER->value)
               ->orWhereJsonContains('secondary_roles', 'motoboy');
         });

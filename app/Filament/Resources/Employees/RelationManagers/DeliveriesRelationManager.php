@@ -11,6 +11,10 @@ use Illuminate\Database\Eloquent\Builder;
 
 class DeliveriesRelationManager extends RelationManager
 {
+    public static function canViewForRecord(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): bool
+    {
+        return method_exists($ownerRecord, 'isCourier') ? $ownerRecord->isCourier() : true;
+    }
     protected static string $relationship = 'deliveries';
 
     protected static ?string $title = 'Histórico de Corridas';

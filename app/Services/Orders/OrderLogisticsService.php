@@ -196,7 +196,7 @@ class OrderLogisticsService
 
         $couriersQuery = User::with('employee:id,phone')
             ->whereHas('roles', function ($q) {
-                $q->whereIn('name', [EmployeeRole::DRIVER->value]);
+                $q->whereIn('name', ['courier', 'driver']);
             })
             ->where('is_active', true);
 

@@ -62,7 +62,7 @@ class UserForm
                             EmployeeRole::CASHIER->value => '🖥️ Operador de Caixa',
                             'kds'     => '🍳 Cozinha / Produção (KDS)',
                             EmployeeRole::WAITER->value  => '📱 Garçom / Atendimento',
-                            EmployeeRole::DRIVER->value  => '🛵 Entregador / Motoboy',
+                            EmployeeRole::COURIER->value  => '🛵 Entregador / Motoboy',
                             default   => ucfirst($record->name),
                         })
                         ->multiple()

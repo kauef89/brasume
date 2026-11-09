@@ -142,7 +142,7 @@ watch(
 
         if (meta) {
             const hasValidTable = type === 'table' && (meta.table?.id || meta.table_id || meta.dining_table_id || meta.id);
-            const hasValidCounter = type === 'counter' && (meta.customer || meta.identifier || meta.customer_name);
+            const hasValidCounter = (type === 'counter' || type === 'pickup') && (meta.customer || meta.identifier || meta.customer_name);
             const hasValidDelivery = type === 'delivery' && (meta.address || meta.address_id);
 
             if (hasValidTable || hasValidCounter || hasValidDelivery) {
@@ -155,7 +155,7 @@ watch(
 );
 
 const syncTakeawayState = () => {
-    const isAlwaysTakeaway = props.orderType === 'delivery' || props.orderType === 'counter';
+    const isAlwaysTakeaway = props.orderType === 'delivery' || props.orderType === 'counter' || props.orderType === 'pickup';
 
     props.cart.forEach(item => {
         if (isAlwaysTakeaway) {

@@ -279,8 +279,9 @@ class MealAllowanceService
                     $latestLedger = $employee->ledgers()->latest('id')->first();
                     $bal = $latestLedger ? (float) $latestLedger->balance : 0.00;
                     $employee->ledgers()->create([
+                        'order_id'    => $order->id,
                         'type'        => 'debit',
-                        'description' => "Excedente Lanche (Turno #{$activeShift->id})",
+                        'description' => "Lanche Turno #{$activeShift->id} (Pedido #{$order->id})",
                         'amount'      => $excess,
                         'balance'     => $bal - $excess,
                     ]);

@@ -76,7 +76,7 @@ class PosOrderSubmitRequest extends FormRequest
 
             // 2. ROTEAMENTO
             'routing'                                               => ['required', 'array'],
-            'routing.type'                                          => ['required', 'string', 'in:table,counter,delivery'],
+            'routing.type'                                          => ['required', 'string', 'in:table,counter,pickup,delivery'],
             'routing.notes'                                         => ['nullable', 'string'],
             'routing.identifier'                                    => [
                 Rule::requiredIf(!$isAppend && $type === 'counter' && empty(data_get($this->all(), 'routing.customer.id'))),

@@ -257,17 +257,23 @@ const handleDeliveryPaymentConfirm = async (payload) => {
 
 const onCartCheckout = async (checkoutPayload) => {
     try {
-        await handleCheckoutWrapper(checkoutPayload);
+        const result = await handleCheckoutWrapper(checkoutPayload);
 
         if (activeCartSidebarView.value === 'payment') return;
 
         isPendingCheckoutSubmission.value = true;
+        const createdId = result?.id || result?.order?.id;
+        const isCounter = checkoutPayload?.meta?.type === 'counter' || orderType.value === 'counter';
 
-        // 🚀 O FIX: Esvazia a memória do carrinho e reseta os configuradores antes de sair
         resetAppendState();
 
-        window.dispatchEvent(new CustomEvent('pos-tab-changed', { detail: 'orders' }));
-        emit('order-created');
+        if (isCounter && createdId) {
+            emit('open-checkout', createdId);
+            window.dispatchEvent(new CustomEvent('pos-open-checkout', { detail: { orderId: createdId } }));
+        } else {
+            window.dispatchEvent(new CustomEvent('pos-tab-changed', { detail: 'orders' }));
+            emit('order-created');
+        }
     } catch (error) {
         console.error('Erro ao processar checkout do carrinho:', error);
     }

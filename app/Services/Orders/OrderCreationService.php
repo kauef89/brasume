@@ -8,6 +8,7 @@ use Exception;
 use App\Services\Orders\Handlers\OrderAppendHandler;
 use App\Services\Orders\Handlers\TableOrderHandler;
 use App\Services\Orders\Handlers\CounterOrderHandler;
+use App\Services\Orders\Handlers\PickupOrderHandler;
 use App\Services\Orders\Handlers\DeliveryOrderHandler;
 use App\Services\RestaurantOps\KitchenDispatchService;
 use App\Notifications\OrderStatusUpdated;
@@ -23,6 +24,7 @@ class OrderCreationService
         protected OrderAppendHandler $appendHandler,
         protected TableOrderHandler $tableHandler,
         protected CounterOrderHandler $counterHandler,
+        protected PickupOrderHandler $pickupHandler,
         protected DeliveryOrderHandler $deliveryHandler,
         protected OrderItemProcessor $itemProcessor,
         protected KitchenDispatchService $kitchenDispatchService
@@ -64,6 +66,8 @@ class OrderCreationService
                 }
 
                 $orderData = $this->tableHandler->buildOrderData($payload, $tableId, $operatorId, $source);
+            } elseif ($orderType === 'pickup') {
+                $orderData = $this->pickupHandler->buildOrderData($payload, $operatorId, $source);
             } elseif ($orderType === 'counter') {
                 $orderData = $this->counterHandler->buildOrderData($payload, $operatorId, $source);
             } else {

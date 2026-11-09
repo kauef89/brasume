@@ -64,6 +64,8 @@ const props = defineProps({
     customers: { type: Array, default: () => [] },
     orderType: { type: String, default: 'delivery' },
     allowEmptyPhone: { type: Boolean, default: false },
+    hidePhone: { type: Boolean, default: false },
+    initialName: { type: String, default: '' },
     simpleMode: { type: Boolean, default: false }
 });
 

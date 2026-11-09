@@ -1,29 +1,44 @@
 <template>
     <div class="flex flex-col gap-3">
-        <div class="flex items-stretch justify-center gap-3 w-full">
+        <!-- SELETOR DE CANAIS EM PÍLULAS EXPANSÍVEIS -->
+        <div class="flex items-center justify-center gap-1.5 md:gap-2 w-full">
             <button
                 v-for="option in filteredOrderTypeOptions"
                 :key="option.value"
                 type="button"
                 @click="handleTabChange(option.value)"
-                class="justify-center-safe flex flex-row gap-2 p-4 rounded-full transition-all duration-300 outline-none cursor-pointer overflow-hidden border-none"
+                class="group flex items-center justify-center rounded-full transition-all duration-300 outline-none cursor-pointer overflow-hidden border-none select-none py-2.5"
                 :class="[
                     localOrderType === option.value
-                        ? 'bg-primary-500/90 text-surface-text z-10 shadow-xs'
-                        : 'bg-primary-500/20 text-surface-text hover:bg-primary-500/30'
+                        ? 'bg-primary-500 text-white z-10 shadow-sm px-4'
+                        : 'bg-primary-500/15 text-surface-text hover:bg-primary-500/25',
+                    isCompactMode && localOrderType !== option.value
+                        ? 'px-3 hover:px-4'
+                        : 'px-4',
+                    !isCompactMode ? 'flex-1' : ''
                 ]"
+                :title="option.label"
             >
                 <i :class="[
-                    'pi text-2xl transition-transform duration-300 relative z-10',
-                    option.icon || (option.value === 'table' ? 'pi-table' : option.value === 'counter' ? 'pi-bolt' : option.value === 'pickup' ? 'pi-shopping-bag' : 'pi-truck'),
+                    'pi text-base md:text-lg shrink-0 transition-transform duration-300',
+                    option.icon || (option.value === 'table' ? 'pi-th-large' : option.value === 'pickup' ? 'pi-shopping-bag' : option.value === 'counter' ? 'pi-bolt' : 'pi-truck'),
+                    localOrderType === option.value ? 'scale-110' : 'group-hover:scale-110'
                 ]"></i>
 
-                <span class="font-black text-[10px] md:text-xs uppercase tracking-widest relative z-10 text-center">
+                <span
+                    class="font-black text-[10px] md:text-xs uppercase tracking-widest whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden"
+                    :class="[
+                        isCompactMode && localOrderType !== option.value
+                            ? 'max-w-0 opacity-0 group-hover:max-w-32 group-hover:opacity-100 group-hover:ml-2'
+                            : 'max-w-32 opacity-100 ml-2'
+                    ]"
+                >
                     {{ option.label }}
                 </span>
             </button>
         </div>
 
+        <!-- CONTEÚDO ESPECÍFICO DO CANAL SELECIONADO -->
         <div v-show="isOpen" class="mt-4 transition-all duration-300">
             <RoutingTable
                 v-if="localOrderType === 'table'"
@@ -37,18 +52,24 @@
                 @load-order="$emit('load-order', $event)"
             />
 
+            <RoutingPickup
+                v-if="localOrderType === 'pickup'"
+                :model-value="sharedCustomer"
+                @update:model-value="setSharedCustomer"
+                :customer="sharedCustomer"
+                @update:customer="setSharedCustomer"
+                :customers="customers"
+                @apply="handleApply($event)"
+            />
+
             <RoutingCounter
                 v-if="localOrderType === 'counter'"
-                :is-team-mode="isTeamMode"
-                :is-waiter-mode="isWaiterMode"
                 :model-value="sharedCustomer"
                 @update:model-value="setSharedCustomer"
                 :customer="sharedCustomer"
                 @update:customer="setSharedCustomer"
                 :customers="customers"
                 @apply="triggerImmediateApply"
-                @create-new="handleCreateNewCustomer"
-                @open-new-customer="handleCreateNewCustomer"
             />
 
             <RoutingDelivery
@@ -59,9 +80,6 @@
                 @update:address="handleAddressChange"
                 :customers="customers"
                 @apply="handleApply($event)"
-                @create-new="handleCreateNewCustomer"
-                @open-new-customer="handleCreateNewCustomer"
-                @customer-selected="updateParentState"
                 @open-new-address="$emit('open-new-address')"
                 @open-edit-address="$emit('open-edit-address', $event)"
             />
@@ -74,6 +92,7 @@ import { computed, unref, watch } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 
 import RoutingTable from "@/Pages/Pos/Components/Cart/RoutingTable.vue";
+import RoutingPickup from "@/Pages/Pos/Components/Cart/RoutingPickup.vue";
 import RoutingCounter from "@/Pages/Pos/Components/Cart/RoutingCounter.vue";
 import RoutingDelivery from "@/Pages/Pos/Components/Cart/RoutingDelivery.vue";
 
@@ -95,7 +114,6 @@ const emit = defineEmits([
     "routing-change",
     "apply",
     "load-order",
-    "open-new-customer",
     "open-new-address",
     "open-edit-address",
     "toggle-open",
@@ -108,25 +126,18 @@ const companySettings = computed(() => page.props.companySettings || {});
 const {
     localOrderType, resetTableTrigger, orderTypeOptions, selectedTable, tableIdentifier,
     sharedCustomer, deliveryAddress, selectOrderType, handleApply,
-    triggerImmediateApply, updateParentState,
+    triggerImmediateApply,
     setSelectedTable, setTableIdentifier, setSharedCustomer, setDeliveryAddress
 } = useOrderRouting(props, emit);
 
 const { draftRouting } = useCart();
 
-// 🚀 CANAIS PERMITIDOS:
-// No POS (desktop), TODOS os canais estão sempre liberados ('table', 'counter', 'delivery').
-// No TeamApp (garçom), respeita rigorosamente a configuração team_order_channels do tenant.
+// PosApp: 4 canais. TeamApp (Garçom): Mesa e Retirada.
 const allowedChannels = computed(() => {
     if (!props.isTeamMode && !props.isWaiterMode) {
-        return ['table', 'counter', 'pickup', 'delivery'];
+        return ['table', 'delivery', 'pickup', 'counter'];
     }
-
-    const channels = companySettings.value?.team_order_channels;
-    if (Array.isArray(channels) && channels.length > 0) {
-        return channels;
-    }
-    return ['table', 'counter'];
+    return ['table', 'pickup'];
 });
 
 const filteredOrderTypeOptions = computed(() => {
@@ -134,7 +145,8 @@ const filteredOrderTypeOptions = computed(() => {
     return all.filter(opt => allowedChannels.value.includes(opt.value));
 });
 
-// Sincronização direta caso o TeamApp envie atualizações via props.routingMeta
+const isCompactMode = computed(() => filteredOrderTypeOptions.value.length > 2);
+
 watch(() => props.routingMeta, (newMeta) => {
     if (newMeta) {
         if (newMeta.table !== undefined) setSelectedTable(newMeta.table);
@@ -150,24 +162,6 @@ watch(() => props.modelValue, (newVal) => {
         selectOrderType(newVal);
     }
 });
-
-watch(() => draftRouting.value?.type, (newType) => {
-    if (newType && newType !== localOrderType.value) {
-        selectOrderType(newType);
-    }
-});
-
-watch(() => draftRouting.value?.table, (newTable) => {
-    if (newTable) setSelectedTable(newTable);
-}, { deep: true });
-
-watch(() => draftRouting.value?.customer, (newCustomer) => {
-    if (newCustomer !== undefined) setSharedCustomer(newCustomer);
-}, { deep: true });
-
-watch(() => draftRouting.value?.address, (newAddress) => {
-    if (newAddress !== undefined) setDeliveryAddress(newAddress);
-}, { deep: true });
 
 const handleCustomerChange = (newCustomer) => {
     setSharedCustomer(newCustomer);
@@ -189,27 +183,14 @@ const handleTabChange = (type) => {
         return;
     }
 
-    if (type === 'table') {
-        setSharedCustomer(null);
+    if (type !== 'delivery') {
         setDeliveryAddress(null);
-        if (draftRouting.value) {
-            draftRouting.value.customer = null;
-            draftRouting.value.address = null;
-        }
-    } else if (type === 'counter') {
+        if (draftRouting.value) draftRouting.value.address = null;
+    }
+
+    if (type !== 'table') {
         setSelectedTable(null);
-        setDeliveryAddress(null);
-        if (draftRouting.value) {
-            draftRouting.value.table = null;
-            draftRouting.value.address = null;
-        }
-    } else if (type === 'delivery') {
-        setSelectedTable(null);
-        setTableIdentifier("");
-        if (draftRouting.value) {
-            draftRouting.value.table = null;
-            draftRouting.value.identifier = "";
-        }
+        if (draftRouting.value) draftRouting.value.table = null;
     }
 
     selectOrderType(type);
@@ -223,7 +204,6 @@ const handleTabChange = (type) => {
     emit('open');
 };
 
-// Se o canal ativo não estiver entre os permitidos para o garçom, comuta automaticamente
 watch(allowedChannels, (channels) => {
     if (props.isTeamMode || props.isWaiterMode) {
         if (channels && channels.length > 0 && !channels.includes(localOrderType.value)) {
@@ -231,8 +211,4 @@ watch(allowedChannels, (channels) => {
         }
     }
 }, { immediate: true });
-
-const handleCreateNewCustomer = (query = '') => {
-    emit('open-new-customer', query);
-};
 </script>

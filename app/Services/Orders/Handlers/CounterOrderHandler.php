@@ -5,7 +5,6 @@ namespace App\Services\Orders\Handlers;
 use App\Models\Order;
 use App\Models\Customer;
 use App\Models\CompanySetting;
-use Exception;
 
 class CounterOrderHandler
 {
@@ -15,7 +14,7 @@ class CounterOrderHandler
         $customerName = null;
 
         if (!empty($customerId) && str_starts_with((string) $customerId, 'temp_')) {
-            $tempName = $routing["customer"]["name"] ?? ($routing["customer_name"] ?? 'Cliente Balcão');
+            $tempName = $routing["customer"]["name"] ?? ($routing["customer_name"] ?? 'BALCAO');
             $tempPhone = preg_replace('/\D/', '', $routing["customer"]["phone"] ?? ($routing["customer_phone"] ?? ''));
 
             $customer = Customer::create([
@@ -28,16 +27,12 @@ class CounterOrderHandler
             $customerName = $customer->name;
         } else {
             $candidate = $routing["customer"]["name"] ?? ($routing["identifier"] ?? ($routing["customer_name"] ?? null));
-            $customerName = !empty($candidate) ? trim($candidate) : null;
-        }
-
-        if (empty($customerName) && empty($customerId)) {
-            throw new Exception("Para pedidos de Balcão, é obrigatório identificar o cliente (Nome ou Cadastro).");
+            $customerName = !empty($candidate) ? trim($candidate) : 'BALCAO';
         }
 
         return [
             'id'   => is_numeric($customerId) ? (int) $customerId : null,
-            'name' => $customerName
+            'name' => $customerName ?: 'BALCAO'
         ];
     }
 
@@ -70,7 +65,8 @@ class CounterOrderHandler
             "delivery_fee"           => 0.00,
             "service_fee"            => $serviceFee,
             "total"                  => $finalTotal,
-            "employee_id"            => $operatorId,
+            "employee_id"            => $routing["employee_id"] ?? null,
+            "waiter_id"              => null,
             "cashier_id"             => in_array($source, [Order::SOURCE_POS_APP, Order::SOURCE_CASHIER], true) ? $operatorId : null,
             "payment_intent_status"  => $routing["payment_intent_status"] ?? 'pending',
             "payment_intent_methods" => $routing["payment_intent_methods"] ?? null,

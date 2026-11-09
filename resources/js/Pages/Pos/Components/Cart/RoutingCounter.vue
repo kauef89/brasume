@@ -1,30 +1,29 @@
 <template>
     <div class="flex flex-col gap-4">
-
-        <!-- FASE 1: NENHUM CLIENTE SELECIONADO NO BALCÃO -->
+        <!-- FASE 1: CLIENTE NÃO SELECIONADO OU PADRÃO BALCAO -->
         <div v-if="!currentCustomer" class="flex flex-col gap-3">
-            <div v-if="!isSimpleMode" class="w-full flex justify-center mb-1">
+            <div class="w-full flex justify-center mb-1">
                 <SegmentedControl
                     v-model="activeSubTab"
                     :options="counterSubTabOptions"
                 />
             </div>
 
-            <!-- 1. PESQUISAR CLIENTE EXISTENTE (COMPONENTE UNIFICADO) -->
+            <!-- 1. PESQUISAR CLIENTE EXISTENTE / CONVÊNIO -->
             <CustomerSearch
-                v-if="!isSimpleMode && activeSubTab === 'search'"
+                v-if="activeSubTab === 'search'"
                 order-type="counter"
                 :initial-customers="customers"
                 @customer-selected="handleCustomerSelected"
                 @create-new="handleGoToNew"
             />
 
-            <!-- 2. CADASTRO RÁPIDO (WhatsApp Opcional no Balcão) -->
+            <!-- 2. CADASTRO RÁPIDO (Pré-preenchido com BALCAO, telefone opcional) -->
             <DeliveryCustomerQuick
-                v-else-if="isSimpleMode || activeSubTab === 'quick'"
-                :simple-mode="isSimpleMode"
+                v-else-if="activeSubTab === 'quick'"
                 :company-settings="companySettings"
                 :customers="customers"
+                :initial-name="'BALCAO'"
                 order-type="counter"
                 :allow-empty-phone="true"
                 @success="handleCustomerSelected"
@@ -32,7 +31,7 @@
 
             <!-- 3. CADASTRO NOVO COMPLETO -->
             <DeliveryCustomerNew
-                v-else-if="!isSimpleMode && activeSubTab === 'new'"
+                v-else-if="activeSubTab === 'new'"
                 :company-settings="companySettings"
                 :customers="customers"
                 :initial-name="newCustomerSeedName"
@@ -41,11 +40,11 @@
             />
         </div>
 
-        <!-- FASE 2: CLIENTE SELECIONADO NO BALCÃO -->
+        <!-- FASE 2: CLIENTE IDENTIFICADO NO BALCÃO -->
         <div v-else class="flex flex-col gap-3 p-4 bg-surface-3 rounded-2xl animate-in fade-in duration-200">
             <div class="flex items-center justify-between">
                 <span class="text-[10px] font-black uppercase tracking-widest text-surface-muted flex items-center gap-1.5">
-                    <i class="pi pi-shopping-bag text-primary-500"></i> Cliente do Balcão
+                    <i class="pi pi-bolt text-amber-500"></i> Cliente do Balcão
                 </span>
                 <button
                     @click="handleChangeCustomer"
@@ -57,45 +56,24 @@
             </div>
 
             <div class="flex items-center gap-3">
-                <div class="w-12 h-12 rounded-2xl bg-primary-500/10 text-primary-500 flex items-center justify-center font-black text-sm border border-primary-500/20 shrink-0">
+                <div class="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-black text-sm border border-amber-500/20 shrink-0">
                     {{ getInitials(currentCustomer.name) }}
                 </div>
 
                 <div class="flex flex-col min-w-0 flex-1">
-                    <div class="flex items-center gap-2">
-                        <span class="font-black text-sm text-surface-text truncate">
-                            {{ currentCustomer.name || 'Cliente Balcão' }}
-                        </span>
-                        <span
-                            v-if="currentCustomer.employee_id || currentCustomer.is_employee"
-                            class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
-                        >
-                            Equipe
-                        </span>
-                        <span
-                            v-if="currentCustomer.supplier_id || currentCustomer.is_convenio"
-                            class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 cursor-help"
-                            :title="currentCustomer.supplier?.name ? `Empresa: ${currentCustomer.supplier.name}` : 'Convênio PJ'"
-                        >
-                            Convênio
-                        </span>
-                    </div>
+                    <span class="font-black text-sm text-surface-text truncate">
+                        {{ currentCustomer.name || 'BALCAO' }}
+                    </span>
                     <span class="text-xs text-surface-muted truncate flex items-center gap-1 mt-0.5">
                         <template v-if="currentCustomer.phone">
                             <i class="pi pi-whatsapp text-emerald-500 text-[10px]"></i>
                             {{ formatPhone(currentCustomer.phone) }}
                         </template>
                         <template v-else>
-                            <i class="pi pi-map-marker text-amber-500 text-[10px]"></i>
-                            Atendimento no local (Sem WhatsApp)
+                            <i class="pi pi-bolt text-amber-500 text-[10px]"></i>
+                            Venda Direta / Sem WhatsApp
                         </template>
                     </span>
-                </div>
-
-                <!-- BADGE DE PONTOS DE FIDELIDADE (Se ativo) -->
-                <div v-if="currentCustomer.loyalty_points > 0" class="flex flex-col items-end shrink-0 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-xl">
-                    <span class="text-[9px] font-black uppercase text-purple-400">Pontos</span>
-                    <span class="text-xs font-black text-purple-400">{{ currentCustomer.loyalty_points }} pts</span>
                 </div>
             </div>
 
@@ -116,7 +94,6 @@
                 </button>
             </div>
         </div>
-
     </div>
 </template>
 
@@ -133,35 +110,21 @@ import { formatPhone, getInitials } from "@/Utils/formatters";
 const props = defineProps({
     modelValue: [Object, String],
     customer: Object,
-    customers: { type: Array, default: () => [] },
-    isCustomerMode: { type: Boolean, default: false },
-    isTeamMode: { type: Boolean, default: false },
-    isWaiterMode: { type: Boolean, default: false }
+    customers: { type: Array, default: () => [] }
 });
 
-const emit = defineEmits([
-    'update:modelValue',
-    'update:customer',
-    'apply',
-    'customer-selected',
-    'create-new'
-]);
+const emit = defineEmits(['update:modelValue', 'update:customer', 'apply', 'customer-selected']);
 
 const page = usePage();
 const companySettings = computed(() => page.props.companySettings || {});
 
-const isSimpleMode = computed(() => {
-    if (!props.isTeamMode && !props.isWaiterMode) return false;
-    const mode = companySettings.value?.team_counter_mode || 'simple';
-    return mode === 'simple';
-});
-
-const activeSubTab = ref('search');
+// Balcão abre por padrão na aba "Rápido"
+const activeSubTab = ref('quick');
 const newCustomerSeedName = ref('');
 
 const counterSubTabOptions = [
-    { label: 'Pesquisar', value: 'search', icon: 'pi-search' },
     { label: 'Rápido',    value: 'quick',  icon: 'pi-bolt' },
+    { label: 'Pesquisar', value: 'search', icon: 'pi-search' },
     { label: 'Novo',      value: 'new',    icon: 'pi-user-plus' }
 ];
 
@@ -175,11 +138,10 @@ const handleCustomerSelected = (c) => {
     emit('update:modelValue', c);
     emit('update:customer', c);
     emit('customer-selected', c);
-    const identifier = typeof c === 'string' ? c : (c?.name || '');
     emit('apply', {
         customer: typeof c === 'object' ? c : null,
         address: null,
-        identifier: identifier || 'Balcão'
+        identifier: c?.name || 'BALCAO'
     });
 };
 
@@ -192,16 +154,15 @@ const handleChangeCustomer = () => {
     emit('update:modelValue', null);
     emit('update:customer', null);
     emit('customer-selected', null);
-    emit('apply', { customer: null, address: null, identifier: 'Balcão' });
     newCustomerSeedName.value = '';
-    activeSubTab.value = 'search';
+    activeSubTab.value = 'quick';
 };
 
 const handleConfirm = () => {
     emit('apply', {
         customer: currentCustomer.value,
         address: null,
-        identifier: currentCustomer.value?.name || 'Balcão'
+        identifier: currentCustomer.value?.name || 'BALCAO'
     });
 };
 </script>

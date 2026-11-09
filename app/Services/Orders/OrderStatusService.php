@@ -33,7 +33,7 @@ class OrderStatusService
                     $driver->notify(new OrderDispatchedNotification($order));
                 }
             } else {
-                $activeDrivers = ShiftAttendanceService::getActiveShiftStaffByRoles([EmployeeRole::DRIVER->value]);
+                $activeDrivers = ShiftAttendanceService::getActiveShiftStaffByRoles([EmployeeRole::COURIER->value]);
                 if ($activeDrivers->isNotEmpty()) {
                     Notification::send($activeDrivers, new OrderDispatchedNotification($order));
                 }

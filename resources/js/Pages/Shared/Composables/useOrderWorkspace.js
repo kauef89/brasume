@@ -108,6 +108,7 @@ export function useOrderWorkspace(cartContext, favoritesContext, editOrderData) 
         const cleanMeta = sanitizeMeta(rawPayload.meta || draftRouting.value);
 
         const isDelivery = cleanMeta.type === 'delivery' || !!cleanMeta.address || orderType.value === 'delivery';
+        const isPickup = cleanMeta.type === 'pickup' || orderType.value === 'pickup';
         const isCounter = cleanMeta.type === 'counter' || orderType.value === 'counter';
 
         const safePayload = {
@@ -117,11 +118,16 @@ export function useOrderWorkspace(cartContext, favoritesContext, editOrderData) 
             totals: rawPayload.totals || {}
         };
 
-        if (isDelivery || isCounter) {
-            safePayload.meta.type = isDelivery ? 'delivery' : 'counter';
+        if (isDelivery || isPickup) {
+            safePayload.meta.type = isDelivery ? 'delivery' : 'pickup';
             stashedCheckoutData.value = safePayload;
             activeCartSidebarView.value = 'payment';
             return Promise.resolve();
+        } else if (isCounter) {
+            safePayload.meta.type = 'counter';
+            safePayload.frontend_intent = 'pay_now';
+            safePayload.intent = 'pay_now';
+            return submitOrder(safePayload);
         } else {
             return submitOrder(safePayload);
         }

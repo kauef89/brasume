@@ -3,9 +3,9 @@
 
         <div class="flex justify-between items-center shrink-0">
             <div>
-                <h2 class="font-black text-surface-text text-xl">Entregas & Balcão</h2>
+                <h2 class="font-black text-surface-text text-xl">Entregas & Retiradas</h2>
             </div>
-            <Badge :value="orders.length" severity="warn" />
+            <Badge :value="kanbanOrdersCount" severity="warn" />
         </div>
 
         <div class="flex-1 overflow-x-auto hide-scrollbar min-h-0">
@@ -21,7 +21,6 @@
                         <Badge :value="columnsData[column.id]?.length || 0" :severity="column.badgeSeverity" />
                     </div>
 
-                    <!-- Draggable container para as raias do Kanban -->
                     <draggable
                         v-model="columnsData[column.id]"
                         group="kanban-delivery"
@@ -50,7 +49,7 @@
 </template>
 
 <script setup>
-import { ref, watch, defineProps, defineEmits } from "vue";
+import { ref, watch, computed } from "vue";
 import Badge from "primevue/badge";
 import OrderCard from "@/Pages/Shared/Order/OrderCard.vue";
 import draggable from "vuedraggable";
@@ -72,15 +71,20 @@ const columnsData = ref({
     dispatched: []
 });
 
-// Normaliza status para a coluna correspondente
 const getColumnForStatus = (status) => {
-    if (status === 'pending' || status === 'pending_payment') return 'pending'; if (status === 'delivered') return 'dispatched';
+    if (status === 'pending' || status === 'pending_payment') return 'pending';
+    if (status === 'delivered') return 'dispatched';
     return status;
 };
 
+const kanbanOrdersCount = computed(() => {
+    return (props.orders || []).filter(o => ['delivery', 'pickup'].includes(o.type)).length;
+});
+
 watch(() => props.orders, (newOrders) => {
+    const validOrders = (newOrders || []).filter(o => ['delivery', 'pickup'].includes(o.type));
     kanbanColumns.forEach(col => {
-        columnsData.value[col.id] = (newOrders || [])
+        columnsData.value[col.id] = validOrders
             .filter(o => getColumnForStatus(o.status) === col.id)
             .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     });
@@ -93,7 +97,6 @@ const onDragChange = (event, newStatus) => {
     }
 };
 
-// 🚀 NAVEGAÇÃO DAS SETINHAS
 const moveOrderPrev = (order) => {
     if (!order) return;
     const currentStatus = getColumnForStatus(order.status);

@@ -13,49 +13,45 @@ enum EmployeeRole: string implements HasLabel, HasColor, HasIcon
     case CASHIER  = 'cashier';
     case WAITER   = 'waiter';
     case KITCHEN  = 'kitchen';
-    case DRIVER   = 'driver';     // Padrão operacional / Spatie role
-    case COURIER  = 'courier';    // Alias logístico
+    case COURIER  = 'courier';
     case CLEANING = 'cleaning';
 
     public function getLabel(): ?string
     {
         return match($this) {
-            self::ADMIN          => 'Administrador',
-            self::MANAGER        => 'Gerente',
-            self::CASHIER        => 'Operador de Caixa',
-            self::WAITER         => 'Atendente / Garçom',
-            self::KITCHEN        => 'Cozinha / Produção',
-            self::DRIVER,
-            self::COURIER        => 'Entregador / Motoboy',
-            self::CLEANING       => 'Limpeza / Apoio',
+            self::ADMIN    => 'Administrador',
+            self::MANAGER  => 'Gerente',
+            self::CASHIER  => 'Operador de Caixa',
+            self::WAITER   => 'Atendente / Garçom',
+            self::KITCHEN  => 'Cozinha / Produção',
+            self::COURIER  => 'Entregador / Motoboy',
+            self::CLEANING => 'Limpeza / Apoio',
         };
     }
 
     public function getColor(): string|array|null
     {
         return match($this) {
-            self::ADMIN          => 'danger',
-            self::MANAGER        => 'primary',
-            self::CASHIER        => 'info',
-            self::WAITER         => 'warning',
-            self::KITCHEN        => 'amber',
-            self::DRIVER,
-            self::COURIER        => 'success',
-            self::CLEANING       => 'gray',
+            self::ADMIN    => 'danger',
+            self::MANAGER  => 'primary',
+            self::CASHIER  => 'info',
+            self::WAITER   => 'warning',
+            self::KITCHEN  => 'amber',
+            self::COURIER  => 'success',
+            self::CLEANING => 'gray',
         };
     }
 
     public function getIcon(): ?string
     {
         return match($this) {
-            self::ADMIN          => 'heroicon-o-shield-check',
-            self::MANAGER        => 'heroicon-o-chart-bar',
-            self::CASHIER        => 'heroicon-o-computer-desktop',
-            self::WAITER         => 'heroicon-o-user',
-            self::KITCHEN        => 'heroicon-o-fire',
-            self::DRIVER,
-            self::COURIER        => 'heroicon-o-truck',
-            self::CLEANING       => 'heroicon-o-sparkles',
+            self::ADMIN    => 'heroicon-o-shield-check',
+            self::MANAGER  => 'heroicon-o-chart-bar',
+            self::CASHIER  => 'heroicon-o-computer-desktop',
+            self::WAITER   => 'heroicon-o-user',
+            self::KITCHEN  => 'heroicon-o-fire',
+            self::COURIER  => 'heroicon-o-truck',
+            self::CLEANING => 'heroicon-o-sparkles',
         };
     }
 
@@ -73,6 +69,6 @@ enum EmployeeRole: string implements HasLabel, HasColor, HasIcon
     {
         if (!$role) return false;
         $val = $role instanceof self ? $role->value : (string) $role;
-        return in_array($val, ['driver', 'courier', 'motoboy'], true);
+        return in_array($val, ['courier', 'driver', 'motoboy'], true);
     }
 }

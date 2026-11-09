@@ -19,4 +19,9 @@ class EmployeeLedger extends Model
     {
         return $this->belongsTo(Employee::class);
     }
+
+    public function order(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Order::class);
+    }
 }

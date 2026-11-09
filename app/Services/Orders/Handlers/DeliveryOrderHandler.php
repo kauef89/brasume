@@ -28,7 +28,7 @@ class DeliveryOrderHandler
             return null;
         }
 
-        $roles = [EmployeeRole::DRIVER->value];
+        $roles = ['courier', 'driver'];
 
         $activeDrivers = $shift->attendees()
             ->wherePivot('status', 'active')
@@ -99,9 +99,10 @@ class DeliveryOrderHandler
             "delivery_fee"           => $deliveryFee,
             "service_fee"            => $serviceFee,
             "total"                  => $finalTotal,
-            "employee_id"            => $operatorId,
+            "employee_id"            => $routing["employee_id"] ?? null,
+            "waiter_id"              => null,
             "cashier_id"             => in_array($source, [Order::SOURCE_POS_APP, Order::SOURCE_CASHIER], true) ? $operatorId : null,
-            "driver_id"              => $resolvedDriverId,
+            "courier_id"             => $resolvedDriverId,
             "payment_intent_status"  => $routing["payment_intent_status"] ?? 'pending_choice',
             "payment_intent_methods" => $routing["payment_intent_methods"] ?? null,
             "change_target"          => $changeTarget,

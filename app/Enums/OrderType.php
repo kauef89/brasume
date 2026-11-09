@@ -16,7 +16,7 @@ enum OrderType: string implements HasLabel, HasColor, HasIcon
     public function getLabel(): ?string
     {
         return match ($this) {
-            self::DELIVERY => 'Delivery',
+            self::DELIVERY => 'Entrega',
             self::COUNTER  => 'Balcão',
             self::PICKUP   => 'Retirada',
             self::TABLE    => 'Mesa',
@@ -37,9 +37,9 @@ enum OrderType: string implements HasLabel, HasColor, HasIcon
     {
         return match ($this) {
             self::DELIVERY => 'heroicon-o-truck',
-            self::COUNTER  => 'heroicon-o-building-storefront',
+            self::COUNTER  => 'heroicon-o-bolt',
             self::PICKUP   => 'heroicon-o-shopping-bag',
-            self::TABLE    => 'heroicon-o-stop', // Representa a mesa
+            self::TABLE    => 'heroicon-o-stop',
         };
     }
 }

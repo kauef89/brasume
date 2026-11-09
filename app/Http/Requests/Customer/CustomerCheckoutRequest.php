@@ -75,7 +75,7 @@ class CustomerCheckoutRequest extends FormRequest
 
             // 2. ROTEAMENTO E LOGÍSTICA
             'routing' => ['required', 'array'],
-            'routing.type' => ['required', 'string', 'in:delivery,counter,table'],
+            'routing.type' => ['required', 'string', 'in:delivery,pickup,counter,table'],
             'routing.identifier' => ['nullable', 'string'],
             'routing.notes' => ['nullable', 'string'],
 

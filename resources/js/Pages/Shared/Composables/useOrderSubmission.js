@@ -71,7 +71,8 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
 
                     const isPayNow = payload.frontend_intent === 'pay_now'
                                     || payload.intent === 'pay_now'
-                                    || payload.routing?.payment_intent_status === 'pay_now';
+                                    || payload.routing?.payment_intent_status === 'pay_now'
+                                    || payload.routing?.type === 'counter';
 
                     if (isPayNow && createdOrderId) {
                         window.dispatchEvent(new CustomEvent('pos-open-checkout', { detail: { orderId: createdOrderId } }));
@@ -116,13 +117,19 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
                 return Promise.reject(new Error('Mesa obrigatória'));
             }
 
-            if (currentType === 'counter') {
+            if (currentType === 'pickup') {
                 const customerName = (meta.customer?.name || meta.customer_name || meta.identifier || '').trim();
                 const customerId = meta.customer?.id || meta.customer_id;
 
                 if (!customerName && !customerId) {
-                    toast.add({ severity: 'warn', summary: 'Identificação Obrigatória', detail: 'Para pedidos de Balcão, informe o nome ou selecione o cliente.', life: 4500 });
+                    toast.add({ severity: 'warn', summary: 'Identificação Obrigatória', detail: 'Para pedidos de Retirada, informe o nome ou selecione o cliente.', life: 4500 });
                     return Promise.reject(new Error('Identificação obrigatória'));
+                }
+            }
+
+            if (currentType === 'counter') {
+                if (!meta.identifier && !meta.customer?.name && !meta.customer_name) {
+                    meta.identifier = 'BALCAO';
                 }
             }
         }

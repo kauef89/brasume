@@ -41,7 +41,7 @@
                         {{ formattedName }}
                     </span>
 
-                    <div v-if="['counter', 'delivery'].includes(order.type)" class="flex items-center gap-1 shrink-0">
+                    <div v-if="['counter', 'delivery', 'pickup'].includes(order.type)" class="flex items-center gap-1 shrink-0">
                         <button @click.stop="$emit('move-prev', order)" class="w-7 h-7 rounded-full text-surface-muted hover:bg-primary-500/60 hover:text-white flex items-center justify-center transition-colors outline-none cursor-pointer">
                             <i class="pi pi-chevron-left text-[10px] font-bold"></i>
                         </button>
@@ -55,7 +55,7 @@
                 </div>
 
                 <!-- LINHA 3: Bairro/Tipo | Status Inteligente do Pagamento -->
-                <div v-if="['counter', 'delivery'].includes(order.type)" class="flex justify-between items-center w-full text-[11px] font-medium border-t border-surface-border/30 pt-2 mt-0.5">
+                <div v-if="['counter', 'delivery', 'pickup'].includes(order.type)" class="flex justify-between items-center w-full text-[11px] font-medium border-t border-surface-border/30 pt-2 mt-0.5">
                     <span class="text-surface-muted truncate max-w-[50%] flex items-center gap-1" :class="order.type === 'delivery' ? 'text-primary-600 dark:text-primary-400 font-bold' : ''">
                         <i v-if="order.type === 'delivery'" class="pi pi-map-marker text-[9px]"></i>
                         {{ typeLabel }}
@@ -251,6 +251,7 @@ const formattedName = computed(() => {
 const typeLabel = computed(() => {
     if (props.order.type === "table") return "Mesa";
     if (props.order.type === "counter") return "Balcão";
+    if (props.order.type === "pickup") return "Retirada";
 
     const neighborhood =
         props.order.address?.neighborhood ||

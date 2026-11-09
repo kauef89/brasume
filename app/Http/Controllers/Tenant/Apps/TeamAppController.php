@@ -33,7 +33,7 @@ class TeamAppController extends Controller
         $isDriver = false;
         if ($user) {
             $userRoles = method_exists($user, 'getRoleNames') ? $user->getRoleNames()->toArray() : [$user->role ?? ''];
-            $isDriver = in_array(EmployeeRole::DRIVER->value, $userRoles, true);
+            $isDriver = in_array(EmployeeRole::COURIER->value, $userRoles, true);
         }
 
         $defaultTabFallback = $isDriver ? 'driver' : 'menu';

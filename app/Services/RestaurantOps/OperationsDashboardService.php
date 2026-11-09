@@ -217,7 +217,7 @@ class OperationsDashboardService
                 // 🛵 DISPARO PUSH: Notifica todos os motoboys que há entrega pronta no balcão
                 if ($order->type === 'delivery') {
                     try {
-                        $drivers = User::whereHas('roles', fn($q) => $q->whereIn('name', [EmployeeRole::DRIVER->value]))->get();
+                        $drivers = User::whereHas('roles', fn($q) => $q->whereIn('name', [EmployeeRole::COURIER->value]))->get();
                         if ($drivers->isNotEmpty()) {
                             Notification::send($drivers, new OrderReadyForDeliveryNotification($order));
                         }
@@ -228,9 +228,10 @@ class OperationsDashboardService
             }
 
             if ($newStatus === 'dispatched') {
-                if (true) {
-                    $order->dispatched_at = now();
+                if ($order->type === 'delivery' && empty($order->courier_id)) {
+                    throw new \DomainException("Atenção: Não é possível despachar o Pedido #{$order->id} para entrega sem um motoboy/entregador vinculado.");
                 }
+                $order->dispatched_at = now();
             }
 
             if (in_array($newStatus, ['closed', 'completed'])) {

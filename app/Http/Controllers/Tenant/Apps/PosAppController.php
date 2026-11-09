@@ -47,7 +47,7 @@ class PosAppController extends Controller
 
         // 🚀 Busca de entregadores via Enum
         $data['couriers'] = fn () => User::whereHas('roles', function ($q) {
-                $q->where('name', EmployeeRole::DRIVER->value);
+                $q->whereIn('name', ['courier', 'driver']);
             })
             ->where('is_active', true)
             ->orderBy('name')

@@ -10,7 +10,6 @@ export function useOrderRouting(props, emit) {
     const sharedCustomer = ref(initialMeta?.customer || null);
     const deliveryAddress = ref(initialMeta?.address || null);
 
-    // 🚀 Sincroniza se o tipo de pedido for alterado externamente pelo pai
     watch(() => props.modelValue, (newType) => {
         if (newType && newType !== localOrderType.value) {
             localOrderType.value = newType;
@@ -25,7 +24,6 @@ export function useOrderRouting(props, emit) {
     const setSharedCustomer = (val) => sharedCustomer.value = val;
     const setDeliveryAddress = (val) => deliveryAddress.value = val;
 
-    // 🚀 O endereço só é hidratado automaticamente se o tipo ATIVO for Delivery
     watch(sharedCustomer, (newCustomer) => {
         if (localOrderType.value === 'delivery' && newCustomer && !deliveryAddress.value) {
             if (newCustomer.address) {
@@ -39,9 +37,10 @@ export function useOrderRouting(props, emit) {
     }, { deep: true });
 
     const orderTypeOptions = computed(() => [
-        { label: "Mesa", value: "table", icon: "pi pi-th-large" },
-        { label: "Delivery", value: "delivery", icon: "pi pi-truck" },
-        { label: "Balcão", value: "counter", icon: "pi pi-shopping-bag" }
+        { label: "Mesa",     value: "table",    icon: "pi pi-th-large" },
+        { label: "Entrega",  value: "delivery", icon: "pi pi-truck" },
+        { label: "Retirada", value: "pickup",   icon: "pi pi-shopping-bag" },
+        { label: "Balcão",   value: "counter",  icon: "pi pi-bolt" },
     ]);
 
     const selectOrderType = (type) => {
@@ -74,14 +73,19 @@ export function useOrderRouting(props, emit) {
             return hasAddress && hasCustomer;
         }
 
-        if (localOrderType.value === 'counter') {
-            const hasCustomer = !!(
+        // Retirada exige identificação de cliente
+        if (localOrderType.value === 'pickup') {
+            return !!(
                 sharedCustomer.value?.id ||
                 (typeof sharedCustomer.value === 'string' && sharedCustomer.value.trim().length > 0) ||
                 (typeof sharedCustomer.value?.name === 'string' && sharedCustomer.value.name.trim().length > 0) ||
                 (typeof tableIdentifier.value === 'string' && tableIdentifier.value.trim().length > 0)
             );
-            return hasCustomer;
+        }
+
+        // Balcão avulso é imediatamente válido
+        if (localOrderType.value === 'counter') {
+            return true;
         }
 
         if (localOrderType.value === 'table') {
@@ -94,10 +98,12 @@ export function useOrderRouting(props, emit) {
     watch([localOrderType, selectedTable, tableIdentifier, sharedCustomer, deliveryAddress], () => {
         let resolvedIdentifier = tableIdentifier.value || '';
 
-        if (localOrderType.value === 'counter' && sharedCustomer.value) {
+        if (localOrderType.value === 'pickup' && sharedCustomer.value) {
             resolvedIdentifier = typeof sharedCustomer.value === 'string'
                 ? sharedCustomer.value
-                : (sharedCustomer.value.name || tableIdentifier.value || '');
+                : (sharedCustomer.value.name || tableIdentifier.value || 'Retirada');
+        } else if (localOrderType.value === 'counter') {
+            resolvedIdentifier = sharedCustomer.value?.name || tableIdentifier.value || 'BALCAO';
         } else if (localOrderType.value === 'delivery' && sharedCustomer.value) {
             resolvedIdentifier = typeof sharedCustomer.value === 'string'
                 ? sharedCustomer.value
@@ -108,7 +114,6 @@ export function useOrderRouting(props, emit) {
             ? (sharedCustomer.value?.phone || null)
             : null;
 
-        // 🛑 TRAVA DE SEGURANÇA: Endereço é NULO em qualquer tipo que não seja Delivery
         const isDelivery = localOrderType.value === 'delivery';
 
         const finalAddress = isDelivery
@@ -151,10 +156,10 @@ export function useOrderRouting(props, emit) {
         deliveryAddress.value = finalAddress;
 
         let resolvedIdentifier = tableIdentifier.value || '';
-        if (localOrderType.value === 'counter' && finalCustomer) {
-            resolvedIdentifier = typeof finalCustomer === 'string'
-                ? finalCustomer
-                : (finalCustomer.name || tableIdentifier.value || '');
+        if (localOrderType.value === 'pickup') {
+            resolvedIdentifier = finalCustomer?.name || tableIdentifier.value || 'Retirada';
+        } else if (localOrderType.value === 'counter') {
+            resolvedIdentifier = finalCustomer?.name || tableIdentifier.value || 'BALCAO';
         }
 
         const resolvedTableId = localOrderType.value === 'table'

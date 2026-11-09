@@ -28,11 +28,15 @@ export function useOrderFormatting() {
             return isGenericName ? `Mesa ${tableName}` : `Mesa ${tableName} (${safeCustomerName})`;
         }
 
-        if (type === 'counter') {
-            return safeCustomerName || "Balcão";
+        if (type === 'pickup') {
+            return safeCustomerName || "Retirada";
         }
 
-        return safeCustomerName || "Delivery";
+        if (type === 'counter') {
+            return safeCustomerName || "BALCAO";
+        }
+
+        return safeCustomerName || "Entrega";
     };
 
     const formatModifiersList = (targetItem) => {
