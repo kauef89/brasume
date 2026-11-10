@@ -58,21 +58,29 @@
             <div class="p-4 rounded-xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
                 <div class="flex items-center justify-between text-xs font-semibold text-gray-500 uppercase">
                     <span>💠 Pix Bancário (Chave/API)</span>
-                    <span class="px-2 py-0.5 rounded text-xs bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
-                        {{ $pixMatches->count() }} no Extrato
-                    </span>
+                    @if($bankStatements->isEmpty())
+                        <span class="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">Sem Extrato</span>
+                    @elseif(abs($pixDiff) < 0.05 && $directPixPayments->count() === $pixMatches->count())
+                        <span class="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">100% Batido</span>
+                    @else
+                        <span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Divergente</span>
+                    @endif
                 </div>
-                <div class="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
-                    @php
-                        $pixTotal = $payments->filter(function($p) {
-                            $m = mb_strtolower($p->method ?? '');
-                            return str_contains($m, 'chave') || (str_contains($m, 'pix') && !str_contains($m, 'máq') && !str_contains($m, 'maq'));
-                        })->sum('amount');
-                    @endphp
-                    R$ {{ number_format($pixTotal, 2, ',', '.') }}
+
+                <div class="mt-2 text-2xl font-bold {{ $bankStatements->isEmpty() ? 'text-gray-500' : (abs($pixDiff) >= 0.05 ? 'text-amber-600' : 'text-gray-900 dark:text-white') }}">
+                    R$ {{ number_format($pixSystemTotal, 2, ',', '.') }}
                 </div>
+
                 <div class="mt-1 text-xs text-gray-500">
-                    {{ $pixMatches->count() > 0 ? 'Confrontado com Extrato Sicredi' : 'Aguardando importação de extrato' }}
+                    @if($bankStatements->isEmpty())
+                        Aguardando importação de extrato
+                    @else
+                        Extrato: R$ {{ number_format($pixStatementTotal, 2, ',', '.') }} | 
+                        Dif: <strong class="{{ abs($pixDiff) < 0.05 ? 'text-emerald-600' : 'text-amber-600' }}">
+                            R$ {{ number_format($pixDiff, 2, ',', '.') }}
+                        </strong>
+                        ({{ $pixMatches->count() }} de {{ $directPixPayments->count() }} conciliados)
+                    @endif
                 </div>
             </div>
 
@@ -140,7 +148,7 @@
                             </div>
                             <div class="flex items-center gap-2 shrink-0">
                                 <button 
-                                    wire:click="criarVendaAvulsa({{ $oTx->id }})"
+                                    wire:click="abrirModalVendaAvulsa({{ $oTx->id }})"
                                     type="button"
                                     class="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
                                 >
@@ -433,6 +441,16 @@
                                         >
                                             Corrigir
                                         </button>
+                                    @elseif(isset($paymentCountByOrder) && $paymentCountByOrder->get($p->order_id)?->count() > 1 && !$pixMatches->has($p->id))
+                                        <button 
+                                            wire:click="removerPagamentoDuplicado({{ $p->id }})"
+                                            type="button"
+                                            title="Remover este lançamento duplicado sem comprovante no extrato"
+                                            class="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-bold transition shadow-sm"
+                                        >
+                                            <x-filament::icon icon="heroicon-m-trash" class="w-3.5 h-3.5" />
+                                            Remover Duplicado
+                                        </button>
                                     @else
                                         <span class="text-gray-400 text-xs">-</span>
                                     @endif
@@ -467,4 +485,147 @@
         </div>
 
     </div>
+
+{{-- 🚀 MODAL INTERATIVO: GERAR VENDA AVULSA RETROATIVA --}}
+    @if($showRetroactiveModal)
+        <div class="fixed inset-0 z-[100] overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div class="relative w-full max-w-2xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-6 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200">
+                
+                {{-- CABEÇALHO DO MODAL --}}
+                <div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-black">
+                            <x-filament::icon icon="heroicon-m-shopping-cart" class="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 class="text-base font-black text-stone-900 dark:text-white leading-tight">Gerar Venda Avulsa da Maquininha</h3>
+                            <p class="text-xs text-stone-500 mt-0.5">{{ $retroactiveTxInfo }}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] uppercase font-bold text-stone-400 block tracking-wider">Valor Alvo</span>
+                        <span class="text-xl font-black text-emerald-600 dark:text-emerald-400">R$ {{ number_format($retroactiveTargetAmount, 2, ',', '.') }}</span>
+                    </div>
+                </div>
+
+                {{-- BLOCO 1: SUGESTÕES RÁPIDAS (HEURÍSTICA INTELIGENTE) --}}
+                @if(!empty($suggestedCombinations))
+                    <div class="flex flex-col gap-2">
+                        <span class="text-xs font-black uppercase tracking-wider text-stone-400 flex items-center gap-1.5">
+                            <x-filament::icon icon="heroicon-m-sparkles" class="w-4 h-4 text-amber-500" /> Sugestões que fecham a conta:
+                        </span>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            @foreach($suggestedCombinations as $idx => $sug)
+                                <button
+                                    type="button"
+                                    wire:click="aplicarSugestao({{ $idx }})"
+                                    class="p-2.5 rounded-xl border text-left transition flex items-center justify-between text-xs font-bold outline-none cursor-pointer bg-stone-50 dark:bg-stone-800/60 hover:bg-emerald-50 hover:border-emerald-500/50 dark:hover:bg-emerald-950/20 border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200"
+                                >
+                                    <span class="truncate mr-2">{{ $sug['label'] }}</span>
+                                    <x-filament::icon icon="heroicon-m-arrow-right" class="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                </button>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
+                {{-- BLOCO 2: ITENS SELECIONADOS NO CARRINHO RETROATIVO --}}
+                <div class="bg-stone-50 dark:bg-stone-800/40 border border-stone-200 dark:border-stone-800 rounded-2xl p-4 flex flex-col gap-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-black uppercase tracking-wider text-stone-500">Itens Deste Pedido</span>
+                        @php
+                            $currentTotal = collect($manualItems)->sum(fn($i) => ($i['quantity'] ?? 1) * ($i['unit_price'] ?? 0));
+                            $diff = round($currentTotal - $retroactiveTargetAmount, 2);
+                        @endphp
+                        <span class="text-xs font-bold" class="{{ $diff == 0 ? 'text-emerald-500' : 'text-amber-500' }}">
+                            Total Itens: R$ {{ number_format($currentTotal, 2, ',', '.') }}
+                            @if(abs($diff) > 0.01)
+                                (Diferença: R$ {{ number_format($diff, 2, ',', '.') }})
+                            @endif
+                        </span>
+                    </div>
+
+                    @if(empty($manualItems))
+                        <div class="py-4 text-center text-xs text-stone-400 font-medium">
+                            Nenhum item adicionado. Clique em uma sugestão acima ou escolha produtos abaixo.
+                        </div>
+                    @else
+                        <div class="flex flex-col divide-y divide-stone-200 dark:divide-stone-700/60 max-h-40 overflow-y-auto">
+                            @foreach($manualItems as $idx => $item)
+                                <div class="py-2 flex items-center justify-between text-xs">
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-stone-800 dark:text-stone-200">{{ $item['name'] }}</span>
+                                        <span class="text-[10px] text-stone-400">R$ {{ number_format($item['unit_price'], 2, ',', '.') }} un.</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <button type="button" wire:click="alterarQtdItem({{ $idx }}, -1)" class="w-6 h-6 rounded bg-stone-200 dark:bg-stone-700 flex items-center justify-center font-bold text-stone-600 dark:text-stone-300">-</button>
+                                        <span class="font-black w-6 text-center">{{ $item['quantity'] }}</span>
+                                        <button type="button" wire:click="alterarQtdItem({{ $idx }}, 1)" class="w-6 h-6 rounded bg-stone-200 dark:bg-stone-700 flex items-center justify-center font-bold text-stone-600 dark:text-stone-300">+</button>
+                                        <span class="font-black text-stone-700 dark:text-stone-300 ml-2 w-16 text-right">R$ {{ number_format($item['quantity'] * $item['unit_price'], 2, ',', '.') }}</span>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+
+                {{-- BLOCO 3: SELETOR MANUAL DE PRODUTOS --}}
+                <div class="flex items-center gap-2">
+                    <select
+                        wire:model="selectedProductIdToAdd"
+                        class="flex-1 h-10 px-3 rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-bold text-stone-800 dark:text-stone-200 outline-none"
+                    >
+                        <option value="">Selecione outro produto do cardápio para adicionar...</option>
+                        @foreach(\App\Models\Product::where('status', 'available')->orderBy('name')->get() as $prod)
+                            <option value="{{ $prod->id }}">
+                                {{ $prod->name }} — R$ {{ number_format($prod->dine_in_price ?: ($prod->delivery_price ?: 0), 2, ',', '.') }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <x-filament::button size="sm" color="gray" wire:click="adicionarProdutoManual">
+                        Adicionar
+                    </x-filament::button>
+                </div>
+
+                {{-- DADOS DO CLIENTE (OPCIONAL) --}}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                        type="text"
+                        wire:model="retroactiveCustomerName"
+                        placeholder="Nome do cliente (opcional)"
+                        class="h-9 px-3 rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-800 dark:text-stone-200 outline-none font-medium"
+                    />
+                    <input
+                        type="text"
+                        wire:model="retroactiveNotes"
+                        placeholder="Observações da venda (opcional)"
+                        class="h-9 px-3 rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-800 dark:text-stone-200 outline-none font-medium"
+                    />
+                </div>
+
+                {{-- RODAPÉ DE AÇÕES DO MODAL --}}
+                <div class="flex items-center justify-between border-t border-stone-200 dark:border-stone-800 pt-4">
+                    <button
+                        type="button"
+                        wire:click="criarVendaDiversaRapida"
+                        class="text-xs text-stone-500 hover:text-stone-800 dark:hover:text-stone-300 font-bold underline outline-none"
+                        title="Gera a venda como item diverso no valor exato sem selecionar produtos"
+                    >
+                        Lançar como Venda Diversa (Sem Itens)
+                    </button>
+
+                    <div class="flex items-center gap-2">
+                        <x-filament::button color="gray" wire:click="$set('showRetroactiveModal', false)">
+                            Cancelar
+                        </x-filament::button>
+
+                        <x-filament::button color="success" icon="heroicon-m-check" wire:click="confirmarVendaAvulsa">
+                            Concluir Venda e Conciliar
+                        </x-filament::button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    @endif
 </x-filament-panels::page>

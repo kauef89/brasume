@@ -278,7 +278,8 @@ export function useCashier(props, { onShiftStaged } = {}) {
         pendingShiftPayload.value = JSON.parse(JSON.stringify(payload));
         isShiftModalVisible.value = false;
 
-        if (onShiftStaged) onShiftStaged(shiftActionType.value, pendingShiftPayload.value);
+        // Se a equipe já foi revisada no Passo 1, executa o fechamento definitivo
+        executeShiftAction(pendingShiftPayload.value);
     };
 
     const finalizeShiftWithAttendance = (attendeesArray) => {
@@ -351,7 +352,7 @@ export function useCashier(props, { onShiftStaged } = {}) {
             isTransactionModalVisible.value = true;
         } else if (authActionType.value === 'close_shift_override') {
             pendingShiftPayload.value.pin = authData.password;
-            if (onShiftStaged) onShiftStaged('close', pendingShiftPayload.value);
+            executeShiftAction(pendingShiftPayload.value);
         } else if (authActionType.value === 'shift_attendance') {
             if (pendingAttendancePayload.value) {
                 executeAttendanceSync(pendingAttendancePayload.value.payload, authData.password, pendingAttendancePayload.value.onSuccessCallback);

@@ -51,15 +51,20 @@ export function useShiftAttendance() {
     };
 
     const confirmFreelancerPayment = (payload) => {
-        router.post(route('operations.attendance.pay'), { preserveState: true, 
+        router.post(route('operations.attendance.pay'), {
             user_id: freelancerToPay.value.id,
             amount: payload.amount,
             gross_rate: payload.gross_rate,
             consumption_deducted: payload.consumption_deducted,
             payment_method: payload.method,
-            bank_account_id: payload.bankAccountId
+            bank_account_id: payload.bankAccountId,
+            shift_date_label: payload.shift_date_label,
+            settled_items: payload.settled_items,
+            rolled_items: payload.rolled_items
         }, {
+            preserveState: true,
             preserveScroll: true,
+            only: ['currentShift', 'currentAttendees', 'managerData', 'transactionsHistory'],
             onSuccess: () => {
                 isFreelancerPaymentVisible.value = false;
                 freelancerToPay.value = null;

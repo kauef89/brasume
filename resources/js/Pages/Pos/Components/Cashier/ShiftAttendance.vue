@@ -148,13 +148,13 @@ const effectiveMode = computed(() => {
 
 const headerTitle = computed(() => {
     if (effectiveMode.value === 'open') return 'Abertura de Turno';
-    if (effectiveMode.value === 'close') return 'Fechamento de Turno';
+    if (effectiveMode.value === 'close') return 'Fechamento de Turno (Passo 1 de 2)';
     return 'Escala e Ponto';
 });
 
 const headerSubtitle = computed(() => {
     if (effectiveMode.value === 'open') return 'Confirme a presença e funções dos colaboradores antes de abrir o caixa.';
-    if (effectiveMode.value === 'close') return 'Confirme a presença e efetue os acertos dos freelancers para encerrar o turno.';
+    if (effectiveMode.value === 'close') return 'Confirme a presença e efetue os acertos ou rolagens das diárias antes da contagem financeira.';
     return 'Gerencie a presença da sua equipe ativa no turno.';
 });
 
@@ -166,13 +166,13 @@ const headerIcon = computed(() => {
 
 const confirmButtonLabel = computed(() => {
     if (effectiveMode.value === 'open') return 'Continuar';
-    if (effectiveMode.value === 'close') return 'Finalizar';
+    if (effectiveMode.value === 'close') return 'Avançar para Caixa';
     return 'Salvar Ponto';
 });
 
 const confirmButtonIcon = computed(() => {
     if (effectiveMode.value === 'open') return 'pi-arrow-right';
-    if (effectiveMode.value === 'close') return 'pi-check-circle';
+    if (effectiveMode.value === 'close') return 'pi-arrow-right';
     return 'pi-check';
 });
 
@@ -230,7 +230,9 @@ const initAttendanceData = () => {
             newState[u.id] = {
                 status: existing.attendance_status || 'present',
                 rate: existing.daily_rate > 0 ? existing.daily_rate : (u.base_remuneration || u.default_rate || 0),
-                is_paid: !!existing.account_payable_id,
+                is_paid: Boolean(existing.is_paid),
+                is_rolled: Boolean(existing.is_rolled),
+                payout_status: existing.payout_status || (existing.account_payable_id ? 'paid' : 'pending'),
                 assigned_role: existing.assigned_role || primaryRole
             };
         } else {
@@ -244,6 +246,8 @@ const initAttendanceData = () => {
                 status: defaultStatus,
                 rate: u.base_remuneration || u.default_rate || 0,
                 is_paid: false,
+                is_rolled: false,
+                payout_status: 'pending',
                 assigned_role: primaryRole
             };
         }

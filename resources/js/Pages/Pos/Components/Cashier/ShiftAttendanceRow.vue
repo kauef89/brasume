@@ -55,20 +55,37 @@
         <div class="min-w-0 flex items-center justify-end gap-2">
             <template v-if="user.employment_type !== 'clt' && modelValue.status === 'present'">
                 <template v-if="canPayout">
+                    <!-- 1. PENDENTE DE ACERTO -->
                     <button
-                        v-if="!modelValue.is_paid"
+                        v-if="!modelValue.is_paid && !modelValue.is_rolled"
                         type="button"
                         @click="$emit('pay-freelancer', user, modelValue.rate)"
-                        class="h-7 px-2 rounded-lg bg-warning-500/10 hover:bg-warning-500/20 text-warning-700 dark:text-warning-400 text-[10px] font-black uppercase tracking-wider border border-warning-500/30 transition-colors cursor-pointer outline-none shrink-0"
+                        class="h-7 px-2.5 rounded-lg bg-warning-500/10 hover:bg-warning-500/20 text-warning-700 dark:text-warning-400 text-[10px] font-black uppercase tracking-wider border border-warning-500/30 transition-colors cursor-pointer outline-none shrink-0 active:scale-95"
                     >
                         Liquidar
                     </button>
-                    <span
-                        v-else
-                        class="h-7 px-2 rounded-lg bg-success-500/10 text-success-smart border border-success-500/20 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0"
+
+                    <!-- 2. ROLADO / ACUMULADO (ROXO) -->
+                    <button
+                        v-else-if="modelValue.is_rolled"
+                        type="button"
+                        @click="$emit('pay-freelancer', user, modelValue.rate)"
+                        class="h-7 px-2.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/25 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0 transition-colors cursor-pointer outline-none"
+                        title="Dívida postergada para os próximos turnos. Clique para revisar ou alterar."
                     >
-                        <i class="pi pi-check text-[9px]"></i> Pago
-                    </span>
+                        <i class="pi pi-history text-[9px]"></i> Rolado
+                    </button>
+
+                    <!-- 3. QUITADO / PAGO (VERDE) -->
+                    <button
+                        v-else
+                        type="button"
+                        @click="$emit('pay-freelancer', user, modelValue.rate)"
+                        class="h-7 px-2.5 rounded-lg bg-success-500/10 hover:bg-success-500/20 text-success-smart border border-success-500/25 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shrink-0 transition-colors cursor-pointer outline-none"
+                        title="Diária liquidada com saída de caixa ou PIX. Clique para ver detalhes."
+                    >
+                        <i class="pi pi-check text-[9px]"></i> Quitado
+                    </button>
                 </template>
                 <span v-else class="text-[11px] font-black text-surface-text pr-1 tabular-nums">
                     {{ $formatCurrency(modelValue.rate) }}

@@ -161,6 +161,10 @@ export function useCheckoutProcessor({
             return { id: i.id, pay_qty: qty, amount: Math.round(qty * Number(i.effective_unit_price || i.unit_price || 0) * 100) / 100 };
         });
 
+        const idempotencyKey = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : (Date.now() + '_' + Math.random().toString(36).substring(2, 9));
+
         try {
             await apiClient.post(route('operations.orders.pay', orderId), {
                 payments: standardPayments.map(p => ({ method_id: p.real_method_id || p.method_id, amount: Number(p.amount) })),
@@ -168,7 +172,8 @@ export function useCheckoutProcessor({
                 service_fee: Math.max(0, Number(unref(serviceFeeAmount) || 0)),
                 cashback_used: Math.max(0, Number(unref(localCashbackAmountToSend) || 0)),
                 document: unref(customerDocument),
-                coupon_code: unref(appliedCheckoutCoupon)
+                coupon_code: unref(appliedCheckoutCoupon),
+                idempotency_key: idempotencyKey
             }, { headers: { 'Accept': 'application/json' } });
 
             stagedPayments.value = [];

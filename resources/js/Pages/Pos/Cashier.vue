@@ -138,7 +138,7 @@
                     :has-active-shift="Boolean(currentShift)"
                     :has-staged-attendees="stagedAttendees.length > 0"
                     @cancel="resetViews"
-                    @back-to-attendance="handleBackToAttendanceFromOpen"
+                    @back-to-attendance="handleBackToAttendance"
                     @confirm="handleShiftSidebarConfirm"
                 />
 
@@ -341,8 +341,10 @@ const resetViews = () => {
     }
 };
 
-watch(() => props.currentShift, () => {
-    resetViews();
+watch(() => [props.currentShift?.id, props.currentShift?.status], ([newId, newStatus], [oldId, oldStatus]) => {
+    if (newId !== oldId || newStatus !== oldStatus) {
+        resetViews();
+    }
 }, { immediate: true });
 
 const filterPanelRef = ref(null);
@@ -386,8 +388,10 @@ const openShiftView = (type) => {
         leftView.value = 'attendance';
         rightView.value = 'empty';
     } else {
-        leftView.value = 'close_shift';
-        rightView.value = 'shift_action';
+        // 🚀 Passo 1 do Fechamento: Equipe & Acertos de Diária
+        isStagedAttendance.value = true;
+        leftView.value = 'attendance';
+        rightView.value = 'dashboard';
     }
 };
 
@@ -395,9 +399,9 @@ const triggerSidebarSubmit = () => {
     shiftSidebarRef.value?.triggerConfirmation();
 };
 
-const handleBackToAttendanceFromOpen = () => {
+const handleBackToAttendance = () => {
     leftView.value = 'attendance';
-    rightView.value = 'empty';
+    rightView.value = shiftActionType.value === 'open' ? 'empty' : 'dashboard';
 };
 
 const handleShiftSidebarConfirm = ({ observation }) => {
@@ -431,8 +435,11 @@ const handleAttendanceConfirm = (attendeesPayload) => {
         stagedAttendees.value = teamArray;
         leftView.value = 'open_shift';
         rightView.value = 'shift_action';
-    } else if (isStagedAttendance.value && shiftActionType.value === 'close') {
-        finalizeShiftWithAttendance(teamArray);
+    } else if (shiftActionType.value === 'close' || isStagedAttendance.value) {
+        // 🚀 Avança para o Passo 2: Contagem de Gaveta e Terminais
+        stagedAttendees.value = teamArray;
+        leftView.value = 'close_shift';
+        rightView.value = 'shift_action';
     } else {
         triggerAttendanceSync(teamArray, () => {
             leftView.value = 'table';

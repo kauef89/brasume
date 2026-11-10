@@ -36,21 +36,14 @@ class CheckoutPaymentController extends Controller
             'service_fee'          => 'nullable|numeric',
             'cashback_used'        => 'nullable|numeric',
             'coupon_code'          => 'nullable|string',
+            'idempotency_key'      => 'nullable|string|max:64',
         ]);
 
-        try {
-            $paymentService->attachActiveShiftIfMissing($order);
+        $idempotencyKey = $data['idempotency_key'] ?? null;
+        $idempotencyCacheKey = $idempotencyKey ? "order_payment_idempotency:{$order->id}:{$idempotencyKey}" : null;
 
-            if (!empty($data['coupon_code'])) {
-                $paymentService->applyCheckoutCoupon(
-                    $order,
-                    $data['coupon_code'],
-                    isset($data['service_fee']) ? (float) $data['service_fee'] : null
-                );
-            }
-
-            $paymentService->processPayment($order, $data);
-
+        // Se a mesma submissão já foi concluída recentemente, responde imediatamente sem reprocessar
+        if ($idempotencyCacheKey && \Illuminate\Support\Facades\Cache::has($idempotencyCacheKey)) {
             $order->refresh()->load([
                 'items.modifiers',
                 'payments.items.modifiers',
@@ -59,17 +52,64 @@ class CheckoutPaymentController extends Controller
                 'diningTable'
             ]);
 
-            $paymentService->resolveOrderCompletion($order);
-
             if ($request->wantsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'Pagamento processado com sucesso!',
+                    'message' => 'Pagamento já processado com sucesso!',
                     'order'   => $order,
                 ]);
             }
+            return redirect()->back()->with('success', 'Pagamento já processado!');
+        }
 
-            return redirect()->back()->with('success', 'Pagamento processado!');
+        // Trava atómica de 15 segundos por encomenda para serializar pedidos concorrentes
+        $lockKey = "order_payment_lock:{$order->id}";
+        $lock = \Illuminate\Support\Facades\Cache::lock($lockKey, 15);
+
+        try {
+            return $lock->block(5, function () use ($order, $data, $request, $paymentService, $idempotencyCacheKey) {
+                $paymentService->attachActiveShiftIfMissing($order);
+
+                if (!empty($data['coupon_code'])) {
+                    $paymentService->applyCheckoutCoupon(
+                        $order,
+                        $data['coupon_code'],
+                        isset($data['service_fee']) ? (float) $data['service_fee'] : null
+                    );
+                }
+
+                $paymentService->processPayment($order, $data);
+
+                $order->refresh()->load([
+                    'items.modifiers',
+                    'payments.items.modifiers',
+                    'payments.transaction',
+                    'customer',
+                    'diningTable'
+                ]);
+
+                $paymentService->resolveOrderCompletion($order);
+
+                if ($idempotencyCacheKey) {
+                    \Illuminate\Support\Facades\Cache::put($idempotencyCacheKey, true, now()->addMinutes(2));
+                }
+
+                if ($request->wantsJson()) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Pagamento processado com sucesso!',
+                        'order'   => $order,
+                    ]);
+                }
+
+                return redirect()->back()->with('success', 'Pagamento processado!');
+            });
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
+            $msg = 'Existe outro pagamento a ser processado simultaneamente para esta comanda. Aguarde um instante.';
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $msg], 409);
+            }
+            return redirect()->back()->with('error', $msg);
         } catch (\Throwable $e) {
             if ($request->wantsJson()) {
                 return response()->json(['success' => false, 'message' => $e->getMessage()], 422);

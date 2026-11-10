@@ -139,13 +139,32 @@ class ShiftAttendanceService
     {
         if (!$currentShift) return [];
 
-        return $currentShift->attendees->map(function($a) {
+        $attendees = $currentShift->attendees()->get();
+        $payableIds = $attendees->pluck('pivot.account_payable_id')->filter()->unique();
+        $payables = $payableIds->isNotEmpty()
+            ? AccountPayable::whereIn('id', $payableIds)->get()->keyBy('id')
+            : collect();
+
+        return $attendees->map(function($a) use ($payables) {
+            $payableId = $a->pivot->account_payable_id;
+            $payable = $payableId ? $payables->get($payableId) : null;
+            $isRolled = false;
+
+            if ($payable) {
+                $isRolled = (float) $payable->amount <= 0.00
+                    || str_contains($payable->observations ?? '', 'Acumulado no Saldo')
+                    || str_contains($payable->description ?? '', 'Acúmulo de Saldo');
+            }
+
             return [
                 'user_id'            => $a->id,
                 'status'             => $a->pivot->status,
                 'attendance_status'  => $a->pivot->attendance_status,
                 'daily_rate'         => (float) ($a->pivot->daily_rate ?? 0),
-                'account_payable_id' => $a->pivot->account_payable_id,
+                'account_payable_id' => $payableId,
+                'is_paid'            => !empty($payableId) && !$isRolled,
+                'is_rolled'          => !empty($payableId) && $isRolled,
+                'payout_status'      => !empty($payableId) ? ($isRolled ? 'rolled' : 'paid') : 'pending',
                 'assigned_role'      => $a->pivot->assigned_role ?? null
             ];
         })->toArray();

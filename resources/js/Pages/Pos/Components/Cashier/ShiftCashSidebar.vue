@@ -11,7 +11,7 @@
                     :class="isOpenMode ? 'animate-pulse' : ''"
                 ></span>
                 <span class="text-xs font-black uppercase tracking-widest text-surface-muted">
-                    {{ isOpenMode ? 'Abertura de Turno (Passo 2 de 2)' : 'Fecho de Turno (Passo 1 de 2)' }}
+                    {{ isOpenMode ? 'Abertura de Turno (Passo 2 de 2)' : 'Fechamento de Caixa (Passo 2 de 2)' }}
                 </span>
             </div>
 
@@ -63,12 +63,12 @@
             >
                 <i v-if="isAnalyzing" class="pi pi-spinner pi-spin text-sm"></i>
                 <i v-else :class="['pi text-sm', isOpenMode ? 'pi-check' : 'pi-arrow-right']"></i>
-                <span>{{ isAnalyzing ? 'A Inspecionar...' : (isOpenMode ? 'Abrir Caixa' : 'Avançar para Equipa') }}</span>
+                <span>{{ isAnalyzing ? 'A Inspecionar...' : (isOpenMode ? 'Abrir Caixa' : 'Encerrar Turno') }}</span>
             </button>
 
             <!-- Botão de voltar para a equipe durante o fluxo de abertura -->
             <button
-                v-if="isOpenMode && hasStagedAttendees"
+                v-if="hasStagedAttendees"
                 type="button"
                 @click="$emit('back-to-attendance')"
                 class="w-full h-10 rounded-full font-black text-xs uppercase tracking-widest text-primary-smart hover:bg-surface-3 transition-colors outline-none cursor-pointer border-none flex items-center justify-center gap-1.5"

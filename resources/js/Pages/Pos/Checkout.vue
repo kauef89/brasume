@@ -118,11 +118,11 @@
                 />
                 <Button
                     v-else
-                    :label="canSubmitCheckout ? 'Confirmar Recebimento' : 'Aguardando Pagamento'"
-                    :icon="canSubmitCheckout ? 'pi pi-check-circle' : 'pi pi-lock'"
+                    :label="isProcessingPayment ? 'A Processar Recebimento...' : (canSubmitCheckout ? 'Confirmar Recebimento' : 'Aguardando Pagamento')"
+                    :icon="isProcessingPayment ? 'pi pi-spin pi-spinner' : (canSubmitCheckout ? 'pi pi-check-circle' : 'pi pi-lock')"
                     class="w-full h-16 text-xl rounded-full! font-black border-none outline-none transition-colors"
-                    :class="canSubmitCheckout ? 'bg-success-500 hover:bg-success-600 text-white cursor-pointer shadow-md' : 'bg-surface-3 text-surface-muted cursor-not-allowed'"
-                    :disabled="!canSubmitCheckout"
+                    :class="canSubmitCheckout && !isProcessingPayment ? 'bg-success-500 hover:bg-success-600 text-white cursor-pointer shadow-md' : 'bg-surface-3 text-surface-muted cursor-not-allowed pointer-events-none'"
+                    :disabled="!canSubmitCheckout || isProcessingPayment"
                     @click="processPayment"
                 />
             </div>
@@ -580,6 +580,7 @@ const {
     isEmittingNfce,
     isFiscalSuccess,
     fiscalEmitError,
+    isProcessingPayment,
     processPayment, generateDirectPix,
     handlePostPaymentAction,
     confirmCancellation

@@ -231,7 +231,7 @@ const initialSaved = loadPersistedData();
 
 const simpleTotal = ref(initialSaved?.simpleTotal ?? 0);
 const retainedCoins = ref(initialSaved?.retainedCoins ?? 0);
-const terminalTotals = ref({});
+const terminalTotals = ref(initialSaved?.terminalTotals || {});
 const counts = ref({
     b200: null, b100: null, b50: null, b20: null, b10: null, b5: null, b2: null,
     c1: null, c50: null, c25: null, c10: null, c5: null,
@@ -239,17 +239,18 @@ const counts = ref({
 });
 
 const hasValues = computed(() => {
+    const hasTerminals = Object.values(terminalTotals.value || {}).some(v => Number(v) > 0);
     if (props.companySettings.cash_opening_mode === 'total') {
-        return Number(simpleTotal.value) > 0 || Number(retainedCoins.value) > 0;
+        return Number(simpleTotal.value) > 0 || Number(retainedCoins.value) > 0 || hasTerminals;
     }
-    return Object.values(counts.value).some(v => v !== null && v > 0);
+    return Object.values(counts.value).some(v => v !== null && v > 0) || hasTerminals;
 });
 
 watch(() => props.mode, () => {
     const saved = loadPersistedData();
     simpleTotal.value = saved?.simpleTotal ?? 0;
     retainedCoins.value = saved?.retainedCoins ?? 0;
-    terminalTotals.value = {};
+    terminalTotals.value = saved?.terminalTotals || {};
     counts.value = {
         b200: null, b100: null, b50: null, b20: null, b10: null, b5: null, b2: null,
         c1: null, c50: null, c25: null, c10: null, c5: null,
@@ -339,7 +340,8 @@ watch([counts, simpleTotal, retainedCoins, calculatedTotal, coinsTotal, terminal
         localStorage.setItem(storageKey.value, JSON.stringify({
             counts: counts.value,
             simpleTotal: simpleTotal.value,
-            retainedCoins: retainedCoins.value
+            retainedCoins: retainedCoins.value,
+            terminalTotals: terminalTotals.value
         }));
     } catch (e) {}
 

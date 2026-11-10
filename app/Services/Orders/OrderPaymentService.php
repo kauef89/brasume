@@ -78,6 +78,22 @@ class OrderPaymentService
         $cashbackUsed = (float) ($data['cashback_used'] ?? 0);
 
         DB::transaction(function () use ($order, $data, $cashbackUsed) {
+            // 🛡️ Bloqueio de linha (Pessimistic Locking)
+            $lockedOrder = Order::where('id', $order->id)->lockForUpdate()->firstOrFail();
+
+            // 🛡️ GUARDA 1: Bloqueia se a encomenda já estiver fechada ou cancelada
+            if (in_array($lockedOrder->status, ['closed', 'cancelled', 'completed'], true)) {
+                throw new Exception("Operação negada: O Pedido #{$lockedOrder->id} já se encontra finalizado ou cancelado.");
+            }
+
+            $currentPaid = (float) $lockedOrder->payments()->sum('amount');
+            $currentTotal = (float) $lockedOrder->total;
+
+            // 🛡️ GUARDA 2: Bloqueia se o pedido já estiver quitado
+            if ($lockedOrder->payment_status === 'paid' && $currentTotal > 0 && ($currentTotal - $currentPaid) <= 0.05) {
+                throw new Exception("Operação negada: O Pedido #{$lockedOrder->id} já se encontra integralmente quitado.");
+            }
+
             $shift = CashShift::where('status', 'open')->latest()->first();
             if (!$shift) {
                 throw new Exception('Operação negada: Nenhum turno de caixa aberto. Abra o caixa antes de receber pagamentos.');
@@ -135,6 +151,21 @@ class OrderPaymentService
                         'amount'      => $payment['amount'],
                         'balance'     => $currentBalance - (float) $payment['amount']
                     ]);
+                }
+
+                // 🛡️ GUARDA 3: Prevenção de duplicidade temporal exata (mesmo método e valor nos últimos 30s)
+                $recentDuplicate = $lockedOrder->payments()
+                    ->where('payment_method_id', $methodId)
+                    ->where('amount', $payment['amount'])
+                    ->where('created_at', '>=', now()->subSeconds(30))
+                    ->exists();
+
+                if ($recentDuplicate) {
+                    $remainingBalance = max(0, $expectedTotal - (float) $lockedOrder->payments()->sum('amount'));
+                    if ($remainingBalance <= 0.05 || $lockedOrder->payment_status === 'paid') {
+                        Log::warning("⚠️ [Anti-Duplicação] Pagamento duplicado ignorado no Pedido #{$lockedOrder->id}: R$ {$payment['amount']} ({$methodName}).");
+                        continue;
+                    }
                 }
 
                 $orderPayment = $order->payments()->create([

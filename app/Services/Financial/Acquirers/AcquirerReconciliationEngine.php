@@ -266,7 +266,7 @@ class AcquirerReconciliationEngine
 
             // Escopo
             if ($scope === 'counter') {
-                if (in_array($order?->type, ['counter', 'takeaway', 'table'])) $score += 30;
+                if (in_array($order?->type, ['counter', 'takeaway', 'table', 'pickup'])) $score += 30;
                 elseif ($order?->type === 'delivery') $score += 10;
             } elseif ($scope === 'waiter' && $order?->type === 'table') {
                 $score += 30;
@@ -282,6 +282,12 @@ class AcquirerReconciliationEngine
             elseif ($diffPay <= 600) $score += 25;
             elseif ($diffPay <= 1800) $score += 15;
             elseif ($diffPay <= 3600) $score += 10;
+            
+            // 🚀 Bônus de Turno (Shift-Awareness): Permite comandas fechadas mais tarde no mesmo turno
+            $shift = $payment->order?->cash_shift_id ? \App\Models\CashShift::find($payment->order->cash_shift_id) : null;
+            if ($shift && $shift->opened_at && $acquirerTx->transaction_date >= $shift->opened_at && $acquirerTx->transaction_date <= ($shift->closed_at ?? now())) {
+                $score += 25;
+            }
 
             // Modalidade
             $methodName = Str::ascii(mb_strtolower($payment->method ?? ''));
