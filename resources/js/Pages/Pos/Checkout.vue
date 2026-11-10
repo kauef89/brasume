@@ -23,6 +23,7 @@
     <div class="flex-1 flex flex-col h-full max-h-full bg-surface-2 rounded-4xl overflow-hidden min-h-0">
         <CheckoutHeader
             class="shrink-0"
+            :is-inescapable="isCounterInescapable"
             :title="orderDestinationTitle"
             :order-label="`Pagamento #${liveOrder.id}`"
             :subtitle="headerSubtitle"
@@ -35,6 +36,7 @@
             @toggle-all="toggleAllSelections"
             @open-coupon="isCouponModalVisible = true"
             @go-back="handleManualClose"
+            @cancel-order="handleInescapableCancel"
         />
 
         <CheckoutItemsList
@@ -450,7 +452,26 @@ const canSubmitCheckout = computed(() => {
     return intendedPaymentTotal.value > 0 && stagedTotalAmount >= (requiredAmount - 0.01);
 });
 
-const handleManualClose = () => { emit('close'); };
+const handleInescapableCancel = () => {
+    itemToProcess.value = liveOrder.value;
+    authActionType.value = 'cancel_order';
+    authNeedsPin.value = Boolean(props.companySettings?.require_pin_for_voids ?? true);
+    isReasonModalVisible.value = true;
+};
+
+const handleManualClose = () => {
+    if (isCounterInescapable.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Venda de Balcão em Aberto',
+            detail: 'Para fechar este checkout de balcão sem pagar, utilize o botão Cancelar Venda.',
+            life: 4000
+        });
+        handleInescapableCancel();
+        return;
+    }
+    emit('close');
+};
 
 const handleKeydown = (e) => {
     if (e.key === 'Escape') {
@@ -519,11 +540,48 @@ const { rollbackPayment, cancelItem } = usePaymentRollback({
     toast
 });
 
+const cancelOrderEntirely = async (authData) => {
+    const orderId = liveOrder.value?.id || props.order?.id;
+    if (!orderId) return;
+
+    try {
+        const apiClient = window.axios || axios;
+        const endpoint = window.route && route().has('operations.orders.cancel')
+            ? route('operations.orders.cancel', orderId)
+            : `/operations/orders/${orderId}/cancel`;
+
+        await apiClient.post(endpoint, {
+            pin: authData.password || authData.pin,
+            reason: authData.reason || 'Venda de balcão cancelada no checkout.',
+            is_loss: Boolean(authData.isLoss)
+        });
+
+        isReasonModalVisible.value = false;
+        toast.add({
+            severity: 'info',
+            summary: 'Venda Cancelada',
+            detail: `O pedido #${orderId} foi cancelado e a tela liberada.`,
+            life: 3500
+        });
+
+        emit('close');
+    } catch (e) {
+        toast.add({
+            severity: 'error',
+            summary: 'Falha ao Cancelar',
+            detail: e.response?.data?.message || 'Não foi possível cancelar o pedido.',
+            life: 5000
+        });
+    }
+};
+
 const handleConfirmAction = (authData) => {
     if (authActionType.value === 'reactivate' || authActionType.value === 'correct_payment') {
         confirmCancellation(authData);
     } else if (authActionType.value === 'rollback_payment') {
         rollbackPayment(itemToProcess.value, authData);
+    } else if (authActionType.value === 'cancel_order') {
+        cancelOrderEntirely(authData);
     } else {
         cancelItem(itemToProcess.value, authData);
     }

@@ -3,7 +3,23 @@
 
         <!-- BLOCO DA ESQUERDA: TÍTULO (MESA/CLIENTE) E IDENTIFICADOR DO PAGAMENTO -->
         <div class="flex items-start gap-3 md:gap-4 flex-1 min-w-0 w-full">
-            <button @click="$emit('go-back')" class="btn-ghost mt-1 shrink-0 cursor-pointer">
+            <button
+                v-if="isInescapable"
+                type="button"
+                @click="$emit('cancel-order')"
+                class="h-9 px-3 rounded-xl bg-danger-500/10 hover:bg-danger-500/20 text-danger-600 dark:text-danger-400 border border-danger-500/30 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer mt-1 shrink-0 active:scale-95 shadow-xs"
+                title="Venda de balcão não pode ser abandonada. Cancelar pedido (requer autorização)."
+            >
+                <i class="pi pi-times font-black text-xs"></i>
+                <span class="hidden sm:inline">Cancelar Venda</span>
+            </button>
+            <button
+                v-else
+                type="button"
+                @click="$emit('go-back')"
+                class="btn-ghost mt-1 shrink-0 cursor-pointer"
+                title="Voltar"
+            >
                 <i class="pi pi-arrow-left font-medium text-sm"></i>
             </button>
 
@@ -84,6 +100,7 @@ const props = defineProps({
     isGrouped: { type: Boolean, default: true },
     hideGroupToggle: { type: Boolean, default: false },
     isAllSelected: { type: Boolean, default: false },
+    isInescapable: { type: Boolean, default: false },
     searchQuery: { type: String, default: '' },
     showSearch: { type: Boolean, default: true }
 });

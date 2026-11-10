@@ -9,7 +9,12 @@ use App\Services\Catalog\Costing\PredictiveCostCalculator;
 
 class ProductCostingService
 {
-    public static function clearCache(): void { BaseCostCalculator::clearCache(); }
+    public static function evaluateCostChain(Product $product): array { return \App\Services\Catalog\Costing\CostChainAnalyzer::analyze($product); }
+
+    public static function clearCache(): void {
+        BaseCostCalculator::clearCache();
+        \App\Services\Catalog\Costing\CostChainAnalyzer::clearCache();
+    }
     public static function calculateBaseCost(Product $product, string $consumptionMode = "all"): float { return BaseCostCalculator::calculate($product, $consumptionMode); }
     public static function getPredictiveModifiersCost(Product $product): float { return PredictiveCostCalculator::calculate($product); }
     public static function getMarginData(Product $product): array { return MarginCalculator::getMarginData($product); }

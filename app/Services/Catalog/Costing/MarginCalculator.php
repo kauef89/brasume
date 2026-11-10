@@ -76,25 +76,43 @@ class MarginCalculator
         $addonSellPriceTotal = 0;
 
         foreach ($modifierGroups as $group) {
-            $groupIsSimulated = false;
-            $groupSimulatedCost = 0;
+            $isProportional = ($group->portion_distribution_mode ?? 'additive') === 'proportional_split';
+            $selectedInGroup = [];
+            $extraPriceSum = 0.0;
 
             foreach ($group->options as $option) {
                 if (in_array($option->id, $selectedAddons)) {
-                    $groupIsSimulated = true;
-                    $addonSellPriceTotal += (float) $option->price;
-
-                    if ($option->linked_product_id) {
-                        $linkedInsumo = Product::find($option->linked_product_id);
-                        if ($linkedInsumo) {
-                            $groupSimulatedCost += ProductCostingService::calculateBaseCost($linkedInsumo) * (float) ($option->linked_qty ?? 1);
-                        }
-                    }
+                    $selectedInGroup[] = $option;
+                    $extraPriceSum += (float) $option->price;
                 }
             }
 
-            if ($groupIsSimulated) {
-                $simulatedCost += $groupSimulatedCost;
+            if (!empty($selectedInGroup)) {
+                $k = count($selectedInGroup);
+                $factor = 1.0;
+
+                if ($isProportional && $k > 1) {
+                    $factor = (1.0 + (0.15 * ($k - 1))) / $k;
+                }
+
+                $groupCost = 0.0;
+                foreach ($selectedInGroup as $option) {
+                    if ($option->linked_product_id) {
+                        $linkedInsumo = Product::find($option->linked_product_id);
+                        if ($linkedInsumo) {
+                            $optCost = ProductCostingService::calculateBaseCost($linkedInsumo) * (float) ($option->linked_qty ?? 1);
+                            $groupCost += ($optCost * $factor);
+                        }
+                    }
+                }
+
+                // Cobrança: sobrepreço individual das opções + taxa por excedente (além de max_free)
+                $maxFree = $group->max_free > 0 ? (int) $group->max_free : 0;
+                $extraCount = max(0, $k - $maxFree);
+                $incrementCharge = $extraCount * (float) ($group->increment ?? 0);
+
+                $addonSellPriceTotal += ($extraPriceSum + $incrementCharge);
+                $simulatedCost += $groupCost;
             } else {
                 $groupTypeVal = $group->type instanceof ModifierType ? $group->type->value : ($group->type instanceof \BackedEnum ? $group->type->value : (string)$group->type);
                 if ($groupTypeVal === ModifierType::OPTION->value) {
@@ -104,13 +122,23 @@ class MarginCalculator
                         $optCost = 0;
                         if ($opt->linked_product_id) {
                             $linked = Product::find($opt->linked_product_id);
-                            if ($linked) $optCost = ProductCostingService::calculateBaseCost($linked) * (float) ($opt->linked_qty ?? 1);
+                            if ($linked) {
+                                $optCost = ProductCostingService::calculateBaseCost($linked) * (float) ($opt->linked_qty ?? 1);
+                            }
                         }
                         $weight = max((float) ($opt->historical_weight ?? 1), 0.001);
                         $groupExpectedCost += ($optCost * $weight);
                         $totalWeight += $weight;
                     }
-                    if ($totalWeight > 0) $simulatedCost += ($groupExpectedCost / $totalWeight) * ($group->max_free > 0 ? $group->max_free : 1);
+                    if ($totalWeight > 0) {
+                        $avgCost = $groupExpectedCost / $totalWeight;
+                        if ($isProportional) {
+                            $maxFree = $group->max_free > 0 ? (int) $group->max_free : 1;
+                            $simulatedCost += $avgCost * (1.0 + (0.15 * max(0, $maxFree - 1)));
+                        } else {
+                            $simulatedCost += $avgCost * ($group->max_free > 0 ? $group->max_free : 1);
+                        }
+                    }
                 }
             }
         }

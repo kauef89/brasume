@@ -10,12 +10,16 @@ enum ShiftStatus: string implements HasLabel, HasColor, HasIcon
 {
     case OPEN = 'open';
     case CLOSED = 'closed';
+    case RECONCILED = 'reconciled';
+    case HOMOLOGATED = 'homologated';
 
     public function getLabel(): ?string
     {
         return match ($this) {
             self::OPEN => 'Aberto',
-            self::CLOSED => 'Fechado',
+            self::CLOSED => 'Fechado (Pendente Auditoria)',
+            self::RECONCILED => 'Auditado & Conciliado',
+            self::HOMOLOGATED => 'Homologado c/ Ressalva',
         };
     }
 
@@ -24,6 +28,8 @@ enum ShiftStatus: string implements HasLabel, HasColor, HasIcon
         return match ($this) {
             self::OPEN => 'success',
             self::CLOSED => 'gray',
+            self::RECONCILED => 'emerald',
+            self::HOMOLOGATED => 'amber',
         };
     }
 
@@ -31,7 +37,9 @@ enum ShiftStatus: string implements HasLabel, HasColor, HasIcon
     {
         return match ($this) {
             self::OPEN => 'heroicon-m-lock-open',
-            self::CLOSED => 'heroicon-m-lock-closed',
+            self::CLOSED => 'heroicon-m-clock',
+            self::RECONCILED => 'heroicon-m-check-badge',
+            self::HOMOLOGATED => 'heroicon-m-shield-exclamation',
         };
     }
 }

@@ -15,6 +15,7 @@ class CashShift extends Model
     protected $guarded = [];
 
     protected $casts = [
+        'status' => \App\Enums\ShiftStatus::class,
         'opened_at'                => 'datetime',
         'closed_at'                => 'datetime',
         'opening_balance'          => 'decimal:2',

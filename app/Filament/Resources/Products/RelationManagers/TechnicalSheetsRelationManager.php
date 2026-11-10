@@ -106,13 +106,62 @@ class TechnicalSheetsRelationManager extends RelationManager
                         \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($livewire->getOwnerRecord(), 'recipe_update');
                     }),
 
-                Tables\Columns\TextColumn::make("ingredient.name")
-                    ->label("Ingrediente / Material")
+                Tables\Columns\TextColumn::make('ingredient.name')
+                    ->label('Ingrediente / Material')
+                    ->description(function ($record) {
+                        $ing = $record->ingredient;
+                        if (!$ing) return null;
+                        $type = $ing->type instanceof \App\Enums\ProductType ? $ing->type : \App\Enums\ProductType::tryFrom((string)$ing->type);
+                        return $type === \App\Enums\ProductType::MANUFACTURED ? '🧪 Pré-Preparo (Ficha Própria)' : null;
+                    })
+                    ->url(function ($record) {
+                        $ing = $record->ingredient;
+                        if (!$ing) return null;
+
+                        // 1. Identifica qual Resource gerencia o tipo deste item
+                        $targetResource = null;
+                        if (\App\Filament\Resources\Products\ProductResource::getEloquentQuery()->where('id', $ing->id)->exists()) {
+                            $targetResource = \App\Filament\Resources\Products\ProductResource::class;
+                        } elseif (class_exists(\App\Filament\Resources\Ingredients\IngredientResource::class) && \App\Filament\Resources\Ingredients\IngredientResource::getEloquentQuery()->where('id', $ing->id)->exists()) {
+                            $targetResource = \App\Filament\Resources\Ingredients\IngredientResource::class;
+                        } else {
+                            $targetResource = \App\Filament\Resources\Products\ProductResource::class;
+                        }
+
+                        // 2. Prioriza a rota 'edit' para acesso direto às abas e ficha, ou 'view' se existir
+                        $availablePages = array_keys($targetResource::getPages());
+                        $targetPage = in_array('edit', $availablePages, true) ? 'edit' : (in_array('view', $availablePages, true) ? 'view' : null);
+
+                        if (!$targetPage) return null;
+
+                        return $targetResource::getUrl($targetPage, ['record' => $ing->id]);
+                    })
+                    ->openUrlInNewTab()
+                    ->icon(function ($record) {
+                        $ing = $record->ingredient;
+                        if (!$ing) return null;
+                        $type = $ing->type instanceof \App\Enums\ProductType ? $ing->type : \App\Enums\ProductType::tryFrom((string)$ing->type);
+                        return $type === \App\Enums\ProductType::MANUFACTURED ? 'heroicon-m-beaker' : null;
+                    })
+                    ->iconPosition('after')
                     ->searchable()
                     ->sortable()
                     ->weight("bold")
                     ->color(fn ($record) => $record->is_active ? null : 'gray')
                     ->description(fn ($record) => $record->is_active ? '' : 'Insumo desativado'),
+
+                Tables\Columns\TextColumn::make('ingredient.cost_chain_status')
+                    ->label('Cadeia')
+                    ->state(fn ($record): ?\App\Enums\CostChainStatus => $record->ingredient?->cost_chain_status)
+                    ->badge()
+                    ->tooltip(function ($record): ?string {
+                        $eval = $record->ingredient?->cost_chain_evaluation;
+                        if (!empty($eval['issues'])) {
+                            return implode("\n• ", array_merge(['Gargalos no insumo:'], $eval['issues']));
+                        }
+                        return $eval['status']?->getDescription();
+                    })
+                    ->grow(false),
 
                 Tables\Columns\TextColumn::make("quantity")
                     ->label("Quantidade")
@@ -217,7 +266,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                                     "quantity"              => $item->quantity,
                                     "is_dine_in"            => $item->is_dine_in ?? true,
                                     "is_takeaway"           => $item->is_takeaway ?? true,
-                                    "order_type"            => $item->order_type,
+                                    "order_type" => is_array($item->order_type) ? json_encode($item->order_type) : ($item->order_type ?: "all"),
                                     "is_active"             => $item->is_active ?? true,
                                     "created_at"            => now(),
                                     "updated_at"            => now(),
@@ -278,7 +327,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                                         "quantity"              => $item->quantity,
                                         "is_dine_in"            => $item->is_dine_in ?? true,
                                         "is_takeaway"           => $item->is_takeaway ?? true,
-                                        "order_type"            => $item->order_type,
+                                        "order_type" => is_array($item->order_type) ? json_encode($item->order_type) : ($item->order_type ?: "all"),
                                         "is_active"             => $item->is_active ?? true,
                                         "created_at"            => now(),
                                         "updated_at"            => now(),

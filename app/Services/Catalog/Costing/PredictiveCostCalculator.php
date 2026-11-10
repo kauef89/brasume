@@ -39,8 +39,18 @@ class PredictiveCostCalculator
 
             if ($totalWeight > 0) {
                 $averageOptionCost = $groupExpectedCost / $totalWeight;
-                $includedQty = $group->max_free > 0 ? (int) $group->max_free : max((int) ($group->min_selections ?? 1), 1);
-                $totalPredictiveCost += $averageOptionCost * $includedQty;
+                $isProportional = ($group->portion_distribution_mode ?? 'additive') === 'proportional_split';
+
+                if ($isProportional) {
+                    // No rateio proporcional, o cliente não recebe N porções cheias somadas.
+                    // Ele recebe 1 porção base dividida com expansão gastronômica de 15% por opção extra.
+                    $maxFree = $group->max_free > 0 ? (int) $group->max_free : max((int) ($group->min_selections ?? 1), 1);
+                    $fillingExpansionFactor = 1.0 + (0.15 * max(0, $maxFree - 1));
+                    $totalPredictiveCost += $averageOptionCost * $fillingExpansionFactor;
+                } else {
+                    $includedQty = $group->max_free > 0 ? (int) $group->max_free : max((int) ($group->min_selections ?? 1), 1);
+                    $totalPredictiveCost += $averageOptionCost * $includedQty;
+                }
             }
         }
         return $totalPredictiveCost;

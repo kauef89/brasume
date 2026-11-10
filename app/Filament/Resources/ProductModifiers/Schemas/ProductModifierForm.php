@@ -47,6 +47,15 @@ class ProductModifierForm
             SchemaComponents\Section::make("Regras de Seleção")
                 ->schema([
                     SchemaComponents\Grid::make(2)->schema([
+                        FormComponents\Select::make("portion_distribution_mode")
+                            ->label("Distribuição da Porção (Estoque & Custo)")
+                            ->options([
+                                "additive" => "Aditivo (100% de cada item - Hambúrgueres/Extras)",
+                                "proportional_split" => "Rateio Proporcional (Divide a porção - Pastéis/Pizzas)",
+                            ])
+                            ->default("additive")
+                            ->required(),
+
                         FormComponents\Select::make("pricing_strategy")
                             ->label("Estratégia de Precificação")
                             ->options([

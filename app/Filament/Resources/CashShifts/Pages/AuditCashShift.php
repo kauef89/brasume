@@ -79,6 +79,47 @@ class AuditCashShift extends Page
             ->send();
     }
 
+    public function homologarAuditoria(): void
+    {
+        $shift = $this->record;
+        $auditService = app(ShiftAuditService::class);
+        $diag = $auditService->diagnose($shift, (float) $shift->closing_balance_actual, $shift->terminal_settlements ?? []);
+
+        $hasRealBreakage = abs($diag['cash_difference']) >= 0.05 || abs($diag['electronic_difference']) >= 0.05;
+
+        // Se houver resíduo (ex: R$ -0,50), o gestor deve registrar justificativa no parecer
+        if ($hasRealBreakage && empty(trim($this->managerNotes ?? ''))) {
+            Notification::make()
+                ->title('Parecer Obrigatório')
+                ->body('Existe uma divergência não zerada (R$ ' . number_format($diag['electronic_difference'], 2, ',', '.') . '). Registre a justificativa no Parecer do Gestor antes de homologar.')
+                ->warning()
+                ->send();
+            return;
+        }
+
+        if (!empty($this->managerNotes) && $this->managerNotes !== $shift->notes) {
+            $shift->update(['notes' => trim($this->managerNotes)]);
+        }
+
+        $newStatus = $hasRealBreakage
+            ? \App\Enums\ShiftStatus::HOMOLOGATED
+            : \App\Enums\ShiftStatus::RECONCILED;
+
+        $operatorName = auth()->user()?->name ?? 'Gestor Administrativo';
+
+        $shift->update([
+            'status'               => $newStatus,
+            'apos_breakage_amount' => $diag['electronic_difference'],
+            'has_breakage'         => $hasRealBreakage,
+        ]);
+
+        Notification::make()
+            ->title("Turno #{$shift->id} Homologado!")
+            ->body("A auditoria foi finalizada como '{$newStatus->getLabel()}' por {$operatorName}.")
+            ->success()
+            ->send();
+    }
+
     public function retificarFormaPagamento(int $paymentId, int $novoMetodoId): void
     {
         $auditService = app(ShiftAuditService::class);
@@ -310,36 +351,16 @@ class AuditCashShift extends Page
     {
         $this->record->refresh();
         $auditService = app(ShiftAuditService::class);
+        $cashierService = app(ShiftCashierService::class);
 
-        $cashIn = DB::table('payments')
-            ->leftJoin('payment_methods', 'payments.payment_method_id', '=', 'payment_methods.id')
-            ->where('payments.cash_shift_id', $this->record->id)
-            ->where(function($q) {
-                $q->where('payment_methods.engine_type', 'money')
-                  ->orWhere(function($sub) {
-                      $sub->whereNull('payments.payment_method_id')
-                          ->where('payments.method', 'like', '%dinheiro%');
-                  });
-            })
-            ->sum('payments.amount');
-
-        $suprimentos = DB::table('transactions')
-            ->where('cash_shift_id', $this->record->id)
-            ->where('type', 'in')
-            ->sum('amount');
-
-        $sangrias = DB::table('transactions')
-            ->where('cash_shift_id', $this->record->id)
-            ->where('type', 'out')
-            ->sum('amount');
-
-        $this->record->closing_balance_expected = (float)$this->record->opening_balance + (float)$cashIn + (float)$suprimentos - (float)$sangrias;
-
+        // O saldo esperado da gaveta física deve considerar estritamente numerário (dinheiro físico)
+        $expectedCash = (float) $cashierService->calculateExpectedCash($this->record);
         $actualCash = (float) $this->record->closing_balance_actual;
         $settlements = $this->record->terminal_settlements ?? [];
 
         $diag = $auditService->diagnose($this->record, $actualCash, $settlements);
 
+        $this->record->closing_balance_expected = $expectedCash;
         $this->record->apos_breakage_amount = $diag['electronic_difference'];
         $this->record->has_breakage = abs($diag['cash_difference']) >= 0.05 || abs($diag['electronic_difference']) >= 0.05;
         $this->record->save();

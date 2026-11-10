@@ -135,48 +135,17 @@ class ProductsTable
                         $livewire->dispatch('$refresh');
                     }),
 
-                // 🚀 COLUNA CADEIA DE CUSTOS AGORA ORDENÁVEL VIA SQL
+                // 🚀 COLUNA CADEIA DE CUSTOS MULTI-NÍVEL
                 Tables\Columns\TextColumn::make('connection_status')
-                    ->label('Cadeia de custos')
-                    ->state(function (Product $record) {
-                        $typeVal = $record->type instanceof ProductType ? $record->type->value : (string) $record->type;
-
-                        if ($typeVal === ProductType::DISH->value) {
-                            return $record->technicalSheets()->exists() ? 'Conectado' : 'Desconectado';
-                        }
-
-                        if ($typeVal === ProductType::RESALE->value) {
-                            return $record->costHistories()->exists() ? 'Conectado' : 'Desconectado';
-                        }
-
-                        return 'Conectado';
-                    })
+                    ->label('Cadeia de Custos')
+                    ->state(fn (Product $record): \App\Enums\CostChainStatus => $record->cost_chain_status)
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'Conectado'    => 'gray',
-                        'Desconectado' => 'danger',
-                        default        => 'gray',
-                    })
-                    ->icon(fn (string $state): string => match ($state) {
-                        'Conectado'    => 'heroicon-m-link',
-                        'Desconectado' => 'heroicon-m-link-slash',
-                        default        => 'heroicon-m-link',
-                    })
-                    ->sortable(query: function (Builder $query, string $direction): Builder {
-                        $dishType = ProductType::DISH->value;
-                        $resaleType = ProductType::RESALE->value;
-
-                        return $query->orderByRaw("
-                            CASE
-                                WHEN products.type = '{$dishType}' AND NOT EXISTS (
-                                    SELECT 1 FROM technical_sheets WHERE technical_sheets.parent_product_id = products.id
-                                ) THEN 'Desconectado'
-                                WHEN products.type = '{$resaleType}' AND NOT EXISTS (
-                                    SELECT 1 FROM product_cost_histories WHERE product_cost_histories.product_id = products.id
-                                ) THEN 'Desconectado'
-                                ELSE 'Conectado'
-                            END {$direction}
-                        ");
+                    ->tooltip(function (Product $record): ?string {
+                        $eval = $record->cost_chain_evaluation;
+                        if (!empty($eval['issues'])) {
+                            return implode("\n• ", array_merge(['Pendências encontradas:'], $eval['issues']));
+                        }
+                        return $eval['status']->getDescription();
                     })
                     ->grow(false),
             ])
@@ -193,42 +162,30 @@ class ProductsTable
                     ->multiple()
                     ->options(ProductStatus::class),
 
-                // 🚀 FILTRO RÁPIDO: Filtrar produtos Conectados ou Desconectados
-                Tables\Filters\TernaryFilter::make('connection_status')
+                // 🚀 FILTRO: Status da Cadeia de Custos
+                Tables\Filters\SelectFilter::make('cost_chain_status')
                     ->label('Cadeia de Custos')
-                    ->placeholder('Todos')
-                    ->trueLabel('Apenas Conectados')
-                    ->falseLabel('Apenas Desconectados')
-                    ->queries(
-                        true: function (Builder $query): Builder {
-                            $dishType = ProductType::DISH->value;
-                            $resaleType = ProductType::RESALE->value;
+                    ->options(\App\Enums\CostChainStatus::class)
+                    ->query(function (Builder $query, array $data): Builder {
+                        $value = $data['value'] ?? null;
+                        if (!$value) return $query;
 
-                            return $query->where(function (Builder $q) use ($dishType, $resaleType) {
-                                $q->where(function (Builder $sub) use ($dishType) {
-                                    $sub->where('products.type', $dishType)
-                                        ->whereExists(fn ($ts) => $ts->select(DB::raw(1))->from('technical_sheets')->whereColumn('technical_sheets.parent_product_id', 'products.id'));
-                                })->orWhere(function (Builder $sub) use ($resaleType) {
-                                    $sub->where('products.type', $resaleType)
-                                        ->whereExists(fn ($pch) => $pch->select(DB::raw(1))->from('product_cost_histories')->whereColumn('product_cost_histories.product_id', 'products.id'));
-                                })->orWhereNotIn('products.type', [$dishType, $resaleType]);
-                            });
-                        },
-                        false: function (Builder $query): Builder {
-                            $dishType = ProductType::DISH->value;
-                            $resaleType = ProductType::RESALE->value;
+                        $targetStatus = \App\Enums\CostChainStatus::tryFrom($value);
+                        if (!$targetStatus) return $query;
 
-                            return $query->where(function (Builder $q) use ($dishType, $resaleType) {
-                                $q->where(function (Builder $sub) use ($dishType) {
-                                    $sub->where('products.type', $dishType)
-                                        ->whereNotExists(fn ($ts) => $ts->select(DB::raw(1))->from('technical_sheets')->whereColumn('technical_sheets.parent_product_id', 'products.id'));
-                                })->orWhere(function (Builder $sub) use ($resaleType) {
-                                    $sub->where('products.type', $resaleType)
-                                        ->whereNotExists(fn ($pch) => $pch->select(DB::raw(1))->from('product_cost_histories')->whereColumn('product_cost_histories.product_id', 'products.id'));
-                                });
-                            });
-                        },
-                    ),
+                        // Avalia os IDs correspondentes em memória para precisão total da árvore
+                        $allIds = Product::pluck('id');
+                        $matchingIds = [];
+
+                        foreach ($allIds as $pId) {
+                            $p = Product::find($pId);
+                            if ($p && $p->cost_chain_status === $targetStatus) {
+                                $matchingIds[] = $pId;
+                            }
+                        }
+
+                        return $query->whereIn('products.id', $matchingIds);
+                    }),
             ])
             ->actions([])
             ->bulkActions([

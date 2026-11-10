@@ -473,14 +473,31 @@
                 class="w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-primary-500 focus:border-primary-500"
                 placeholder="Registre as justificativas ou observações da auditoria deste turno..."
             ></textarea>
-            <div class="flex justify-end">
-                <button 
-                    wire:click="saveNotes" 
-                    type="button" 
-                    class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold transition"
-                >
-                    Salvar Parecer no Turno
-                </button>
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-gray-200 dark:border-gray-800">
+                <div class="text-xs text-gray-500">
+                    Status da Auditoria: 
+                    <span class="font-bold text-gray-900 dark:text-white">
+                        {{ $shift->status instanceof \App\Enums\ShiftStatus ? $shift->status->getLabel() : ($shift->status ?? 'Pendente') }}
+                    </span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button 
+                        wire:click="saveNotes" 
+                        type="button" 
+                        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg text-xs font-bold transition"
+                    >
+                        Salvar Parecer
+                    </button>
+
+                    <button 
+                        wire:click="homologarAuditoria" 
+                        type="button" 
+                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md transition flex items-center gap-1.5"
+                    >
+                        <x-filament::icon icon="heroicon-m-check-badge" class="w-4 h-4" />
+                        <span>Concluir & Homologar Turno</span>
+                    </button>
+                </div>
             </div>
         </div>
 

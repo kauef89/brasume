@@ -263,4 +263,14 @@ class Product extends Model
             'suggested_quantity'       => (float) ($latest->quantity > 0 ? $latest->quantity : 1),
         ];
     }
+
+    public function getCostChainEvaluationAttribute(): array
+    {
+        return \App\Services\Catalog\ProductCostingService::evaluateCostChain($this);
+    }
+
+    public function getCostChainStatusAttribute(): \App\Enums\CostChainStatus
+    {
+        return $this->cost_chain_evaluation['status'];
+    }
 }
