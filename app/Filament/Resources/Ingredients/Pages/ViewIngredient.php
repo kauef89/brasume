@@ -3,9 +3,10 @@
 namespace App\Filament\Resources\Ingredients\Pages;
 
 use App\Filament\Resources\Ingredients\IngredientResource;
+use App\Models\Product;
 use Filament\Actions;
-use Filament\Resources\Pages\ViewRecord;
 use Filament\Notifications\Notification;
+use Filament\Resources\Pages\ViewRecord;
 
 class ViewIngredient extends ViewRecord
 {
@@ -19,44 +20,39 @@ class ViewIngredient extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            // Botão padrão para ir para a tela de edição
-            Actions\EditAction::make(),
+            // 🚀 Redireciona diretamente para a página cheia de edição em vez de abrir modal
+            Actions\Action::make('edit')
+                ->label('Editar Insumo / Ficha')
+                ->icon('heroicon-m-pencil-square')
+                ->color('primary')
+                ->url(fn (): string => IngredientResource::getUrl('edit', ['record' => $this->record])),
 
-            // Ação personalizada para Duplicar o Insumo
-            // Útil para quando você tem insumos muito parecidos (ex: marcas diferentes do mesmo produto)
-            Actions\Action::make("duplicate")
-                ->label("Duplicar Insumo")
-                ->color("gray")
-                ->icon("heroicon-o-document-duplicate")
+            Actions\Action::make('duplicate')
+                ->label('Duplicar Insumo')
+                ->color('gray')
+                ->icon('heroicon-o-document-duplicate')
                 ->requiresConfirmation()
-                ->modalHeading("Duplicar este insumo?")
-                ->modalDescription(
-                    "Uma cópia exata deste insumo será criada. Você poderá editar o nome e os detalhes em seguida.",
-                )
+                ->modalHeading('Duplicar este insumo?')
+                ->modalDescription('Uma cópia exata deste insumo será criada. Você poderá editar o nome e os detalhes em seguida.')
                 ->action(function () {
-                    // Replica o registro atual do banco de dados
                     $newIngredient = $this->record->replicate();
-
-                    // Adiciona um sufixo para diferenciar da original
-                    $newIngredient->name = $newIngredient->name . " (Cópia)";
-
-                    // Salva o novo registro
+                    $newIngredient->name = $newIngredient->name . ' (Cópia)';
                     $newIngredient->save();
 
                     Notification::make()
-                        ->title("Insumo Duplicado com Sucesso!")
+                        ->title('Insumo Duplicado com Sucesso!')
                         ->success()
                         ->send();
 
-                    // Redireciona o usuário para a visualização do novo registro criado
                     return redirect(
-                        IngredientResource::getUrl("view", [
-                            "record" => $newIngredient->id,
+                        IngredientResource::getUrl('edit', [
+                            'record' => $newIngredient->id,
                         ]),
                     );
                 }),
         ];
     }
+
     protected function getHeaderWidgets(): array
     {
         return [
@@ -71,6 +67,6 @@ class ViewIngredient extends ViewRecord
 
     public function getContentTabLabel(): ?string
     {
-        return "Cadastro do Insumo";
+        return 'Cadastro do Insumo';
     }
 }

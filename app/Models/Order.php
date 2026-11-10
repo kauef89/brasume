@@ -27,6 +27,17 @@ class Order extends Model
 {
     use SoftDeletes;
 
+    public function setCourierIdAttribute($value): void
+    {
+        $this->attributes['courier_id'] = (!empty($value) && (int) $value > 0) ? (int) $value : null;
+    }
+
+    public function setDriverIdAttribute($value): void
+    {
+        $this->attributes['driver_id'] = (!empty($value) && (int) $value > 0) ? (int) $value : null;
+    }
+
+
     protected $guarded = [];
 
     protected $casts = [

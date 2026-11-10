@@ -8,7 +8,7 @@ use Filament\Schemas\Schema; // 🚀 Aqui está a correção (Filament v4)
 use Filament\Tables\Table;
 use App\Filament\Resources\PosAudits\Pages;
 use App\Filament\Resources\PosAudits\Schemas\PosAuditInfolist;
-use App\Filament\Resources\PosAudits\Tables\PosAuditTable;
+use App\Filament\Resources\PosAudits\Tables\PosAuditsTable;
 
 class PosAuditResource extends Resource
 {
@@ -23,7 +23,7 @@ class PosAuditResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return PosAuditTable::configure($table);
+        return PosAuditsTable::configure($table);
     }
 
     // 🚀 Assinatura atualizada para o Filament v4

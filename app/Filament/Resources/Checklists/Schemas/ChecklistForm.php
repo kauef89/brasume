@@ -106,7 +106,7 @@ class ChecklistForm
                                     ->options(function () {
                                         return \App\Models\Product::orderBy('name')
                                             ->get()
-                                            ->mapWithKeys(fn ($p) => [$p->id => "{$p->name} ({$p->type})"])
+                                            ->mapWithKeys(fn ($p) => [$p->id => "{$p->name} (" . ($p->type instanceof \BackedEnum ? $p->type->value : $p->type) . ")"])
                                             ->toArray();
                                     })
                                     ->searchable()

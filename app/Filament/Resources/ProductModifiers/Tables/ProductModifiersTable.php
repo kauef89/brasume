@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use App\Models\Product;
 use App\Models\Category;
 
-class ProductModifierTable
+class ProductModifiersTable
 {
     public static function configure(Table $table): Table
     {

@@ -5,7 +5,7 @@ namespace App\Filament\Resources\Printers; // <-- Agora ele mora DENTRO da pasta
 use App\Filament\Traits\HasGlobalSearch;
 use App\Filament\Resources\Printers\Pages;
 use App\Filament\Resources\Printers\Schemas\PrinterForm;
-use App\Filament\Resources\Printers\Tables\PrinterTable;
+use App\Filament\Resources\Printers\Tables\PrintersTable;
 use App\Models\Printer;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -27,7 +27,7 @@ class PrinterResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return PrinterTable::configure($table);
+        return PrintersTable::configure($table);
     }
 
     public static function getPages(): array

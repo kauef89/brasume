@@ -4,7 +4,7 @@ namespace App\Filament\Resources\Coupons;
 
 use App\Filament\Resources\Coupons\Pages;
 use App\Filament\Resources\Coupons\Schemas\CouponForm;
-use App\Filament\Resources\Coupons\Tables\CouponTable;
+use App\Filament\Resources\Coupons\Tables\CouponsTable;
 use App\Filament\Resources\Coupons\RelationManagers\OrdersRelationManager;
 use App\Models\Coupon;
 use Filament\Schemas\Schema;
@@ -28,7 +28,7 @@ class CouponResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return CouponTable::configure($table);
+        return CouponsTable::configure($table);
     }
 
     public static function getRelations(): array

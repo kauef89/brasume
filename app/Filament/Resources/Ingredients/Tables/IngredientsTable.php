@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Ingredients\Tables;
 
+use App\Enums\ProductStatus;
 use App\Filament\Resources\Ingredients\IngredientResource;
 use App\Models\Category;
 use App\Models\Product;
@@ -9,8 +10,9 @@ use Filament\Actions;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Schema;
 
-class IngredientTable
+class IngredientsTable
 {
     public static function configure(Table $table): Table
     {
@@ -118,6 +120,30 @@ class IngredientTable
                             ->orderByRaw("({$expr} IS NULL) ASC")
                             ->orderByRaw("{$expr} {$direction}");
                     }),
+
+                // 🚀 TOGGLE ATIVO? (COMPATÍVEL COM is_active OU status)
+                Tables\Columns\ToggleColumn::make('is_active')
+                    ->label('Ativo?')
+                    ->getStateUsing(function (Product $record) {
+                        if (isset($record->is_active)) {
+                            return (bool) $record->is_active;
+                        }
+                        $statusVal = $record->status instanceof \BackedEnum ? $record->status->value : (string) $record->status;
+                        return $statusVal === 'available';
+                    })
+                    ->updateStateUsing(function (Product $record, bool $state) {
+                        $updateData = [];
+
+                        if (Schema::hasColumn('products', 'is_active')) {
+                            $updateData['is_active'] = $state;
+                        }
+
+                        if (Schema::hasColumn('products', 'status')) {
+                            $updateData['status'] = $state ? ProductStatus::AVAILABLE->value : ProductStatus::PAUSED->value;
+                        }
+
+                        $record->updateQuietly($updateData);
+                    }),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('category_id')
@@ -144,10 +170,7 @@ class IngredientTable
                         ) >= 0.50
                     ")),
             ])
-            ->actions([
-                Actions\ViewAction::make()->iconButton(),
-                Actions\EditAction::make()->iconButton(),
-            ])
+            ->actions([])
             ->bulkActions([
                 Actions\BulkActionGroup::make([
                     Actions\DeleteBulkAction::make(),

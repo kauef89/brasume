@@ -10,7 +10,7 @@ use App\Filament\Resources\Products\RelationManagers\ProductModifiersRelationMan
 use App\Filament\Resources\Products\RelationManagers\SimulatorRelationManager;
 use App\Filament\Resources\Products\RelationManagers\TechnicalSheetsRelationManager;
 use App\Filament\Resources\Products\Schemas\ProductForm;
-use App\Filament\Resources\Products\Tables\ProductTable;
+use App\Filament\Resources\Products\Tables\ProductsTable;
 use App\Models\Product;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -49,7 +49,7 @@ class ProductResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return ProductTable::configure($table);
+        return ProductsTable::configure($table);
     }
 
     public static function getRelations(): array

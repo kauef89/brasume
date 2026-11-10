@@ -227,9 +227,18 @@ class OperationsDashboardService
                 }
             }
 
-            if ($newStatus === 'dispatched') {
+            if (in_array($newStatus, ['dispatched', 'out_for_delivery'])) {
                 if ($order->type === 'delivery' && empty($order->courier_id)) {
-                    throw new \DomainException("Atenção: Não é possível despachar o Pedido #{$order->id} para entrega sem um motoboy/entregador vinculado.");
+                    $courierService = app(\App\Services\Orders\CourierSettlementService::class);
+                    $activeCouriers = $courierService->getActiveCouriersOnShift();
+
+                    if ($activeCouriers->count() === 1) {
+                        $courierService->assignCourier($order, $activeCouriers->first());
+                    } elseif ($activeCouriers->count() > 1) {
+                        throw new \DomainException("Há {$activeCouriers->count()} motoboys no turno. Selecione o entregador responsável antes de despachar.");
+                    } else {
+                        throw new \DomainException("Atenção: Não há nenhum motoboy com presença confirmada no turno aberto.");
+                    }
                 }
                 $order->dispatched_at = now();
             }

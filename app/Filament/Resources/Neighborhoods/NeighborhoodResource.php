@@ -3,7 +3,7 @@ namespace App\Filament\Resources\Neighborhoods;
 use App\Filament\Traits\HasGlobalSearch;
 use App\Filament\Resources\Neighborhoods\Pages;
 use App\Filament\Resources\Neighborhoods\Schemas\NeighborhoodForm;
-use App\Filament\Resources\Neighborhoods\Tables\NeighborhoodTable;
+use App\Filament\Resources\Neighborhoods\Tables\NeighborhoodsTable;
 use App\Models\Neighborhood;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -18,7 +18,7 @@ class NeighborhoodResource extends Resource {
     protected static ?string $pluralModelLabel = 'Bairros';
 
     public static function form(Schema $schema): Schema { return NeighborhoodForm::configure($schema); }
-    public static function table(Table $table): Table { return NeighborhoodTable::configure($table); }
+    public static function table(Table $table): Table { return NeighborhoodsTable::configure($table); }
     public static function getPages(): array {
         return [
             'index' => Pages\ListNeighborhoods::route('/'),

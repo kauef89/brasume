@@ -9,7 +9,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 
 use App\Filament\Resources\CashShifts\Schemas\CashShiftForm;
-use App\Filament\Resources\CashShifts\Tables\CashShiftTable;
+use App\Filament\Resources\CashShifts\Tables\CashShiftsTable;
 
 class CashShiftResource extends Resource
 {
@@ -31,7 +31,7 @@ class CashShiftResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return CashShiftTable::configure($table);
+        return CashShiftsTable::configure($table);
     }
 
     public static function getPages(): array

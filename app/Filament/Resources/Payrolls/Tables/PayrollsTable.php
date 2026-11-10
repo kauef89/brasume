@@ -19,7 +19,7 @@ use Filament\Tables\Table;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-class PayrollTable
+class PayrollsTable
 {
     public static function table(Table $table): Table
     {

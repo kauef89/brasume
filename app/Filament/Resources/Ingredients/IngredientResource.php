@@ -4,7 +4,7 @@ namespace App\Filament\Resources\Ingredients;
 
 use App\Filament\Resources\Ingredients\Pages;
 use App\Filament\Resources\Ingredients\Schemas\IngredientForm;
-use App\Filament\Resources\Ingredients\Tables\IngredientTable;
+use App\Filament\Resources\Ingredients\Tables\IngredientsTable;
 use App\Filament\Resources\Products\RelationManagers\CostHistoriesRelationManager;
 use App\Filament\Resources\Products\RelationManagers\InventoryMovementsRelationManager;
 use App\Filament\Resources\Products\RelationManagers\TechnicalSheetsRelationManager;
@@ -52,7 +52,7 @@ class IngredientResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return IngredientTable::configure($table);
+        return IngredientsTable::configure($table);
     }
 
     public static function getRelations(): array

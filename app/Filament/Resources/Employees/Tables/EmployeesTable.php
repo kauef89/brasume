@@ -11,7 +11,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 
-class EmployeeTable
+class EmployeesTable
 {
     public static function table(Table $table): Table
     {

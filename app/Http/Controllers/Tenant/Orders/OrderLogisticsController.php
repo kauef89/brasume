@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Tenant\Orders;
 
 use App\Http\Controllers\Controller;
 use App\Models\DiningTable;
-use App\Models\Employee;
 use App\Models\Order;
 use App\Services\Orders\CourierSettlementService;
 use App\Services\Orders\OrderLogisticsService;
@@ -16,6 +15,45 @@ class OrderLogisticsController extends Controller
         protected OrderLogisticsService $logisticsService,
         protected CourierSettlementService $courierSettlementService
     ) {}
+
+    public function assignCourier(Order $order, Request $request)
+    {
+        $validated = $request->validate([
+            'courier_id'           => 'nullable|integer',
+            'driver_id'            => 'nullable|integer',
+            'delivery_distance_km' => 'nullable|numeric|min:0',
+        ]);
+
+        try {
+            $rawId = $validated['courier_id'] ?? $validated['driver_id'] ?? null;
+            if (!$rawId) {
+                throw new \Exception('Selecione um entregador válido.');
+            }
+
+            $courier = CourierSettlementService::resolveEmployee((int) $rawId);
+            if (!$courier) {
+                throw new \Exception('Entregador não encontrado no cadastro de colaboradores.');
+            }
+
+            $distance = isset($validated['delivery_distance_km']) ? (float) $validated['delivery_distance_km'] : null;
+            $this->courierSettlementService->assignCourier($order, $courier, $distance);
+
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Entregador atribuído com sucesso!',
+                    'order'   => $order->fresh(['courier', 'driver'])
+                ]);
+            }
+
+            return back()->with('success', 'Entregador atribuído e taxa fixada com sucesso!');
+        } catch (\Exception $e) {
+            if ($request->wantsJson()) {
+                return response()->json(['error' => $e->getMessage()], 422);
+            }
+            return back()->withErrors(['courier_id' => $e->getMessage()]);
+        }
+    }
 
     public function transform(Order $order, Request $request)
     {
@@ -31,72 +69,19 @@ class OrderLogisticsController extends Controller
         ]);
 
         $tableId = $validated['dining_table_id'] ?? $validated['table_id'] ?? null;
-
         if ($tableId) {
             $validated['dining_table_id'] = (int) $tableId;
             $validated['table_id'] = (int) $tableId;
             if (empty($validated['table_number'])) {
                 $validated['table_number'] = DiningTable::find($tableId)?->name;
             }
-        } elseif (!empty($validated['table_number'])) {
-            $foundTable = DiningTable::where('name', $validated['table_number'])->first();
-            if ($foundTable) {
-                $validated['dining_table_id'] = $foundTable->id;
-                $validated['table_id'] = $foundTable->id;
-            }
         }
 
         try {
             $this->logisticsService->transformOrder($order, $validated);
-
-            if ($request->wantsJson()) {
-                return response()->json(['success' => true, 'order' => $order->fresh(['diningTable'])]);
-            }
-
             return back()->with('success', 'Pedido transformado com sucesso!');
         } catch (\Exception $e) {
-            if ($request->wantsJson()) {
-                return response()->json(['error' => $e->getMessage()], 400);
-            }
-
             return back()->withErrors(['transform' => $e->getMessage()]);
-        }
-    }
-
-    public function assignCourier(Order $order, Request $request)
-    {
-        $validated = $request->validate([
-            'driver_id'            => 'nullable|integer',
-            'courier_id'           => 'nullable|integer',
-            'delivery_distance_km' => 'nullable|numeric|min:0',
-        ]);
-
-        try {
-            $rawId = (int) ($validated['courier_id'] ?? $validated['driver_id']);
-            $userFound = \App\Models\User::find($rawId);
-            $courier = $userFound?->employee ?? \App\Models\Employee::find($rawId);
-            $userId = $courier?->user_id ?? $rawId;
-
-            // 1. Atualização via serviço de logística operacional existente
-            $this->logisticsService->assignCourier($order, $userId);
-
-            // 2. Localiza o registo de Employee correspondente ao User
-            $userFound = User::find($userId);
-            $courier = ($userFound && $userFound->employee_id)
-                ? Employee::find($userFound->employee_id)
-                : Employee::find($userId);
-
-            if ($courier) {
-                if (isset($validated['delivery_distance_km'])) {
-                    $order->delivery_distance_km = (float) $validated['delivery_distance_km'];
-                }
-
-                $this->courierSettlementService->assignCourier($order, $courier);
-            }
-
-            return back()->with('success', 'Entregador atribuído e taxa fixada com sucesso!');
-        } catch (\Exception $e) {
-            return back()->withErrors(['driver_id' => $e->getMessage()]);
         }
     }
 
@@ -129,7 +114,6 @@ class OrderLogisticsController extends Controller
 
         $status = $validated['payment_intent_status'] ?? $order->payment_intent_status;
         $methods = $validated['payment_intent_methods'] ?? $order->payment_intent_methods;
-
         if (is_string($methods)) {
             $methods = json_decode($methods, true) ?: $methods;
         }
@@ -142,19 +126,12 @@ class OrderLogisticsController extends Controller
 
         broadcast(new \App\Events\OrderUpdated($order->fresh()));
 
-        return back()->with('success', 'Forma de pagamento de entrega atualizada!');
+        return back()->with('success', 'Forma de pagamento atualizada!');
     }
 
     public function bulkCompleteDispatched()
     {
         $result = $this->logisticsService->bulkCompleteDispatched();
-
-        if (!empty($result['skipped'])) {
-            return back()
-                ->with('success', "{$result['processed']} pedido(s) finalizado(s) com sucesso!")
-                ->with('warning', "{$result['skipped']} pedido(s) não puderam ser baixados por pendência no valor ou forma de pagamento.");
-        }
-
         return back()->with('success', "{$result['processed']} pedidos finalizados com sucesso!");
     }
 }

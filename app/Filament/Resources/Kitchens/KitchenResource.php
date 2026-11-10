@@ -5,7 +5,7 @@ namespace App\Filament\Resources\Kitchens; // <-- Agora ele mora DENTRO da pasta
 use App\Filament\Traits\HasGlobalSearch;
 use App\Filament\Resources\Kitchens\Pages;
 use App\Filament\Resources\Kitchens\Schemas\KitchenForm;
-use App\Filament\Resources\Kitchens\Tables\KitchenTable;
+use App\Filament\Resources\Kitchens\Tables\KitchensTable;
 use App\Models\Kitchen;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -27,7 +27,7 @@ class KitchenResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return KitchenTable::configure($table);
+        return KitchensTable::configure($table);
     }
 
     public static function getPages(): array

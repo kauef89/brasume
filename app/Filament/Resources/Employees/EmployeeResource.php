@@ -5,7 +5,7 @@ namespace App\Filament\Resources\Employees;
 use App\Filament\Traits\HasGlobalSearch;
 use App\Filament\Resources\Employees\Pages;
 use App\Filament\Resources\Employees\Schemas\EmployeeForm;
-use App\Filament\Resources\Employees\Tables\EmployeeTable;
+use App\Filament\Resources\Employees\Tables\EmployeesTable;
 use App\Filament\Resources\Employees\RelationManagers\LedgersRelationManager;
 use App\Filament\Resources\Employees\RelationManagers\ConsumptionsRelationManager;
 use App\Filament\Resources\Employees\RelationManagers\EmployeePayablesRelationManager;
@@ -37,7 +37,7 @@ class EmployeeResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return EmployeeTable::table($table);
+        return EmployeesTable::table($table);
     }
 
     public static function infolist(Schema $schema): Schema

@@ -5,7 +5,7 @@ use Filament\Tables\Table;
 use Filament\Tables;
 use Filament\Actions;
 
-class OfferTable {
+class OffersTable {
     public static function configure(Table $table): Table {
         return $table->columns([
             Tables\Columns\TextColumn::make('title')->label('Título')->searchable()->sortable(),

@@ -15,7 +15,7 @@ use App\Enums\ProductType;
 use App\Models\Product;
 use Illuminate\Support\HtmlString;
 
-class OrderTable {
+class OrdersTable {
     public static function configure(Table $table): Table {
         return $table->columns([
             Tables\Columns\TextColumn::make('id')->label('Pedido #')->sortable()->searchable(),

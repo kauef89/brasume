@@ -10,7 +10,7 @@ use Filament\Forms\Components\DatePicker;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Actions\ViewAction;
 
-class PosAuditTable
+class PosAuditsTable
 {
     public static function configure(Table $table): Table
     {

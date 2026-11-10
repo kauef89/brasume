@@ -9,7 +9,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use App\Filament\Resources\ProductModifiers\Schemas\ProductModifierForm;
-use App\Filament\Resources\ProductModifiers\Tables\ProductModifierTable;
+use App\Filament\Resources\ProductModifiers\Tables\ProductModifiersTable;
 
 class ProductModifierResource extends Resource
 {
@@ -25,7 +25,7 @@ class ProductModifierResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return ProductModifierTable::configure($table);
+        return ProductModifiersTable::configure($table);
     }
 
     public static function getRelations(): array

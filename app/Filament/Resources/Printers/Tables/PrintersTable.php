@@ -10,7 +10,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 
-class PrinterTable
+class PrintersTable
 {
     public static function configure(Table $table): Table
     {

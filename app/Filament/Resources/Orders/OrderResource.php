@@ -3,7 +3,7 @@ namespace App\Filament\Resources\Orders;
 
 use App\Filament\Resources\Orders\Pages;
 use App\Filament\Resources\Orders\Schemas\OrderForm;
-use App\Filament\Resources\Orders\Tables\OrderTable;
+use App\Filament\Resources\Orders\Tables\OrdersTable;
 use App\Models\Order;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -20,7 +20,7 @@ class OrderResource extends Resource {
     protected static ?string $pluralModelLabel = 'Pedidos';
 
     public static function form(Schema $schema): Schema { return OrderForm::configure($schema); }
-    public static function table(Table $table): Table { return OrderTable::configure($table); }
+    public static function table(Table $table): Table { return OrdersTable::configure($table); }
     
     public static function getPages(): array {
         return [

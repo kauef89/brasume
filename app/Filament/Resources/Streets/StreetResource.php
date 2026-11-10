@@ -2,7 +2,7 @@
 namespace App\Filament\Resources\Streets;
 use App\Filament\Resources\Streets\Pages;
 use App\Filament\Resources\Streets\Schemas\StreetForm;
-use App\Filament\Resources\Streets\Tables\StreetTable;
+use App\Filament\Resources\Streets\Tables\StreetsTable;
 use App\Models\Street;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -16,7 +16,7 @@ class StreetResource extends Resource {
     protected static ?string $pluralModelLabel = 'Ruas';
 
     public static function form(Schema $schema): Schema { return StreetForm::configure($schema); }
-    public static function table(Table $table): Table { return StreetTable::configure($table); }
+    public static function table(Table $table): Table { return StreetsTable::configure($table); }
     public static function getPages(): array {
         return [
             'index' => Pages\ListStreets::route('/'),

@@ -79,7 +79,7 @@ class ModifiersDemandSection
                         ";
 
                         foreach ($groups as $group) {
-                            $typeEnum = $group->type instanceof ModifierType ? $group->type : ModifierType::tryFrom((string)$group->type);
+                            $typeEnum = $group->type instanceof ModifierType ? $group->type : ModifierType::tryFrom(($group->type instanceof \BackedEnum ? $group->type->value : (string)$group->type));
                             $groupTotalWeight = $group->options->sum('historical_weight') ?: $group->options->count();
 
                             $badgeClass = match($typeEnum) {

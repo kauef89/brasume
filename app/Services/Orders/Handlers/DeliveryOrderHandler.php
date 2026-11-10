@@ -2,47 +2,25 @@
 
 namespace App\Services\Orders\Handlers;
 
-use App\Enums\EmployeeRole;
-
-use App\Models\Order;
-use App\Models\User;
-use App\Models\Customer;
 use App\Models\CashShift;
 use App\Models\CompanySetting;
+use App\Models\Customer;
+use App\Models\Employee;
+use App\Models\Order;
+use App\Services\Orders\CourierSettlementService;
 use App\Services\Orders\OrderAddressResolver;
 
 class DeliveryOrderHandler
 {
-    public function __construct(protected OrderAddressResolver $addressResolver) {}
+    public function __construct(
+        protected OrderAddressResolver $addressResolver,
+        protected CourierSettlementService $courierSettlementService
+    ) {}
 
-    /**
-     * Resolve o motoboy do pedido:
-     * - Retorna o ID se houver EXATAMENTE 1 motorista ativo e presente no turno aberto.
-     * - Retorna NULL se não houver nenhum motorista com presença confirmada ou se houver mais de um.
-     */
     public function resolveCourier(?CashShift $shift = null): ?int
     {
-        $shift = $shift ?? CashShift::where('status', 'open')->latest('id')->first();
-
-        if (!$shift) {
-            return null;
-        }
-
-        $roles = ['courier', 'driver'];
-
-        $activeDrivers = $shift->attendees()
-            ->wherePivot('status', 'active')
-            ->wherePivot('attendance_status', 'present')
-            ->where(function ($query) use ($roles) {
-                $query->whereIn('shift_attendances.assigned_role', $roles)
-                      ->orWhereHas('roles', function ($q) use ($roles) {
-                          $q->whereIn('name', $roles);
-                      });
-            })
-            ->where('users.is_active', true)
-            ->get();
-
-        return $activeDrivers->count() === 1 ? (int) $activeDrivers->first()->id : null;
+        $activeCouriers = $this->courierSettlementService->getActiveCouriersOnShift($shift);
+        return $activeCouriers->count() === 1 ? (int) $activeCouriers->first()->id : null;
     }
 
     public function buildOrderData(array $payload, int $operatorId, string $source): array
@@ -78,9 +56,28 @@ class DeliveryOrderHandler
 
         $changeTarget = $routing["change_target"] ?? ($routing["delivery_change_target"] ?? ($routing["cash_change_target"] ?? null));
 
-        // Respeita seleção manual do operador se enviada; caso contrário, busca o único motoboy do turno
-        $explicitDriverId = !empty($routing["driver_id"]) ? (int) $routing["driver_id"] : (!empty($payload["driver_id"]) ? (int) $payload["driver_id"] : null);
-        $resolvedDriverId = $explicitDriverId ?: $this->resolveCourier();
+        // Resolução segura de entregador (prioriza escolha manual; caso contrário, aplica Regra 2)
+        $rawDriverId = !empty($routing["courier_id"])
+            ? (int) $routing["courier_id"]
+            : (!empty($routing["driver_id"]) ? (int) $routing["driver_id"] : null);
+
+        $resolvedCourier = null;
+        if ($rawDriverId) {
+            $resolvedCourier = CourierSettlementService::resolveEmployee($rawDriverId);
+        }
+
+        if (!$resolvedCourier) {
+            $soleCourierId = $this->resolveCourier();
+            $resolvedCourier = $soleCourierId ? Employee::find($soleCourierId) : null;
+        }
+
+        $courierFee = 0.00;
+        if ($resolvedCourier) {
+            $courierFee = $this->courierSettlementService->calculateFee($resolvedCourier, new Order([
+                'delivery_distance_km' => $routing['delivery_distance_km'] ?? 0,
+                'address_id'           => $resolvedAddress['address_id'],
+            ]));
+        }
 
         return [
             "customer_id"            => is_numeric($customerId) ? (int) $customerId : null,
@@ -99,10 +96,13 @@ class DeliveryOrderHandler
             "delivery_fee"           => $deliveryFee,
             "service_fee"            => $serviceFee,
             "total"                  => $finalTotal,
-            "employee_id"            => $routing["employee_id"] ?? null,
+            "employee_id"            => !empty($routing["employee_id"]) ? (int) $routing["employee_id"] : null,
             "waiter_id"              => null,
             "cashier_id"             => in_array($source, [Order::SOURCE_POS_APP, Order::SOURCE_CASHIER], true) ? $operatorId : null,
-            "courier_id"             => $resolvedDriverId,
+            "courier_id"             => $resolvedCourier?->id,
+            "driver_id"              => $resolvedCourier?->user_id ?? $resolvedCourier?->user?->id,
+            "courier_fee"            => $courierFee,
+            "courier_assigned_at"    => $resolvedCourier ? now() : null,
             "payment_intent_status"  => $routing["payment_intent_status"] ?? 'pending_choice',
             "payment_intent_methods" => $routing["payment_intent_methods"] ?? null,
             "change_target"          => $changeTarget,

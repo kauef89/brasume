@@ -12,7 +12,7 @@ use App\Models\Product;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 
-class KitchenTable
+class KitchensTable
 {
     public static function configure(Table $table): Table
     {

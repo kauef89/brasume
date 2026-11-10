@@ -25,7 +25,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\HtmlString;
 
-class CashShiftTable
+class CashShiftsTable
 {
     public static function configure(Table $table): Table
     {

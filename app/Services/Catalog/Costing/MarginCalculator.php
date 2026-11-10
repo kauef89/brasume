@@ -96,7 +96,7 @@ class MarginCalculator
             if ($groupIsSimulated) {
                 $simulatedCost += $groupSimulatedCost;
             } else {
-                $groupTypeVal = $group->type instanceof ModifierType ? $group->type->value : (string)$group->type;
+                $groupTypeVal = $group->type instanceof ModifierType ? $group->type->value : ($group->type instanceof \BackedEnum ? $group->type->value : (string)$group->type);
                 if ($groupTypeVal === ModifierType::OPTION->value) {
                     $groupExpectedCost = 0;
                     $totalWeight = 0;

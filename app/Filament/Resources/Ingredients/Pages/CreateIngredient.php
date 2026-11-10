@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\Ingredients\Pages;
 
-use App\Filament\Resources\Ingredients\IngredientResource;
 use App\Enums\ProductType;
+use App\Filament\Resources\Ingredients\IngredientResource;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateIngredient extends CreateRecord
@@ -19,7 +19,9 @@ class CreateIngredient extends CreateRecord
         $data['dine_in_price'] = null;
         $data['delivery_price'] = null;
         $data['promo_price'] = null;
-        $data['requires_preparation'] = false;
+
+        $isManufactured = ($data['type'] ?? null) === ProductType::MANUFACTURED->value;
+        $data['requires_preparation'] = $isManufactured;
 
         if (empty($data['type'])) {
             $data['type'] = ProductType::INGREDIENT->value;

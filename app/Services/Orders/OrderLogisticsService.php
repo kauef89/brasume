@@ -192,29 +192,16 @@ class OrderLogisticsService
 
     public function getAvailableCouriers(): array
     {
-        $settings = CompanySetting::getCached();
+        $courierService = app(CourierSettlementService::class);
+        $activeCouriers = $courierService->getActiveCouriersOnShift();
 
-        $couriersQuery = User::with('employee:id,phone')
-            ->whereHas('roles', function ($q) {
-                $q->whereIn('name', ['courier', 'driver']);
-            })
-            ->where('is_active', true);
-
-        if ($settings && $settings->require_shift_attendance) {
-            $couriersQuery->whereHas('attendedShifts', function ($q) {
-                $q->where('cash_shifts.status', 'open')
-                  ->where('shift_attendances.status', 'active')
-                  ->where('shift_attendances.attendance_status', 'present');
-            });
-        }
-
-        return $couriersQuery->get(['id', 'name', 'employee_id'])
-            ->map(fn ($user) => [
-                'id'          => $user->id,
-                'name'        => $user->name,
-                'phone'       => $user->employee ? $user->employee->phone : null,
-                'employee_id' => $user->employee_id ?? $user->id,
-            ])->toArray();
+        return $activeCouriers->map(fn ($emp) => [
+            'id'          => $emp->id,
+            'user_id'     => $emp->user_id ?? $emp->user?->id,
+            'name'        => $emp->name,
+            'phone'       => $emp->phone,
+            'employee_id' => $emp->id,
+        ])->toArray();
     }
 
     public function bulkCompleteDispatched(): array

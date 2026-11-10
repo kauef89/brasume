@@ -15,7 +15,7 @@ use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Support\Str;
 
-class CouponTable
+class CouponsTable
 {
     public static function configure(Table $table): Table
     {

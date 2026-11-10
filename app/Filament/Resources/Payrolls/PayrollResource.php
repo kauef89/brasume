@@ -5,7 +5,7 @@ namespace App\Filament\Resources\Payrolls;
 use App\Filament\Resources\Payrolls\Pages;
 use App\Filament\Resources\Payrolls\Schemas\PayrollForm;
 use App\Filament\Resources\Payrolls\Schemas\PayrollInfolist;
-use App\Filament\Resources\Payrolls\Tables\PayrollTable;
+use App\Filament\Resources\Payrolls\Tables\PayrollsTable;
 use App\Filament\Resources\Payrolls\RelationManagers\PayslipsRelationManager;
 use App\Models\Payroll;
 use Filament\Resources\Resource;
@@ -33,7 +33,7 @@ class PayrollResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return PayrollTable::table($table);
+        return PayrollsTable::table($table);
     }
 
     public static function getRelations(): array

@@ -2,8 +2,9 @@
 
 namespace App\Services\Printing\Documents;
 
-use App\Models\Order;
+use App\Enums\ModifierType;
 use App\Models\CompanySetting;
+use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\ProductModifier;
 use Illuminate\Support\Collection;
@@ -54,7 +55,7 @@ class KitchenTicket
             ->flatMap(function ($item) {
                 $rawMods = $item->modifiers ?? $item->structured_modifiers ?? $item->structuredModifiers ?? [];
                 return collect($rawMods)
-                    ->map(fn($m) => is_array($m) ? (object)$m : $m)
+                    ->map(fn ($m) => is_array($m) ? (object)$m : $m)
                     ->pluck('modifier_group_id');
             })
             ->filter()
@@ -154,7 +155,6 @@ class KitchenTicket
         $this->blueprint[] = ['cmd' => 'align', 'val' => 'ct'];
 
         $headerText = 'CLIENTE';
-        // 🥪 Se for lanche da equipe, prioriza SEMPRE o nome formatado do colaborador
         if ($this->order->source === 'team_app' && !empty($this->order->customer_name)) {
             $headerText = $this->order->customer_name;
         } elseif ($this->order->type === 'table') {
@@ -182,7 +182,6 @@ class KitchenTicket
         $time = $this->order->created_at ? $this->order->created_at->format('H:i') : now()->format('H:i');
         $orderIdFmt = number_format($this->order->id, 0, '', '.');
 
-        // 👤 Resolução resiliente do Operador: Employee -> Cashier/User -> APP
         $operatorName = $this->order->employee?->name
             ?? $this->order->cashier?->name
             ?? ($this->order->items->first()?->user_name)
@@ -192,7 +191,6 @@ class KitchenTicket
         $infoLine = "{$time} - #{$orderIdFmt} - {$operator}";
 
         $this->blueprint[] = ['cmd' => 'text', 'val' => $this->cleanText($infoLine), 'bold' => false, 'size' => '1x'];
-
         $this->blueprint[] = ['cmd' => 'text', 'val' => '------------------------------------------------', 'bold' => false, 'size' => '1x'];
         $this->blueprint[] = ['cmd' => 'align', 'val' => 'lt'];
     }
@@ -223,7 +221,6 @@ class KitchenTicket
         });
 
         if ($validModifiers->isNotEmpty()) {
-            // 🛡️ Recupera a quantidade original do produto para calcular a proporção correta por lanche
             $originalQuantity = $item->original_quantity ?? null;
             if (!$originalQuantity && !empty($item->id)) {
                 $dbItem = $this->order->relationLoaded('items')
@@ -240,15 +237,22 @@ class KitchenTicket
             $rankedModifiers = $validModifiers->map(function ($mod) use ($modifierGroups, $itemQty) {
                 $groupId = $mod->modifier_group_id ?? $mod->group_id ?? null;
                 $group = $groupId ? $modifierGroups->get($groupId) : null;
-                $type = strtolower((string)($group?->type ?? $mod->type ?? $mod->group_type ?? ''));
 
-                if (in_array($type, ['ingredient', 'ingrediente', 'flavor', 'sabor', 'option', 'opcao'])) {
+                // 🛡️ Extração resiliente: extrai o valor caso seja instância de Enum ou string
+                $rawType = $group?->type ?? $mod->type ?? $mod->group_type ?? '';
+                $typeEnum = $rawType instanceof ModifierType
+                    ? $rawType
+                    : (is_string($rawType) ? ModifierType::tryFrom(strtolower($rawType)) : null);
+
+                $type = strtolower($rawType instanceof \BackedEnum ? $rawType->value : (string) $rawType);
+
+                if ($typeEnum === ModifierType::OPTION || in_array($type, ['ingredient', 'ingrediente', 'flavor', 'sabor', 'option', 'opcao'])) {
                     $rank = 1;
                     $normalizedType = 'ingredient';
-                } elseif (in_array($type, ['add_on', 'adicional', 'extra'])) {
+                } elseif ($typeEnum === ModifierType::ADD_ON || in_array($type, ['add_on', 'adicional', 'extra'])) {
                     $rank = 2;
                     $normalizedType = 'add_on';
-                } elseif (in_array($type, ['observation', 'observacao', 'removal', 'remocao'])) {
+                } elseif ($typeEnum === ModifierType::OBSERVATION || in_array($type, ['observation', 'observacao', 'removal', 'remocao'])) {
                     $rank = 3;
                     $normalizedType = 'observation';
                 } else {
@@ -256,12 +260,9 @@ class KitchenTicket
                     $normalizedType = ($rank === 2) ? 'add_on' : 'ingredient';
                 }
 
-                // 🚀 Cálculo da proporção de quantidade por unidade do item
                 $modQty = (float)($mod->quantity ?? $mod->qty ?? 1);
                 $unitQty = $itemQty > 0 ? ($modQty / $itemQty) : $modQty;
 
-                // Ingredientes NUNCA recebem multiplicador numérico.
-                // Adicionais só mostram o prefixo se a porção por unidade for maior que 1.
                 $qtyPrefix = '';
                 if ($normalizedType === 'add_on' && $unitQty > 1 && $modQty > $itemQty) {
                     $displayQty = (floor($unitQty) == $unitQty) ? (int)$unitQty : (int)$modQty;
@@ -339,9 +340,9 @@ class KitchenTicket
 
             $this->blueprint[] = ['cmd' => 'align', 'val' => 'ct'];
             $this->blueprint[] = [
-                'cmd'  => 'text',
-                'val'  => $s3 . '   VIAGEM   ' . $s0,
-                'bold' => true,
+                'cmd'    => 'text',
+                'val'    => $s3 . '   VIAGEM   ' . $s0,
+                'bold'   => true,
                 'invert' => true
             ];
             $this->blueprint[] = ['cmd' => 'align', 'val' => 'lt'];

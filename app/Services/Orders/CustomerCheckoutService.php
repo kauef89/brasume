@@ -3,7 +3,6 @@
 namespace App\Services\Orders;
 
 use App\Enums\PaymentEngineType;
-
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\PaymentMethod;
@@ -31,15 +30,13 @@ class CustomerCheckoutService
 
     public function processB2CCheckout(array $payload, $customer, bool $isGuest): array
     {
-        // 🚀 SONDA 1: Verifica o que o front enviou de verdade
         Log::info('📍 [SONDA CHECKOUT B2C - 1] Recebendo payload:', [
-            'customer_id' => $customer->id ?? 'guest',
-            'type' => $payload['routing']['type'] ?? 'null',
+            'customer_id'       => $customer->id ?? 'guest',
+            'type'              => $payload['routing']['type'] ?? 'null',
             'payment_method_id' => $payload['routing']['payment_method_id'] ?? 'NULO',
-            'final_total' => $payload['financials']['finalTotal'] ?? 0
+            'final_total'       => $payload['financials']['finalTotal'] ?? 0
         ]);
 
-        // 🛡️ 1. BARREIRA DE HORÁRIO E TURNO DE CAIXA
         $storeStatus = $this->availabilityService->getStoreStatus();
         $canOrder = $storeStatus['is_open'] || $storeStatus['is_pre_order'];
 
@@ -102,13 +99,12 @@ class CustomerCheckoutService
             $paymentMethod = $paymentMethodId ? PaymentMethod::find($paymentMethodId) : null;
             $isBankApi = $paymentMethod && ($paymentMethod->engine_type === PaymentEngineType::BANK_API || $paymentMethod->engine_type?->value === 'bank_api');
 
-            // 🚀 SONDA 2 E TRAVA DE SEGURANÇA B2C
             $previewTotal = round((float)$financials['subtotal'] + (float)($financials['deliveryFee'] ?? 0) + $serviceFee - $discount - $cashbackUsed, 2);
 
             Log::info('📍 [SONDA CHECKOUT B2C - 2] Validação de Pagamento:', [
-                'previewTotal' => $previewTotal,
+                'previewTotal'      => $previewTotal,
                 'metodo_encontrado' => $paymentMethod ? $paymentMethod->name : 'NENHUM',
-                'isBankApi' => $isBankApi
+                'isBankApi'         => $isBankApi
             ]);
 
             if ($previewTotal > 0 && !$paymentMethod && !$isAppend && $orderType !== 'table') {
@@ -176,13 +172,23 @@ class CustomerCheckoutService
                 $marketing = session('marketing_traffic', []);
 
                 $currentShift = \App\Models\CashShift::where('status', 'open')->latest()->first();
-                $resolvedDriverId = ($orderType === 'delivery') ? app(\App\Services\Orders\Handlers\DeliveryOrderHandler::class)->resolveCourier($currentShift) : null;
+                $courierService = app(\App\Services\Orders\CourierSettlementService::class);
+                $soleCourier = null;
+
+                if ($orderType === 'delivery') {
+                    $activeCouriers = $courierService->getActiveCouriersOnShift($currentShift);
+                    if ($activeCouriers->count() === 1) {
+                        $soleCourier = $activeCouriers->first();
+                    }
+                }
 
                 $order = Order::create([
                     'customer_id'            => $targetCustomerId,
                     'coupon_id'              => $couponId,
-                    'cash_shift_id'        => $currentShift?->id,
-                    'driver_id'            => $resolvedDriverId,
+                    'cash_shift_id'          => $currentShift?->id,
+                    'courier_id'             => $soleCourier?->id,
+                    'driver_id'              => $soleCourier?->user_id ?? $soleCourier?->user?->id,
+                    'courier_assigned_at'    => $soleCourier ? now() : null,
                     'type'                   => $orderType,
                     'source'                 => Order::SOURCE_CUSTOMER_APP,
                     'address_id'             => $resolvedAddress['address_id'],
@@ -206,7 +212,13 @@ class CustomerCheckoutService
                     'total'                  => $realOrderTotal,
                     'notes'                  => $finalNotes,
                 ]);
-            }
+
+                if ($soleCourier) {
+                    $order->updateQuietly([
+                        'courier_fee' => $courierService->calculateFee($soleCourier, $order),
+                    ]);
+                }
+            } // 🚀 Fechamento do bloco else (B. NOVO PEDIDO)
 
             foreach ($items as $item) {
                 $this->itemProcessor->process($order, $item);
@@ -237,7 +249,6 @@ class CustomerCheckoutService
                 $gateway = $this->gatewayManager->resolveGateway($paymentMethod->gateway_driver);
                 $pixData = $gateway->generatePayment($order, $remainingBalance);
 
-                // 🔥 CRIAR O REGISTO DO PAGAMENTO AQUI:
                 $order->payments()->create([
                     'payment_method_id' => $paymentMethod->id,
                     'method'            => $paymentMethod->name ?? 'Pix',

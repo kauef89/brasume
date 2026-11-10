@@ -344,8 +344,12 @@ class TechnicalSheetsRelationManager extends RelationManager
             ->paginationPageOptions(["all"]);
     }
 
-    public static function canViewForRecord($ownerRecord, $pageClass): bool
+    public static function canViewForRecord($ownerRecord, string $pageClass): bool
     {
-        return in_array($ownerRecord->type, ["dish", "combo", "manufactured"]);
+        $type = $ownerRecord->type instanceof \App\Enums\ProductType
+            ? $ownerRecord->type
+            : \App\Enums\ProductType::tryFrom((string) $ownerRecord->type);
+
+        return $type?->canHaveRecipe() ?? false;
     }
 }
