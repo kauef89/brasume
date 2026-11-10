@@ -58,9 +58,9 @@ class OrderLogisticsController extends Controller
     public function transform(Order $order, Request $request)
     {
         $validated = $request->validate([
-            'new_type'        => 'nullable|string|in:table,counter,delivery',
-            'newType'         => 'nullable|string|in:table,counter,delivery',
-            'type'            => 'nullable|string|in:table,counter,delivery',
+            'new_type'        => 'nullable|string|in:table,counter,delivery,pickup',
+            'newType'         => 'nullable|string|in:table,counter,delivery,pickup',
+            'type'            => 'nullable|string|in:table,counter,delivery,pickup',
             'table_id'        => 'nullable|integer|exists:dining_tables,id',
             'dining_table_id' => 'nullable|integer|exists:dining_tables,id',
             'table_number'    => 'nullable|string',
@@ -133,5 +133,36 @@ class OrderLogisticsController extends Controller
     {
         $result = $this->logisticsService->bulkCompleteDispatched();
         return back()->with('success', "{$result['processed']} pedidos finalizados com sucesso!");
+    }
+
+    public function applyDiscount(Order $order, \Illuminate\Http\Request $request, \App\Services\Orders\PosCheckoutService $checkoutService)
+    {
+        $validated = $request->validate([
+            'discount'    => 'required|numeric|min:0',
+            'coupon_id'   => 'nullable|integer',
+            'coupon_code' => 'nullable|string',
+        ]);
+
+        $checkoutService->applyDiscount($order, (float) $validated['discount']);
+
+        $couponId = !empty($validated['coupon_id']) ? (int) $validated['coupon_id'] : null;
+        if (!$couponId && !empty($validated['coupon_code'])) {
+            $foundCoupon = \App\Models\Coupon::where('code', $validated['coupon_code'])->first();
+            $couponId = $foundCoupon?->id;
+        }
+
+        if ($couponId) {
+            $order->updateQuietly(['coupon_id' => $couponId]);
+        }
+
+        return response()->json(['success' => true, 'order' => $order->fresh(['items', 'coupon'])]);
+    }
+
+    public function removeDiscount(Order $order, \App\Services\Orders\PosCheckoutService $checkoutService)
+    {
+        $checkoutService->removeDiscount($order);
+        $order->updateQuietly(['coupon_id' => null]);
+
+        return response()->json(['success' => true, 'order' => $order->fresh(['items', 'coupon'])]);
     }
 }

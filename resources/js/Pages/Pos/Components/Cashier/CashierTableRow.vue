@@ -89,26 +89,45 @@
         </div>
 
         <!-- SEFAZ -->
-        <div class="w-16 shrink-0 flex justify-center">
+        <div class="w-20 shrink-0 flex justify-center">
             <template v-if="item._type === 'order' && item.status !== 'cancelled'">
+                <!-- AUTORIZADA -->
                 <span
                     v-if="item.fiscal_status === 'authorized'"
-                    class="text-[9px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded flex items-center gap-1"
+                    class="text-[9px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs"
                 >
                     <i class="pi pi-check text-[8px]"></i> NFC-e
                 </span>
+
+                <!-- DISPENSADA -->
                 <span
-                    v-else-if="item.fiscal_status === 'rejected'"
-                    class="text-[9px] font-bold uppercase tracking-wider text-danger-500 bg-danger-500/10 px-1.5 py-0.5 rounded flex items-center gap-1"
+                    v-else-if="item.fiscal_status === 'skipped'"
+                    class="text-[9px] font-semibold uppercase tracking-wider text-surface-muted/60 bg-surface-3/50 px-2 py-0.5 rounded-full"
+                    title="Emissão dispensada para este pedido"
                 >
-                    <i class="pi pi-times text-[8px]"></i> Erro
+                    Isento
                 </span>
-                <span
+
+                <!-- PENDENTE OU REJEITADA: BOTÃO PÍLULA EMITIR -->
+                <button
                     v-else
-                    class="text-[9px] font-semibold text-surface-muted/60 uppercase tracking-wider"
+                    type="button"
+                    @click.stop="$emit('action', { type: 'emit_nfce', order: item })"
+                    :disabled="isEmitting"
+                    class="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border transition-all flex items-center gap-1 cursor-pointer outline-none active:scale-95 shadow-2xs"
+                    :class="[
+                        item.fiscal_status === 'failed' || item.fiscal_status === 'rejected'
+                            ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border-amber-500/30'
+                            : 'bg-primary-500/10 hover:bg-primary-500/20 text-primary-500 border-primary-500/30',
+                        isEmitting ? 'opacity-60 cursor-not-allowed' : ''
+                    ]"
+                    :title="item.fiscal_error || 'Emitir NFC-e agora na SEFAZ'"
                 >
-                    Pendente
-                </span>
+                    <i v-if="isEmitting" class="pi pi-spinner pi-spin text-[8px]"></i>
+                    <i v-else-if="item.fiscal_status === 'failed' || item.fiscal_status === 'rejected'" class="pi pi-refresh text-[8px]"></i>
+                    <i v-else class="pi pi-bolt text-[8px]"></i>
+                    <span>{{ isEmitting ? 'Emitindo' : 'Emitir' }}</span>
+                </button>
             </template>
         </div>
 
@@ -133,7 +152,8 @@ import { formatCurrency, abbreviateName } from '@/Utils/formatters';
 
 const props = defineProps({
     item: { type: Object, required: true },
-    isSelected: { type: Boolean, default: false }
+    isSelected: { type: Boolean, default: false },
+    isEmitting: { type: Boolean, default: false }
 });
 
 defineEmits(['toggle-selection', 'action']);

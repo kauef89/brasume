@@ -28,7 +28,7 @@
                 <div class="flex items-center gap-2.5">
                     <i class="pi pi-check-circle text-lg"></i>
                     <div>
-                        <div class="font-black text-xs uppercase tracking-wider">{{ appliedCoupon }}</div>
+                        <div class="font-black text-xs uppercase tracking-wider">{{ couponName || appliedCoupon }}</div>
                         <div class="text-[10px] font-bold mt-0.5">Desconto ativo: - R$ {{ Number(appliedDiscount || 0).toFixed(2) }}</div>
                     </div>
                 </div>
@@ -77,7 +77,7 @@
                     :is-selected="coupon.code === appliedCoupon"
                     :show-checkmark="true"
                     :class="[!coupon.meets_subtotal ? 'opacity-40 cursor-not-allowed' : '']"
-                    @select="coupon.meets_subtotal ? handleSelectCoupon(coupon.code) : null"
+                    @select="handleSelectCoupon(coupon)"
                 />
             </div>
 
@@ -96,15 +96,18 @@ import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import Button from 'primevue/button';
 import SelectableCard from '@/Components/UI/SelectableCard.vue';
+import { useToast } from 'primevue/usetoast';
 
 const props = defineProps({
     appliedCoupon: String,
+    couponName: String,
     appliedDiscount: Number,
     subtotal: { type: Number, default: 0 },
     customerId: { type: [Number, String, null], default: null }
 });
 
 const emit = defineEmits(['close', 'apply', 'remove']);
+const toast = useToast();
 
 const coupons = ref([]);
 const isLoading = ref(false);
@@ -151,8 +154,24 @@ const getCouponSubtitle = (coupon) => {
     return coupon.description || (coupon.is_pos_only ? 'Uso exclusivo no caixa' : 'Válido para este pedido');
 };
 
-const handleSelectCoupon = (code) => {
-    emit('apply', code);
+const handleSelectCoupon = (coupon) => {
+    if (!coupon) return;
+    const code = typeof coupon === 'string' ? coupon : (coupon.code || coupon.name);
+
+    if (typeof coupon === 'object' && coupon.meets_subtotal === false) {
+        const missing = coupon.min_subtotal
+            ? (Number(coupon.min_subtotal) - Number(props.subtotal || 0)).toFixed(2).replace('.', ',')
+            : '0,00';
+        toast.add({
+            severity: 'warn',
+            summary: 'Valor Mínimo Não Atingido',
+            detail: `Este cupom exige subtotal mínimo de R$ ${Number(coupon.min_subtotal || 0).toFixed(2).replace('.', ',')} (faltam R$ ${missing}).`,
+            life: 4000
+        });
+        return;
+    }
+
+    emit('apply', code, coupon);
 };
 
 const handleDirectSubmit = () => {

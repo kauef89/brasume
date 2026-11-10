@@ -21,7 +21,7 @@
             <div class="w-28 shrink-0">Liquidação</div>
             <div class="w-14 shrink-0 text-center">Hora</div>
             <div class="w-24 shrink-0 text-right">Valor</div>
-            <div class="w-16 flex justify-center shrink-0">Sefaz</div>
+            <div class="w-20 flex justify-center shrink-0">Sefaz</div>
             <div class="w-8 shrink-0"></div>
         </div>
 
@@ -38,6 +38,7 @@
                     :key="item._uniqueId"
                     :item="item"
                     :is-selected="selectedRows.has(item._uniqueId)"
+                    :is-emitting="emittingOrderIds?.has(item.id)"
                     @toggle-selection="$emit('toggle-selection', $event)"
                     @action="$emit('action', $event)"
                 />
@@ -53,7 +54,8 @@ import CashierTableRow from './CashierTableRow.vue';
 
 const props = defineProps({
     unifiedHistory: { type: Array, required: true },
-    selectedRows: { type: Object, required: true }
+    selectedRows: { type: Object, required: true },
+    emittingOrderIds: { type: Object, default: () => new Set() }
 });
 
 defineEmits(['toggle-selection', 'toggle-all', 'action']);

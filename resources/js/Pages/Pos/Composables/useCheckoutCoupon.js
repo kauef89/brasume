@@ -3,6 +3,7 @@ import axios from 'axios';
 
 export function useCheckoutCoupon({ selectedItemsValue, effectiveDeliveryFee, effectiveServiceFee, liveOrder, toast }) {
     const appliedCheckoutCoupon = ref(null);
+    const appliedCheckoutCouponName = ref(null);
     const appliedCheckoutDiscount = ref(0);
     const isCouponModalVisible = ref(false);
 
@@ -21,6 +22,7 @@ export function useCheckoutCoupon({ selectedItemsValue, effectiveDeliveryFee, ef
             });
 
             appliedCheckoutCoupon.value = response.data.code;
+            appliedCheckoutCouponName.value = response.data.name || response.data.coupon?.name || response.data.code;
 
             const type = response.data.type;
             const val = Number(response.data.value || 0);
@@ -46,12 +48,14 @@ export function useCheckoutCoupon({ selectedItemsValue, effectiveDeliveryFee, ef
 
     const removeCoupon = () => {
         appliedCheckoutCoupon.value = null;
+        appliedCheckoutCouponName.value = null;
         appliedCheckoutDiscount.value = 0;
         toast.add({ severity: 'info', summary: 'Removido', detail: 'Cupom de desconto removido.', life: 2500 });
     };
 
     return {
         appliedCheckoutCoupon,
+        appliedCheckoutCouponName,
         appliedCheckoutDiscount,
         isCouponModalVisible,
         applyCoupon,

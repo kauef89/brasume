@@ -27,6 +27,7 @@
             :order-label="`Pagamento #${liveOrder.id}`"
             :subtitle="headerSubtitle"
             :applied-coupon="appliedCheckoutCoupon"
+              :coupon-name="appliedCheckoutCouponName"
             :coupon-discount="appliedCheckoutDiscount"
             :is-all-selected="isAllSelected"
             v-model:is-grouped="isGrouped"
@@ -159,6 +160,7 @@
           <CheckoutCouponDrawer
               v-if="isCouponModalVisible"
               :applied-coupon="appliedCheckoutCoupon"
+              :coupon-name="appliedCheckoutCouponName"
               :applied-discount="appliedCheckoutDiscount"
               :subtotal="selectedItemsValue"
               :customer-id="liveOrder?.customer_id || liveOrder?.customer?.id"
@@ -350,6 +352,7 @@ const effectiveDiscount = computed(() => Number((discount.value * selectionRatio
 
 const {
     appliedCheckoutCoupon,
+    appliedCheckoutCouponName,
     appliedCheckoutDiscount,
     isCouponModalVisible,
     applyCoupon,
@@ -599,6 +602,7 @@ const {
     isReasonModalVisible,
     isPostPaymentPhase,
     appliedCheckoutCoupon,
+    appliedCheckoutCouponName,
     isZeroRevenueOrder
 });
 

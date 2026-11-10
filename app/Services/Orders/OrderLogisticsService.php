@@ -25,7 +25,7 @@ class OrderLogisticsService
     {
         $newType = $data['new_type'] ?? $data['newType'] ?? $data['type'] ?? null;
 
-        if (!$newType || !in_array($newType, ['table', 'counter', 'delivery'], true)) {
+        if (!$newType || !in_array($newType, ['table', 'counter', 'delivery', 'pickup'], true)) {
             throw new Exception("Tipo de pedido inválido ou não informado.");
         }
 
@@ -61,7 +61,7 @@ class OrderLogisticsService
                 $order->payment_intent_status = null;
                 $order->payment_intent_methods = null;
 
-            } elseif ($newType === 'counter') {
+            } elseif (in_array($newType, ['counter', 'pickup'], true)) {
                 $order->dining_table_id = null;
                 $order->table_number = null;
                 $order->delivery_fee = 0;

@@ -42,7 +42,11 @@
                 :is-all-selected="selectedItemIds.length === activeItemsExploded.length && activeItemsExploded.length > 0"
                 :is-grouped="true"
                 :hide-group-toggle="true"
+                :applied-coupon="order?.coupon?.code || order?.coupon_code"
+                :coupon-name="order?.coupon?.name || order?.coupon_name || order?.coupon?.label || order?.coupon?.code || order?.coupon_code"
+                :coupon-discount="Number(order?.discount || 0)"
                 v-model:search-query="itemSearchQuery"
+                @open-coupon="activeSidebarView = 'coupon'"
                 @toggle-all="toggleSelectAllItems"
                 @go-back="closeOrderDetails"
             >
@@ -57,7 +61,7 @@
 
                 <template #subtitle>
                     <button @click="handleAction(order?.type === 'table' ? 'transfer_all' : 'transform_order')" :class="chipInteractive">
-                        <i class="pi pi-sync text-[9px]"></i> {{ translatedType }}
+                        <i :class="order?.type === 'pickup' ? 'pi pi-shopping-bag' : (order?.type === 'delivery' ? 'pi pi-truck' : (order?.type === 'table' ? 'pi pi-table' : 'pi pi-sync'))" class="text-[9px]"></i> {{ translatedType }}
                     </button>
 
                     <button
@@ -86,7 +90,7 @@
                         <i class="pi pi-truck text-[9px]"></i> {{ assignedCourier ? abbreviateName(assignedCourier.name) : '+ Atribuir Entregador' }}
                     </button>
 
-                    <button v-if="['counter', 'delivery'].includes(order?.type)" @click="openCustomerWhatsApp" :class="!hasPhone ? chipDanger : chipInteractive">
+                    <button v-if="['counter', 'delivery', 'pickup'].includes(order?.type)" @click="openCustomerWhatsApp" :class="!hasPhone ? chipDanger : chipInteractive">
                         <i class="pi pi-whatsapp text-[9px]"></i> {{ hasPhone ? formatPhone(customerPhone) : 'Sem Telefone' }}
                     </button>
                 </template>
@@ -192,6 +196,18 @@
                     @confirm="handleExecuteTransfer"
                 />
 
+                <CheckoutCouponDrawer
+                    v-else-if="activeSidebarView === 'coupon'"
+                    :subtotal="calculatedOrderSubtotal"
+                    :customer-id="order?.customer_id || order?.customer?.id"
+                    :applied-coupon="order?.coupon?.code || order?.coupon_code"
+                    :coupon-name="order?.coupon?.name || order?.coupon_name || order?.coupon?.label || order?.coupon?.code || order?.coupon_code"
+                    :applied-discount="Number(order?.discount || 0)"
+                    @close="activeSidebarView = 'menu'"
+                    @apply="handleApplyCoupon"
+                    @remove="handleRemoveCoupon"
+                />
+
                 <OrderTransformer
                     v-else-if="activeSidebarView === 'transform'"
                     mode="inline"
@@ -262,14 +278,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
-import { router } from "@inertiajs/vue3";
+import axios from 'axios';
+import { router } from '@inertiajs/vue3';
+
 import { useToast } from "primevue/usetoast";
 import DesktopLayout from "@/Layouts/DesktopLayout.vue";
 import { formatCurrency, formatNumber, formatPhone } from "@/Utils/formatters";
 import { useViewport } from "@/Composables/useViewport";
 
 import CheckoutHeader from "@/Pages/Pos/Components/Checkout/CheckoutHeader.vue";
+import CheckoutCouponDrawer from "@/Pages/Pos/Components/Checkout/CheckoutCouponDrawer.vue";
 import CheckoutItemsList from "@/Pages/Pos/Components/Checkout/CheckoutItemsList.vue";
 import OrderActionsGrid from "@/Pages/Shared/Order/OrderActionsGrid.vue";
 import OperationReasonModal from "@/Pages/Pos/Components/Checkout/OperationReasonModal.vue";
@@ -493,8 +511,18 @@ const triggerCourierAssignment = (courier) => {
     });
 };
 
+
+const calculatedOrderSubtotal = computed(() => {
+    const sub = Number(props.order?.subtotal || 0);
+    if (sub > 0) return sub;
+    const items = props.order?.items || [];
+    return items
+        .filter(i => !['cancelled', 'voided', 'refunded'].includes(i.status))
+        .reduce((sum, i) => sum + Number(i.total_price || 0), 0);
+});
+
 const formattedOrderTitle = computed(() => getOrderTitle(props.order));
-const isGuestUser = computed(() => !props.order?.customer_id && ['counter', 'delivery'].includes(props.order?.type));
+const isGuestUser = computed(() => !props.order?.customer_id && ['counter', 'delivery', 'pickup'].includes(props.order?.type));
 
 const parsedAddressData = computed(() => parseAddress(props.order?.address));
 const displayAddressText = computed(() => parsedAddressData.value ? (formatAddress(props.order) || 'Endereço sem detalhes') : '+ Adicionar Endereço');
@@ -518,7 +546,7 @@ const paymentMissing = computed(() => {
 
 const parsedPaymentBadges = computed(() => getPaymentBadges(props.order));
 const translatedType = computed(() => {
-    const t = { table: "Mesa", counter: "Balcão", delivery: "Delivery" };
+    const t = { table: props.order?.table_number ? `Mesa ${props.order.table_number}` : "Mesa", counter: "Balcão", delivery: "Delivery", pickup: "Retirada", takeaway: "Retirada" };
     return t[props.order?.type] || "";
 });
 

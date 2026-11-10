@@ -87,6 +87,7 @@
                     class="w-full h-full"
                     :unified-history="unifiedHistory"
                     :selected-rows="selectedRows"
+                    :emitting-order-ids="emittingOrderIds"
                     @toggle-selection="toggleRowSelection"
                     @toggle-all="toggleAllRows"
                     @action="handleOrderAction"
@@ -305,7 +306,7 @@ const {
     confirmFreelancerPayment
 } = useShiftAttendance();
 
-const { isRetryingFiscal, pendingFiscalOrders, retryFailedFiscal } = useFiscalBatchEmitter(props, unifiedHistory);
+const { isRetryingFiscal, emittingOrderIds, pendingFiscalOrders, emitSingleNfce, retryFailedFiscal } = useFiscalBatchEmitter(props, unifiedHistory);
 
 const {
     isProcessing: isOperationalProcessing,
@@ -369,6 +370,8 @@ const handleOrderAction = (payload) => {
                 mode: 'payment'
             }
         }));
+    } else if (payload.type === 'emit_nfce' && payload.order?.id) {
+        emitSingleNfce(payload.order);
     }
 };
 

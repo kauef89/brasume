@@ -46,15 +46,33 @@ export function useCheckoutProcessor({
 
         try {
             const apiClient = axios || window.axios;
-            const response = await apiClient.post(route('operations.orders.emit-nfce', orderId), {
-                document: unref(customerDocument)
+            const endpoint = window.route && route().has('operations.orders.emit-nfce')
+                ? route('operations.orders.emit-nfce', orderId)
+                : `/operations/orders/${orderId}/emit-nfce`;
+
+            let docToSend = null;
+            try {
+                if (typeof customerDocument !== 'undefined' && customerDocument) {
+                    docToSend = unref(customerDocument);
+                }
+            } catch (e) {}
+
+            const response = await apiClient.post(endpoint, {
+                document: docToSend,
+                force: true
             }, { headers: { 'Accept': 'application/json' } });
 
-            if (response.data?.success) {
+            if (response.data?.success && response.data?.status !== 'failed') {
                 isFiscalSuccess.value = true;
-                const target = getOrder();
-                if (target) { target.has_fiscal_document = true; target.fiscal_status = 'authorized'; }
-                setTimeout(() => { isEmittingNfce.value = false; executeAutoPrintRule(); }, 1500);
+                const target = typeof getOrder === 'function' ? getOrder() : null;
+                if (target) {
+                    target.has_fiscal_document = true;
+                    target.fiscal_status = response.data?.status || 'authorized';
+                }
+                setTimeout(() => {
+                    isEmittingNfce.value = false;
+                    executeAutoPrintRule();
+                }, 1200);
             } else {
                 throw new Error(response.data?.message || 'Falha ao emitir nota fiscal.');
             }
@@ -158,7 +176,12 @@ export function useCheckoutProcessor({
             isPaymentSuccess.value = true;
             isProcessingPayment.value = false;
             if (isPostPaymentPhase) isPostPaymentPhase.value = true;
-            executeAutoPrintRule();
+            const isEmitter = Boolean(props?.companySettings?.is_fiscal_emitter || false);
+            if (isEmitter && !(isZeroRevenueOrder && unref(isZeroRevenueOrder))) {
+                triggerSilentEmission(); // Disparo automático pós-pagamento
+            } else {
+                executeAutoPrintRule();
+            }
         } catch (error) {
             isProcessingPayment.value = false;
             toast.add({ severity: 'error', summary: 'Erro de Pagamento', detail: error.response?.data?.message || 'Falha ao processar o pagamento.', life: 5000 });

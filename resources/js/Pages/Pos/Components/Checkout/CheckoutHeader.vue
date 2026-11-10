@@ -21,18 +21,18 @@
                         <span>{{ orderLabel }}</span>
                     </span>
 
-                    <!-- 🚀 CHIP DE CUPOM INTERATIVO -->
+                    <!-- 🚀 CHIP DE CUPOM INTERATIVO (FORMATO PÍLULA) -->
                     <button
                         type="button"
                         @click="$emit('open-coupon')"
-                        class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border text-xs font-bold transition-all cursor-pointer outline-none active:scale-95"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 md:py-2 rounded-full border text-xs font-black transition-all cursor-pointer outline-none active:scale-95 shadow-2xs select-none"
                         :class="appliedCoupon
                             ? 'bg-success-500/10 border-success-500/30 text-success-600 dark:text-success-400 hover:bg-success-500/20'
-                            : 'bg-surface-1 border-surface-border text-surface-muted hover:text-surface-text hover:border-surface-muted'"
-                        :title="appliedCoupon ? `Cupom ativo: ${appliedCoupon}. Clique para gerenciar.` : 'Adicionar cupom de desconto'"
+                            : 'bg-primary-500/10 border-primary-500/20 text-primary-smart hover:bg-primary-500/20 hover:border-primary-500/40'"
+                        :title="appliedCoupon ? `Cupom ativo: ${displayCouponLabel}. Clique para gerenciar.` : 'Adicionar cupom de desconto'"
                     >
-                        <i class="pi pi-ticket text-[10px]" :class="appliedCoupon ? 'text-success-500' : 'text-primary-500'"></i>
-                        <span>{{ appliedCoupon ? appliedCoupon : 'Sem Cupom' }}</span>
+                        <i class="pi pi-ticket text-xs" :class="appliedCoupon ? 'text-success-500' : 'text-primary-500'"></i>
+                        <span>{{ appliedCoupon ? displayCouponLabel : 'Cupom' }}</span>
                         <span v-if="appliedCoupon && couponDiscount > 0" class="text-[10px] font-black opacity-80">
                             (-R$ {{ Number(couponDiscount).toFixed(2) }})
                         </span>
@@ -70,14 +70,16 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import SegmentedControl from '@/Components/UI/SegmentedControl.vue';
 import ExpandableSearch from '@/Components/UI/ExpandableSearch.vue';
 
-defineProps({
+const props = defineProps({
     title: { type: String, required: true },
     orderLabel: String,
     subtitle: String,
     appliedCoupon: { type: String, default: null },
+    couponName: { type: String, default: null },
     couponDiscount: { type: [Number, String], default: 0 },
     isGrouped: { type: Boolean, default: true },
     hideGroupToggle: { type: Boolean, default: false },
@@ -87,6 +89,10 @@ defineProps({
 });
 
 defineEmits(['go-back', 'update:isGrouped', 'toggle-all', 'update:searchQuery', 'open-coupon']);
+
+const displayCouponLabel = computed(() => {
+    return props.couponName || props.appliedCoupon || 'Cupom';
+});
 
 const groupOptions = [
     { label: 'Agrupado', value: true, icon: 'pi-clone' },

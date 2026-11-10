@@ -24,6 +24,15 @@
 
             <div class="flex flex-col gap-3 shrink-0">
                 <SelectableCard
+                    v-if="order?.type !== 'pickup'"
+                    @select="selectTarget('pickup')"
+                    :is-selected="targetType === 'pickup'"
+                    color="amber"
+                    icon="pi-shopping-bag"
+                    title="Mudar para Retirada (Takeaway)"
+                    subtitle="Transforma em pedido para retirada no balcão e remove taxa de entrega."
+                />
+                <SelectableCard
                     v-if="order?.type !== 'table'"
                     @select="selectTarget('table')"
                     :is-selected="targetType === 'table'"
@@ -121,7 +130,7 @@ watch(() => props.order, resetState);
 watch(isVisible, (val) => { if (!val) resetState(); });
 
 const currentTypeLabel = computed(() => {
-    const types = { table: "Mesa", counter: "Balcão", delivery: "Delivery" };
+    const types = { table: "Mesa", counter: "Balcão", delivery: "Delivery", pickup: "Retirada", takeaway: "Retirada" };
     return props.order ? types[props.order.type] : "";
 });
 
