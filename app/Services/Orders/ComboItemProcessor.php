@@ -76,7 +76,7 @@ class ComboItemProcessor
             ]);
 
             if ($childProductModel) {
-                $this->inventoryService->deductStock($childProductModel, $subQty * $parentQty);
+                $this->inventoryService->deductStock($childProductModel, $subQty * $parentQty, $subOrderItem);
             }
 
             if (!empty($cItem["structuredModifiers"]) && is_array($cItem["structuredModifiers"])) {
@@ -100,7 +100,7 @@ class ComboItemProcessor
         // 1. Estorna estoque e modificadores do subitem antigo
         $oldProduct = $this->getProduct($oldChild->product_id);
         if ($oldProduct) {
-            $this->inventoryService->deductStock($oldProduct, -$oldChild->quantity);
+            $this->inventoryService->deductStock($oldProduct, -$oldChild->quantity, $oldChild);
         }
 
         foreach ($oldChild->modifiers as $mod) {
@@ -110,7 +110,7 @@ class ComboItemProcessor
                     $linkedProduct = $this->getProduct($modifierOption->linked_product_id);
                     if ($linkedProduct) {
                         $deduction = ((float) ($modifierOption->linked_qty ?? 1)) * ((float) ($mod->quantity ?? 1));
-                        $this->inventoryService->deductStock($linkedProduct, -$deduction);
+                        $this->inventoryService->deductStock($linkedProduct, -$deduction, $oldChild);
                     }
                 }
             }
@@ -166,7 +166,7 @@ class ComboItemProcessor
         ]);
 
         if ($productModel) {
-            $this->inventoryService->deductStock($productModel, $qty);
+            $this->inventoryService->deductStock($productModel, $qty, $newChild);
         }
 
         if (!empty($itemData["structuredModifiers"]) && is_array($itemData["structuredModifiers"])) {

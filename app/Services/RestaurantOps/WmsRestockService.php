@@ -166,37 +166,71 @@ class WmsRestockService
     public function addStockToShelf(int $ruleId, float $addedStock): ProductStorageLocation
     {
         return DB::transaction(function () use ($ruleId, $addedStock) {
-            $rule = ProductStorageLocation::lockForUpdate()->findOrFail($ruleId);
-            $product = Product::lockForUpdate()->find($rule->product_id);
+            ProductStorageLocation::$skipAutoKardex = true;
+            try {
+                $rule = ProductStorageLocation::lockForUpdate()->findOrFail($ruleId);
+                $product = Product::lockForUpdate()->find($rule->product_id);
 
-            $rule->current_stock += $addedStock;
-
-            if ($rule->max_capacity > 0 && $rule->current_stock > $rule->max_capacity) {
-                $rule->current_stock = $rule->max_capacity;
-            }
-
-            $rule->save();
-
-            if ($product) {
-                if ((float) $product->current_stock < (float) $rule->current_stock) {
-                    $product->current_stock = (float) $rule->current_stock;
+                $beforeShelf = (float) $rule->current_stock;
+                $targetShelf = $beforeShelf + $addedStock;
+                if ($rule->max_capacity > 0 && $targetShelf > $rule->max_capacity) {
+                    $targetShelf = (float) $rule->max_capacity;
                 }
 
-                if ($product->status === 'out_of_stock' && (float) $product->current_stock > 0) {
-                    app(InventoryService::class)->triggerStockRestored($product);
-                } else {
-                    $product->save();
-                    $tenantId = tenant('id') ?? 'central';
-                    broadcast(new CatalogUpdated($tenantId));
+                $actualMoved = round($targetShelf - $beforeShelf, 3);
+                if ($actualMoved <= 0) {
+                    return $rule->load('product');
                 }
-            } else {
-                $tenantId = tenant('id') ?? 'central';
-                broadcast(new CatalogUpdated($tenantId));
+
+                $rule->current_stock = $targetShelf;
+                $rule->saveQuietly();
+
+                // Se houver local de origem (ex: Estoque Seco -> Geladeira), transfere entre locais sem inflar saldo global
+                if (!empty($rule->source_location_id)) {
+                    $sourceRule = ProductStorageLocation::where('product_id', $rule->product_id)
+                        ->where('storage_location_id', $rule->source_location_id)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($sourceRule && (float) $sourceRule->current_stock > 0) {
+                        $deductFromSource = min((float) $sourceRule->current_stock, $actualMoved);
+                        $sourceRule->current_stock = round((float) $sourceRule->current_stock - $deductFromSource, 3);
+                        $sourceRule->saveQuietly();
+                    }
+                }
+
+                if ($product) {
+                    $newTotalStock = round((float) ProductStorageLocation::where('product_id', $product->id)->sum('current_stock'), 3);
+                    $oldTotalStock = (float) $product->current_stock;
+                    $globalDiff    = round($newTotalStock - $oldTotalStock, 4);
+
+                    if (abs($globalDiff) >= 0.0001) {
+                        app(InventoryService::class)->logMovement(
+                            $product,
+                            'adjustment',
+                            $globalDiff,
+                            $newTotalStock,
+                            "Reposição WMS Prateleira #{$ruleId}",
+                            null,
+                            $rule->storage_location_id
+                        );
+                    }
+
+                    $product->current_stock = $newTotalStock;
+                    if ($product->status === 'out_of_stock' && $newTotalStock > 0) {
+                        app(InventoryService::class)->triggerStockRestored($product);
+                    } else {
+                        $product->saveQuietly();
+                        broadcast(new CatalogUpdated(tenant('id') ?? 'central'));
+                    }
+                }
+
+                Log::info("📦 [WmsRestock] Reposição salva: +{$actualMoved} na regra #{$ruleId} (Produto: {$rule->product_id})");
+
+                return $rule->load('product');
+            } finally {
+                ProductStorageLocation::$skipAutoKardex = false;
             }
-
-            Log::info("📦 [WmsRestock] Reposição salva: +{$addedStock} na regra #{$ruleId} (Produto: {$rule->product_id})");
-
-            return $rule->load('product');
         });
     }
 

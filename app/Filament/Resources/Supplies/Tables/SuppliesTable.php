@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Supplies\Tables;
 
+use App\Enums\ProductStatus;
+use App\Filament\Resources\Products\Actions\SmartStatusAction;
 use App\Filament\Resources\Supplies\SupplyResource;
 use App\Models\Category;
 use App\Models\Product;
@@ -118,8 +120,23 @@ class SuppliesTable
                             ->orderByRaw("({$expr} IS NULL) ASC")
                             ->orderByRaw("{$expr} {$direction}");
                     }),
+
+                Tables\Columns\TextColumn::make('status')
+                    ->label('Status')
+                    ->badge()
+                    ->sortable(),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('status')
+                    ->label('Disponibilidade')
+                    ->options(ProductStatus::class)
+                    ->query(function (Builder $query, array $data): Builder {
+                        if (filled($data['value'] ?? null)) {
+                            return $query->where('status', $data['value']);
+                        }
+                        return $query->where('status', '!=', ProductStatus::ARCHIVED->value);
+                    }),
+
                 Tables\Filters\SelectFilter::make('category_id')
                     ->label('Filtrar Categoria')
                     ->options(fn () => Category::where('type', 'supply')->pluck('name', 'id')),
@@ -140,6 +157,7 @@ class SuppliesTable
                     ")),
             ])
             ->actions([
+                SmartStatusAction::make()->iconButton(),
                 Actions\ViewAction::make()->iconButton(),
                 Actions\EditAction::make()->iconButton(),
             ])

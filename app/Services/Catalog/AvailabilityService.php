@@ -48,15 +48,20 @@ class AvailabilityService
             } elseif ($action === 'available') {
                 $updates = ['status' => 'available'];
 
+                $product->update($updates);
+
                 if ($product->track_inventory && !is_null($newStock)) {
-                    $updates['current_stock'] = $newStock;
+                    $this->inventoryService->adjustStock(
+                        $product,
+                        (float) $newStock,
+                        'Reativação de disponibilidade com ajuste de saldo',
+                        auth()->id()
+                    );
 
                     ShoppingListItem::where('product_id', $product->id)
                         ->whereIn('status', ['pending', 'ordered'])
                         ->update(['status' => 'received']);
                 }
-
-                $product->update($updates);
 
                 // Reativa modificadores vinculados
                 ModifierOption::where('linked_product_id', $product->id)->update(['is_active' => true]);

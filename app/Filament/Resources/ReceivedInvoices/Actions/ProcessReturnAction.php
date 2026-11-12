@@ -9,6 +9,7 @@ use App\Models\ReceivedInvoice;
 use App\Models\ProductCostHistory;
 use App\Models\Product;
 use App\Models\AccountPayable;
+use App\Services\Catalog\InventoryService;
 use Filament\Notifications\Notification;
 
 class ProcessReturnAction extends Action
@@ -71,8 +72,8 @@ class ProcessReturnAction extends Action
                                         ->first();
 
                                     if ($historyOriginal && $historyOriginal->product_id) {
-                                        $factor = clone $historyOriginal->conversion_factor ?: 1;
-                                        $internalQty = $xmlQty * $factor;
+                                        $factor = (float) ($historyOriginal->conversion_factor ?: 1);
+                                        $internalQty = round($xmlQty * $factor, 4);
 
                                         ProductCostHistory::create([
                                             'product_id' => $historyOriginal->product_id,
@@ -89,9 +90,13 @@ class ProcessReturnAction extends Action
                                         ]);
 
                                         $product = Product::find($historyOriginal->product_id);
-                                        if ($product) {
-                                            $product->current_stock -= $internalQty;
-                                            $product->save();
+                                        if ($product && $product->track_inventory) {
+                                            app(InventoryService::class)->deductStock(
+                                                $product,
+                                                $internalQty,
+                                                $recibo,
+                                                "Devolução de Compra NF-e #{$record->nfe_key}"
+                                            );
                                         }
                                     }
                                 }

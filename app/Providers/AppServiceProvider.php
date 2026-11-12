@@ -15,6 +15,8 @@ use Illuminate\Foundation\Http\Events\RequestHandled;
 // 🚀 Modelos, Observadores e Listeners
 use App\Models\Order;
 use App\Observers\OrderObserver;
+use App\Models\InventoryMovement;
+use App\Observers\InventoryMovementObserver;
 use App\Events\OrderCancelled;
 use App\Listeners\ProcessGatewayRefund;
 use App\Listeners\ReturnStockAndNotifyCatalog;
@@ -80,6 +82,7 @@ class AppServiceProvider extends ServiceProvider
         // 📦 EVENTOS, LISTENERS E OBSERVERS
         // =========================================================
         Order::observe(OrderObserver::class);
+        InventoryMovement::observe(InventoryMovementObserver::class);
 
         Event::listen(OrderCancelled::class, ProcessGatewayRefund::class);
         Event::listen(OrderCancelled::class, ReturnStockAndNotifyCatalog::class);

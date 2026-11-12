@@ -152,6 +152,9 @@ class OrderPixService
         try {
             $inventoryService = app(\App\Services\Catalog\InventoryService::class);
             foreach ($order->items as $item) {
+                if ($item->parent_item_id !== null) {
+                    continue;
+                }
                 $inventoryService->processOrderItemStock($item, 'deduct');
             }
         } catch (\Throwable $e) {

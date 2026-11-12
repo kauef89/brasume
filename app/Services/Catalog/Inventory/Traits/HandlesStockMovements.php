@@ -37,7 +37,7 @@ trait HandlesStockMovements
         return (int) $targetLoc->id;
     }
 
-    public function logMovement(Product $product, string $type, float $quantity, float $newBalance, string $description, $originModel = null, ?int $locationId = null): void
+    public function logMovement(Product $product, string $type, float $quantity, float $newBalance, string $description, $originModel = null, ?int $locationId = null, ?int $userId = null): void
     {
         DB::table('inventory_movements')->insert([
             'product_id'          => $product->id,
@@ -49,7 +49,7 @@ trait HandlesStockMovements
             'origin_type'         => $originModel ? get_class($originModel) : null,
             'origin_id'           => $originModel ? $originModel->id : null,
             'description'         => $description,
-            'user_id'             => auth()->id(),
+            'user_id'             => $userId ?? auth()->id(),
             'created_at'          => now(),
             'updated_at'          => now(),
         ]);

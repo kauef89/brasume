@@ -3,35 +3,47 @@
 namespace App\Services\RestaurantOps;
 
 use App\Models\ProductionOrder;
-use App\Events\CatalogUpdated;
+use App\Services\Catalog\InventoryService;
 use Illuminate\Support\Facades\DB;
 
 class ProductionService
 {
     /**
-     * Finaliza a ordem de produção, injeta no estoque e notifica os terminais.
+     * Finaliza a ordem de produção, dá entrada no item produzido (Kardex + WMS),
+     * baixa os insumos da ficha técnica e notifica os terminais.
      */
     public function finishOrder(int $orderId, float $actualQty): void
     {
         DB::transaction(function () use ($orderId, $actualQty) {
-            $order = ProductionOrder::with('product')->findOrFail($orderId);
+            $order = ProductionOrder::with('product')->lockForUpdate()->findOrFail($orderId);
+
+            // Trava de idempotência: evita duplicar entrada de produção se já estiver concluída
+            if ($order->status === 'completed') {
+                return;
+            }
 
             $order->update([
                 'status'     => 'completed',
-                'actual_qty' => $actualQty
+                'actual_qty' => $actualQty,
             ]);
 
             $product = $order->product;
 
-            if ($product && $product->track_inventory) {
-                $product->increment('current_stock', $actualQty);
+            if ($product && $actualQty > 0) {
+                $inventoryService = app(InventoryService::class);
 
-                if ($product->status === 'out_of_stock' && $product->current_stock > 0) {
-                    $product->update(['status' => 'available']);
-
-                    $tenant = function_exists('tenant') && tenant('id') ? tenant('id') : 'central';
-                    broadcast(new CatalogUpdated($tenant));
+                // 1. Injeta o produto acabado no estoque (Kardex 'in' + WMS + restaura disponibilidade)
+                if ($product->track_inventory) {
+                    $inventoryService->addStock(
+                        $product,
+                        $actualQty,
+                        "Ordem de Produção #{$order->id}",
+                        $order
+                    );
                 }
+
+                // 2. Baixa os insumos consumidos pela ficha técnica do item produzido
+                $inventoryService->deductRecipeStock($product, $actualQty, $order);
             }
         });
     }

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Supplies\Pages;
 
 use App\Filament\Resources\Supplies\SupplyResource;
+use App\Filament\Resources\Products\Actions\SmartStatusAction;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 
@@ -21,7 +22,8 @@ class EditSupply extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [DeleteAction::make()];
+        return [SmartStatusAction::make(),
+            DeleteAction::make()];
     }
 
     public function hasCombinedRelationManagerTabsWithContent(): bool

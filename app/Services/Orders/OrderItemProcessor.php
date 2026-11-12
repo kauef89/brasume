@@ -96,7 +96,7 @@ class OrderItemProcessor
 
         if ($productModel) {
             $mainOrderItem->setRelation('product', $productModel);
-            $this->inventoryService->deductStock($productModel, $qty);
+            $this->inventoryService->deductStock($productModel, $qty, $mainOrderItem);
         }
 
         if (!empty($itemData["structuredModifiers"]) && is_array($itemData["structuredModifiers"])) {
@@ -121,7 +121,7 @@ class OrderItemProcessor
 
         $oldProduct = $this->getProduct($oldItem->product_id);
         if ($oldProduct) {
-            $this->inventoryService->deductStock($oldProduct, -$oldItem->quantity);
+            $this->inventoryService->deductStock($oldProduct, -$oldItem->quantity, $oldItem);
         }
 
         foreach ($oldItem->modifiers as $mod) {
@@ -131,7 +131,7 @@ class OrderItemProcessor
                     $linkedProduct = $this->getProduct($modifierOption->linked_product_id);
                     if ($linkedProduct) {
                         $deduction = ((float) ($modifierOption->linked_qty ?? 1)) * ((float) ($mod->quantity ?? 1));
-                        $this->inventoryService->deductStock($linkedProduct, -$deduction);
+                        $this->inventoryService->deductStock($linkedProduct, -$deduction, $oldItem);
                     }
                 }
             }

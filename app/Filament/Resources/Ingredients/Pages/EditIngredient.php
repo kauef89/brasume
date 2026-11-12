@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Ingredients\Pages;
 
 use App\Filament\Resources\Ingredients\IngredientResource;
+use App\Filament\Resources\Products\Actions\SmartStatusAction;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 
@@ -25,6 +26,7 @@ class EditIngredient extends EditRecord
             $this->getSaveFormAction()->formId("form"),
 
             // O seu botão de Deletar
+            SmartStatusAction::make(),
             DeleteAction::make(),
         ];
     }

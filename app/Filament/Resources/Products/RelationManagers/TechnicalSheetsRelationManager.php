@@ -45,7 +45,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                                 \App\Enums\ProductType::CONSUMABLE->value,
                                 \App\Enums\ProductType::RESALE->value,
                             ])
-                            ->with("category")
+                            ->where("status", "!=", \App\Enums\ProductStatus::ARCHIVED->value)->with("category")
                             ->get()
                             ->groupBy(fn($p) => $p->category?->name ?? "Outros / Sem Categoria")
                             ->map(fn($prods) => $prods->pluck("name", "id"))
@@ -101,6 +101,18 @@ class TechnicalSheetsRelationManager extends RelationManager
             ->columns([
                 Tables\Columns\ToggleColumn::make("is_active")
                     ->label("Ativo")
+                    ->disabled(function ($record) {
+                        $status = $record->ingredient?->status;
+                        $val = $status instanceof \BackedEnum ? (string) $status->value : (string) $status;
+                        return $val === \App\Enums\ProductStatus::ARCHIVED->value;
+                    })
+                    ->tooltip(function ($record) {
+                        $status = $record->ingredient?->status;
+                        $val = $status instanceof \BackedEnum ? (string) $status->value : (string) $status;
+                        return $val === \App\Enums\ProductStatus::ARCHIVED->value
+                            ? 'Bloqueado: este insumo está Arquivado no cadastro mestre.'
+                            : null;
+                    })
                     ->afterStateUpdated(function ($record, $state, $livewire) {
                         $livewire->dispatch("update-margin-widget");
                         \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($livewire->getOwnerRecord(), 'recipe_update');
@@ -148,7 +160,17 @@ class TechnicalSheetsRelationManager extends RelationManager
                     ->sortable()
                     ->weight("bold")
                     ->color(fn ($record) => $record->is_active ? null : 'gray')
-                    ->description(fn ($record) => $record->is_active ? '' : 'Insumo desativado'),
+                    ->description(function ($record) {
+                        $status = $record->ingredient?->status;
+                        $val = $status instanceof \BackedEnum ? (string) $status->value : (string) $status;
+                        if ($val === \App\Enums\ProductStatus::ARCHIVED->value) {
+                            return '🗄️ Insumo Arquivado (Chave bloqueada)';
+                        }
+                        if ($val === \App\Enums\ProductStatus::PAUSED->value) {
+                            return '⏸️ Insumo Pausado Temporariamente';
+                        }
+                        return $record->is_active ? '' : 'Desativado nesta receita';
+                    }),
 
                 Tables\Columns\TextColumn::make('ingredient.cost_chain_status')
                     ->label('Cadeia')
@@ -365,7 +387,13 @@ class TechnicalSheetsRelationManager extends RelationManager
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->action(function (\Illuminate\Database\Eloquent\Collection $records, $livewire) {
-                            $records->each->update(['is_active' => true]);
+                            $records->each(function ($row) {
+                                $status = $row->ingredient?->status;
+                                $val = $status instanceof \BackedEnum ? (string) $status->value : (string) $status;
+                                if ($val !== \App\Enums\ProductStatus::ARCHIVED->value) {
+                                    $row->update(['is_active' => true]);
+                                }
+                            });
                             $livewire->dispatch("update-margin-widget");
                             \App\Services\Catalog\ProductCostingService::recordPriceSnapshot($livewire->getOwnerRecord(), 'recipe_update');
                         }),

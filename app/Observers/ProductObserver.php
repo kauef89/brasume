@@ -55,6 +55,26 @@ class ProductObserver
 
     public function saved(Product $product): void
     {
+        // Se current_stock foi alterado via formulário Filament (save normal, não updateQuietly) e não há regras WMS
+        if ($product->wasChanged('current_stock') && $product->track_inventory && !$product->storageRules()->exists()) {
+            $oldStock = (float) $product->getOriginal('current_stock');
+            $newStock = (float) $product->current_stock;
+            $diff     = round($newStock - $oldStock, 4);
+
+            if (abs($diff) >= 0.0001) {
+                \Illuminate\Support\Facades\DB::table('inventory_movements')->insert([
+                    'product_id'    => $product->id,
+                    'type'          => 'adjustment',
+                    'quantity'      => $diff,
+                    'balance_after' => $newStock,
+                    'unit_cost'     => (float) ($product->base_cost ?? 0),
+                    'description'   => "Ajuste direto via Cadastro do Produto ({$oldStock} → {$newStock})",
+                    'user_id'       => auth()->id(),
+                    'created_at'    => now(),
+                    'updated_at'    => now(),
+                ]);
+            }
+        }
         // Se o preço de Salão ou Delivery mudou (ou produto novo de venda)
         if ($product->isDirty('dine_in_price') || $product->isDirty('delivery_price') || $product->wasRecentlyCreated) {
             if (in_array($product->type, [\App\Enums\ProductType::DISH->value, \App\Enums\ProductType::COMBO->value, \App\Enums\ProductType::RESALE->value])) {
