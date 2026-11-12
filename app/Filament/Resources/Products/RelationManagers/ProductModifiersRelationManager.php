@@ -34,6 +34,23 @@ class ProductModifiersRelationManager extends RelationManager
                     ->badge()
                     ->sortable(),
 
+                TextColumn::make('portion_distribution_mode')
+                    ->label('Modo de Rateio')
+                    ->badge()
+                    ->state(fn ($record) => ($record->portion_distribution_mode ?? 'additive') === 'proportional_split' ? 'Rateio Proporcional' : 'Aditivo')
+                    ->color(fn (string $state) => $state === 'Rateio Proporcional' ? 'info' : 'gray'),
+
+                TextColumn::make('channels')
+                    ->label('Canais')
+                    ->badge()
+                    ->state(function ($record) {
+                        $c = [];
+                        if ($record->show_on_pos) $c[] = 'PDV';
+                        if ($record->show_on_customer_app) $c[] = 'App';
+                        return empty($c) ? 'Oculto' : implode(' / ', $c);
+                    })
+                    ->color(fn ($state) => $state === 'PDV / App' ? 'success' : ($state === 'Oculto' ? 'danger' : 'warning')),
+
                 TextColumn::make('pivot.excluded_options')
                     ->label('Opções Ocultadas Neste Produto')
                     ->state(function ($record) {

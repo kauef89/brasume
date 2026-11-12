@@ -96,12 +96,15 @@ trait HandlesRecipeDeductions
 
             $mods = $processItem->modifiers()->with('modifierOption.group')->get();
 
-            // Mapeia quantidade de opções selecionadas por grupo para rateio proporcional
-            $groupCounts = [];
+            // Mapeia quantidade apenas de opções PROPORCIONAIS por grupo
+            $groupPropCounts = [];
             foreach ($mods as $mod) {
-                $grpId = $mod->modifier_group_id ?? $mod->modifierOption?->modifier_group_id;
-                if ($grpId) {
-                    $groupCounts[$grpId] = ($groupCounts[$grpId] ?? 0) + (float) ($mod->quantity ?? 1);
+                $opt = $mod->modifierOption;
+                $grpId = $mod->modifier_group_id ?? $opt?->modifier_group_id;
+                $isFixed = ($opt?->portion_behavior ?? 'proportional') === 'fixed';
+
+                if ($grpId && !$isFixed) {
+                    $groupPropCounts[$grpId] = ($groupPropCounts[$grpId] ?? 0) + (float) ($mod->quantity ?? 1);
                 }
             }
 
@@ -118,12 +121,13 @@ trait HandlesRecipeDeductions
                             if ($linked) {
                                 $baseQty = (float) ($opt->linked_qty ?? 1) * (float) ($mod->quantity ?? 1);
                                 $factor = 1.0;
+                                $isFixed = ($opt->portion_behavior ?? 'proportional') === 'fixed';
 
-                                if ($group && ($group->portion_distribution_mode ?? 'additive') === 'proportional_split') {
-                                    $k = (int) ($groupCounts[$group->id] ?? 1);
-                                    if ($k > 1) {
-                                        // Aplica a curva de fartura: (1 + 0.15*(k-1)) / k
-                                        $factor = (1.0 + (0.15 * ($k - 1))) / $k;
+                                // Se for item de dose fixa, vai 100%. Se for proporcional, divide por kProp com fartura de 15%
+                                if (!$isFixed && $group && ($group->portion_distribution_mode ?? 'additive') === 'proportional_split') {
+                                    $kProp = (int) ($groupPropCounts[$group->id] ?? 1);
+                                    if ($kProp > 1) {
+                                        $factor = (1.0 + (0.15 * ($kProp - 1))) / $kProp;
                                     }
                                 }
 

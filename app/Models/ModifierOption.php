@@ -31,4 +31,9 @@ class ModifierOption extends Model
     {
         return $this->belongsTo(Product::class, 'removes_ingredient_id');
     }
+
+    public function isFixedPortion(): bool
+    {
+        return ($this->portion_behavior ?? 'proportional') === 'fixed';
+    }
 }

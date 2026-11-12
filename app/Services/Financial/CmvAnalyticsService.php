@@ -96,9 +96,9 @@ class CmvAnalyticsService
             ->whereNull('order_items.parent_item_id') // Apenas itens raiz (itens normais ou combos principais)
             ->with([
                 'product',
-                'modifiers.modifierOption',
+                'modifiers.modifierOption.group',
                 'subItems.product',
-                'subItems.modifiers.modifierOption',
+                'subItems.modifiers.modifierOption.group',
             ])
             ->select('order_items.*')
             ->get();
@@ -199,6 +199,22 @@ class CmvAnalyticsService
             return 0.0;
         }
 
+        // Mapeia quantidade de itens proporcionais por grupo dentro deste item de pedido
+        $groupPropCounts = [];
+        foreach ($modifiers as $mod) {
+            $option = $mod->modifierOption ?? $this->getModifierOption($mod->modifier_option_id);
+            if (!$option) {
+                continue;
+            }
+
+            $grpId = $mod->modifier_group_id ?? $option->modifier_group_id;
+            $isFixed = ($option->portion_behavior ?? 'proportional') === 'fixed';
+
+            if ($grpId && !$isFixed) {
+                $groupPropCounts[$grpId] = ($groupPropCounts[$grpId] ?? 0) + max(1, (float) ($mod->quantity ?? 1));
+            }
+        }
+
         $cost = 0.0;
 
         foreach ($modifiers as $mod) {
@@ -209,7 +225,18 @@ class CmvAnalyticsService
                 $unitCost = $this->getIngredientUnitCost((int) $option->linked_product_id);
                 $portionQty = (float) ($option->linked_qty ?? 1);
 
-                $cost += ($unitCost * $portionQty * $modQty);
+                $factor = 1.0;
+                $isFixed = ($option->portion_behavior ?? 'proportional') === 'fixed';
+                $group = $option->group;
+
+                if (!$isFixed && $group && ($group->portion_distribution_mode ?? 'additive') === 'proportional_split') {
+                    $kProp = (int) ($groupPropCounts[$group->id] ?? 1);
+                    if ($kProp > 1) {
+                        $factor = (1.0 + (0.15 * ($kProp - 1))) / $kProp;
+                    }
+                }
+
+                $cost += ($unitCost * $portionQty * $modQty * $factor);
             }
         }
 
@@ -220,7 +247,7 @@ class CmvAnalyticsService
     {
         if (!$id) return null;
         if (!isset(self::$modifierOptionCache[$id])) {
-            self::$modifierOptionCache[$id] = ModifierOption::find($id);
+            self::$modifierOptionCache[$id] = ModifierOption::with('group')->find($id);
         }
         return self::$modifierOptionCache[$id];
     }

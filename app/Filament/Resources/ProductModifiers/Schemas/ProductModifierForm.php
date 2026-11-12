@@ -39,8 +39,20 @@ class ProductModifierForm
                         ->label("Ativo?")
                         ->default(true)
                         ->inline(false),
+
+                    FormComponents\Toggle::make("show_on_pos")
+                        ->label("PDV / Garçom")
+                        ->helperText("PosApp & TeamApp")
+                        ->default(true)
+                        ->inline(false),
+
+                    FormComponents\Toggle::make("show_on_customer_app")
+                        ->label("Cardápio Digital")
+                        ->helperText("CustomerApp / Delivery")
+                        ->default(true)
+                        ->inline(false),
                 ])
-                ->columns(4)
+                ->columns(6)
                 ->columnSpanFull(),
 
             // SEÇÃO 2: REGRAS E COMPORTAMENTO

@@ -28,7 +28,8 @@ class OperationsMenuService
         $products = Product::whereIn("type", ["dish", "combo", "resale"])
             ->whereIn("status", ["available", "out_of_stock", "paused", "active"])
             ->where("show_on_menu", true)
-            ->with(["modifiers.options", "comboGroups.items.product", "latestCostHistory"])
+            ->with(["modifiers" => fn ($q) => $q->where("modifier_groups.is_active", true)->where("modifier_groups.show_on_pos", true),
+            "modifiers.options" => fn ($q) => $q->where("modifier_options.is_active", true)->where("modifier_options.show_on_pos", true), "comboGroups.items.product", "latestCostHistory"])
             ->get();
 
         $categories = Category::where("type", "external")
@@ -132,7 +133,8 @@ class OperationsMenuService
             ->groupBy('category_id');
 
         // 🚀 OTIMIZAÇÃO: Injetado latestCostHistory
-        $products = Product::with(["modifiers.options", "comboGroups.items.product", "latestCostHistory"])
+        $products = Product::with(["modifiers" => fn ($q) => $q->where("modifier_groups.is_active", true)->where("modifier_groups.show_on_pos", true),
+            "modifiers.options" => fn ($q) => $q->where("modifier_options.is_active", true)->where("modifier_options.show_on_pos", true), "comboGroups.items.product", "latestCostHistory"])
             ->whereIn("type", ["resale", "recipe", "combo", "manufactured"])
             ->whereIn("status", ["available", "out_of_stock", "paused"])
             ->get()

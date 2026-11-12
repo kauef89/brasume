@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\ProductModifiers\RelationManagers;
 
-use App\Filament\Resources\Ingredients\Schemas\IngredientForm;
 use App\Models\Product;
 use Filament\Actions;
 use Filament\Forms\Components as FormComponents;
@@ -65,6 +64,18 @@ class OptionsRelationManager extends RelationManager
                 ->suffix(fn (Get $get) => Product::find($get("linked_product_id"))?->unit_of_measure)
                 ->columnSpan(2),
 
+            // NOVO: COMPORTAMENTO DA PORÇÃO (DOSE FIXA VS RATEIO)
+            FormComponents\Select::make("portion_behavior")
+                ->label("Comportamento da Porção no Estoque & Custo")
+                ->options([
+                    "proportional" => "Rateio de Volume (Fraciona com outros recheios - Carnes, Queijos, Cremes)",
+                    "fixed"        => "Dose Fixa / Teto (Não fraciona - 100% da porção: Ovos, Azeitonas, Alho, Bombons)",
+                ])
+                ->default("proportional")
+                ->required()
+                ->helperText("Itens de Dose Fixa não reduzem gramatura e não diluem os recheios de volume do produto.")
+                ->columnSpan(4),
+
             // CASO B: OBSERVAÇÕES / REMOÇÕES (ANULAM A BAIXA DA FICHA TÉCNICA)
             FormComponents\Select::make("removes_ingredient_id")
                 ->label("Omissão: Anular Insumo da Ficha Técnica (Sem isto)")
@@ -91,7 +102,7 @@ class OptionsRelationManager extends RelationManager
                 ->columnSpan(1),
 
             FormComponents\Toggle::make("show_on_customer_app")
-                ->label("Delivery")
+                ->label("Delivery / App")
                 ->default(true)
                 ->inline(false)
                 ->columnSpan(1),
@@ -117,6 +128,13 @@ class OptionsRelationManager extends RelationManager
                     ->label("Opção")
                     ->searchable()
                     ->weight("bold"),
+
+                Tables\Columns\TextColumn::make("portion_behavior")
+                    ->label("Dose")
+                    ->badge()
+                    ->state(fn ($record) => ($record->portion_behavior ?? 'proportional') === 'fixed' ? 'Dose Fixa' : 'Rateio')
+                    ->color(fn (string $state) => $state === 'Dose Fixa' ? 'purple' : 'success')
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make("price")
                     ->label("Preço Extra")
@@ -160,14 +178,21 @@ class OptionsRelationManager extends RelationManager
                     ->color(fn ($record) => $record->removes_ingredient_id ? 'danger' : 'warning'),
 
                 Tables\Columns\TextColumn::make("historical_weight")
-                    ->label("Demanda Recente")
+                    ->label("Demanda")
                     ->numeric(0)
-                    ->suffix(" pedidos")
+                    ->suffix(" ped.")
                     ->badge()
                     ->color("info")
                     ->sortable(),
 
-                Tables\Columns\ToggleColumn::make("is_active")->label("Ativa"),
+                Tables\Columns\ToggleColumn::make("show_on_pos")
+                    ->label("PDV"),
+
+                Tables\Columns\ToggleColumn::make("show_on_customer_app")
+                    ->label("App"),
+
+                Tables\Columns\ToggleColumn::make("is_active")
+                    ->label("Ativa"),
             ])
             ->defaultSort("sort_order")
             ->headerActions([Actions\CreateAction::make()])

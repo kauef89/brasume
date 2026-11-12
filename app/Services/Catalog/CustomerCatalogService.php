@@ -33,7 +33,8 @@ class CustomerCatalogService
                 ->get()
                 ->groupBy('category_id');
 
-            $products = Product::with(["modifiers.options", "comboGroups.items.product"])
+            $products = Product::with(["modifiers" => fn ($q) => $q->where("modifier_groups.is_active", true)->where("modifier_groups.show_on_customer_app", true),
+            "modifiers.options" => fn ($q) => $q->where("modifier_options.is_active", true)->where("modifier_options.show_on_customer_app", true), "comboGroups.items.product"])
                 ->whereIn("category_id", $validCategoryIds)
                 ->whereIn("type", ["dish", "resale", "combo", "manufactured"])
                 ->whereIn("status", ["available", "out_of_stock", "paused", "active"])

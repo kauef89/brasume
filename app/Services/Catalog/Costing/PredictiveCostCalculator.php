@@ -16,13 +16,23 @@ class PredictiveCostCalculator
             $options = $group->options()->where('is_active', true)->get();
             if ($options->isEmpty()) continue;
 
-            $groupExpectedCost = 0;
+            // Filtra apenas opções inclusas no preço base (price == 0) para o cálculo do CMV do produto base.
+            // Opções especiais (price > 0) são custeadas pelo seu próprio adicional no PDV e no Simulador.
+            $includedOptions = $options->filter(fn ($opt) => (float) ($opt->price ?? 0) <= 0);
+            if ($includedOptions->isEmpty()) {
+                $includedOptions = $options;
+            }
+
+            $groupHasHistory = $includedOptions->sum('historical_weight') > 0;
+            $isProportional = ($group->portion_distribution_mode ?? 'additive') === 'proportional_split';
+
+            $propWeight = 0;
+            $propCostSum = 0;
+            $fixedWeight = 0;
+            $fixedCostSum = 0;
             $totalWeight = 0;
-            $groupHasHistory = $options->sum('historical_weight') > 0;
 
-            foreach ($options as $option) {
-                if ((float) $option->price > 0 && ($group->max_free ?? 0) <= 0) continue;
-
+            foreach ($includedOptions as $option) {
                 $optionCost = 0;
                 if (!empty($option->linked_product_id)) {
                     $linkedInsumo = Product::find($option->linked_product_id);
@@ -33,23 +43,32 @@ class PredictiveCostCalculator
                 }
 
                 $weight = $groupHasHistory ? ((float) $option->historical_weight > 0 ? (float) $option->historical_weight : 0.1) : 1.0;
-                $groupExpectedCost += $optionCost * $weight;
                 $totalWeight += $weight;
+
+                if (($option->portion_behavior ?? 'proportional') === 'fixed') {
+                    $fixedCostSum += ($optionCost * $weight);
+                    $fixedWeight += $weight;
+                } else {
+                    $propCostSum += ($optionCost * $weight);
+                    $propWeight += $weight;
+                }
             }
 
             if ($totalWeight > 0) {
-                $averageOptionCost = $groupExpectedCost / $totalWeight;
-                $isProportional = ($group->portion_distribution_mode ?? 'additive') === 'proportional_split';
+                $maxFree = $group->max_free > 0 ? (int) $group->max_free : max((int) ($group->min_selections ?? 1), 1);
 
                 if ($isProportional) {
-                    // No rateio proporcional, o cliente não recebe N porções cheias somadas.
-                    // Ele recebe 1 porção base dividida com expansão gastronômica de 15% por opção extra.
-                    $maxFree = $group->max_free > 0 ? (int) $group->max_free : max((int) ($group->min_selections ?? 1), 1);
-                    $fillingExpansionFactor = 1.0 + (0.15 * max(0, $maxFree - 1));
-                    $totalPredictiveCost += $averageOptionCost * $fillingExpansionFactor;
+                    $expPropChoices = $maxFree * ($propWeight / $totalWeight);
+                    $expFixedChoices = $maxFree * ($fixedWeight / $totalWeight);
+
+                    $avgPropCost = $propWeight > 0 ? ($propCostSum / $propWeight) : 0;
+                    $avgFixedCost = $fixedWeight > 0 ? ($fixedCostSum / $fixedWeight) : 0;
+
+                    $propExpansion = $expPropChoices > 1 ? (1.0 + (0.15 * ($expPropChoices - 1))) : min(1.0, $expPropChoices);
+                    $totalPredictiveCost += ($avgPropCost * $propExpansion) + ($avgFixedCost * $expFixedChoices);
                 } else {
-                    $includedQty = $group->max_free > 0 ? (int) $group->max_free : max((int) ($group->min_selections ?? 1), 1);
-                    $totalPredictiveCost += $averageOptionCost * $includedQty;
+                    $averageOptionCost = ($propCostSum + $fixedCostSum) / $totalWeight;
+                    $totalPredictiveCost += $averageOptionCost * $maxFree;
                 }
             }
         }

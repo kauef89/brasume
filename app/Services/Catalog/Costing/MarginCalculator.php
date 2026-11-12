@@ -88,27 +88,42 @@ class MarginCalculator
             }
 
             if (!empty($selectedInGroup)) {
-                $k = count($selectedInGroup);
-                $factor = 1.0;
-
-                if ($isProportional && $k > 1) {
-                    $factor = (1.0 + (0.15 * ($k - 1))) / $k;
+                $propOptions = [];
+                $fixedOptions = [];
+                foreach ($selectedInGroup as $opt) {
+                    if (($opt->portion_behavior ?? 'proportional') === 'fixed') {
+                        $fixedOptions[] = $opt;
+                    } else {
+                        $propOptions[] = $opt;
+                    }
                 }
 
+                $kProp = count($propOptions);
+                $propFactor = ($isProportional && $kProp > 1) ? ((1.0 + (0.15 * ($kProp - 1))) / $kProp) : 1.0;
+
                 $groupCost = 0.0;
-                foreach ($selectedInGroup as $option) {
+                foreach ($fixedOptions as $option) {
                     if ($option->linked_product_id) {
                         $linkedInsumo = Product::find($option->linked_product_id);
                         if ($linkedInsumo) {
                             $optCost = ProductCostingService::calculateBaseCost($linkedInsumo) * (float) ($option->linked_qty ?? 1);
-                            $groupCost += ($optCost * $factor);
+                            $groupCost += $optCost;
+                        }
+                    }
+                }
+                foreach ($propOptions as $option) {
+                    if ($option->linked_product_id) {
+                        $linkedInsumo = Product::find($option->linked_product_id);
+                        if ($linkedInsumo) {
+                            $optCost = ProductCostingService::calculateBaseCost($linkedInsumo) * (float) ($option->linked_qty ?? 1);
+                            $groupCost += ($optCost * $propFactor);
                         }
                     }
                 }
 
-                // Cobrança: sobrepreço individual das opções + taxa por excedente (além de max_free)
+                $kTotal = count($selectedInGroup);
                 $maxFree = $group->max_free > 0 ? (int) $group->max_free : 0;
-                $extraCount = max(0, $k - $maxFree);
+                $extraCount = max(0, $kTotal - $maxFree);
                 $incrementCharge = $extraCount * (float) ($group->increment ?? 0);
 
                 $addonSellPriceTotal += ($extraPriceSum + $incrementCharge);
