@@ -53,7 +53,16 @@ export function useCustomerCheckoutFlow(props, cartContext, activeTab) {
         const finalSnapshot = financials.value.finalTotal;
         const payload = buildPayload(finalSnapshot);
 
-                if (activeOrderId.value) {
+                        // 🛑 PURGA O CONTEXTO ANTES DE DISPARAR (Blindagem do Guest)
+        sessionStorage.removeItem('customer_append_order_id');
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('append_to_order');
+            url.searchParams.delete('order_id');
+            window.history.replaceState({}, document.title, url.pathname);
+        }
+
+        if (activeOrderId.value) {
             router.post(route('customer.orders.cancel', activeOrderId.value), {}, { preserveState: true, preserveScroll: true });
             activeOrderId.value = null;
             activePixData.value = null;

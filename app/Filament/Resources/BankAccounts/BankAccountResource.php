@@ -12,7 +12,9 @@ use Filament\Tables\Table;
 // Importando as nossas classes desacopladas
 use App\Filament\Resources\BankAccounts\Schemas\BankAccountForm;
 use App\Filament\Resources\BankAccounts\Tables\BankAccountsTable;
-use App\Filament\Resources\BankAccounts\RelationManagers\AccountReceivablesRelationManager; // 🚀 O nosso Motor de Recebimentos continua aqui!
+use App\Filament\Resources\BankAccounts\RelationManagers\AccountReceivablesRelationManager;
+use App\Filament\Resources\BankAccounts\RelationManagers\CreditCardsRelationManager;
+use App\Filament\Resources\BankAccounts\RelationManagers\CreditCardPayablesRelationManager; // 🚀 O nosso Motor de Recebimentos continua aqui!
 
 class BankAccountResource extends Resource
 {
@@ -63,6 +65,8 @@ class BankAccountResource extends Resource
     {
         return [
             AccountReceivablesRelationManager::class,
+            CreditCardsRelationManager::class,
+            CreditCardPayablesRelationManager::class,
         ];
     }
 

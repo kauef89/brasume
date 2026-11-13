@@ -132,7 +132,7 @@ class ImportOfxAction extends Action
                                     \App\Services\Accounting\BankReconciliationService::finalize($stmt, $payable, $matchedSupplier->id, $desc);
                                     $autoPersonalCount++;
                                 }
-                                elseif ($stmt->movement_type === "bank_fee" && $stmt->amount < 0) {
+                                elseif (($stmt->movement_type?->value ?? $stmt->movement_type) === "bank_fee" && $stmt->amount < 0) {
                                     $desc = $stmt->description ?: "Tarifa Bancária";
                                     $payable = AccountPayable::create([
                                         "description" => $desc,
@@ -168,9 +168,23 @@ class ImportOfxAction extends Action
                     return;
                 }
 
+                $pixRes = app(\App\Services\Accounting\PixBankReconciliationService::class)
+                    ->reconcilePendingPixSince(now()->subDays(12)->toDateString());
+                $autoPixCount = (int) ($pixRes['reconciled'] ?? 0);
+
+                $cardRes = app(\App\Services\Accounting\CardSettlementReconciliationService::class)
+                    ->reconcilePendingCardSettlementsSince(now()->subDays(12)->toDateString());
+                $autoCardBatches = (int) ($cardRes['batches'] ?? 0);
+
                 $message = "Foram adicionadas {$importedCount} transações.";
-                if ($autoFeesCount > 0 || $autoMatchesCount > 0 || $autoPersonalCount > 0) {
+                if ($autoFeesCount > 0 || $autoMatchesCount > 0 || $autoPersonalCount > 0 || $autoPixCount > 0 || $autoCardBatches > 0) {
                     $message .= " O sistema auto-conciliou ";
+                    if ($autoCardBatches > 0) {
+                        $message .= "{$autoCardBatches} lotes de cartão, ";
+                    }
+                    if ($autoPixCount > 0) {
+                        $message .= "{$autoPixCount} recebimentos Pix de pedidos, ";
+                    }
                     if ($autoMatchesCount > 0) {
                         $message .= "{$autoMatchesCount} pagamentos exatos, ";
                     }

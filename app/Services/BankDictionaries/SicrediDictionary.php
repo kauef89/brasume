@@ -2,6 +2,8 @@
 
 namespace App\Services\BankDictionaries;
 
+use App\Enums\BankMovementType;
+
 class SicrediDictionary implements BankDictionaryInterface
 {
     public function parseMemo(string $memo): array
@@ -19,7 +21,7 @@ class SicrediDictionary implements BankDictionaryInterface
         if (str_contains($upperMemo, "DEP DINHEIRO ATM") || str_contains($upperMemo, "DEP DINHEIRO")) {
             $result["name"] = "Depósito em Dinheiro (ATM)";
             $result["clean_description"] = "Depósito ATM em Dinheiro";
-            $result["movement_type"] = "atm_in";
+            $result["movement_type"] = BankMovementType::ATM_IN->value;
             return $result;
         }
 
@@ -33,7 +35,7 @@ class SicrediDictionary implements BankDictionaryInterface
 
             $result["name"] = $cleanName ?: "Compra no Débito";
             $result["clean_description"] = "Débito: " . ($cleanName ?: $memo);
-            $result["movement_type"] = "debit_card";
+            $result["movement_type"] = BankMovementType::DEBIT_CARD->value;
             return $result;
         }
 
@@ -41,7 +43,7 @@ class SicrediDictionary implements BankDictionaryInterface
         if (str_contains($upperMemo, "DEB.CTA.FATURA") || str_contains($upperMemo, "DEB.FATURA")) {
             $result["name"] = "Cartão Sicredi PJ";
             $result["clean_description"] = "Pagamento de Fatura de Cartão";
-            $result["movement_type"] = "credit_card_payment";
+            $result["movement_type"] = BankMovementType::CREDIT_CARD_PAYMENT->value;
             return $result;
         }
 
@@ -49,7 +51,7 @@ class SicrediDictionary implements BankDictionaryInterface
         if (str_contains($upperMemo, "LIBERACAO CREDITO") || str_contains($upperMemo, "PRONAMPE") || str_contains($upperMemo, "GIRO")) {
             $result["name"] = "Banco Sicredi (Giro / Crédito)";
             $result["clean_description"] = "Liberação de Capital de Giro / Empréstimo";
-            $result["movement_type"] = "loan_in";
+            $result["movement_type"] = BankMovementType::LOAN_IN->value;
             return $result;
         }
 
@@ -66,18 +68,18 @@ class SicrediDictionary implements BankDictionaryInterface
             $result["name"] = trim($matches[2]);
 
             if (str_contains($upperMemo, "RECEBIMENTO PIX")) {
-                $result["movement_type"] = "pix_in";
-            } elseif (str_contains($upperMemo, "DEVOLUCAO PIX")) {
-                $result["movement_type"] = "pix_out";
+                $result["movement_type"] = BankMovementType::PIX_IN->value;
+            } elseif (str_contains($upperMemo, "DEVOLUCAO PIX") || str_contains($upperMemo, "ESTORNO")) {
+                $result["movement_type"] = BankMovementType::REFUND->value;
             } elseif (str_contains($upperMemo, "LIQUIDACAO BOLETO")) {
-                $result["movement_type"] = "boleto_out";
+                $result["movement_type"] = BankMovementType::BOLETO_OUT->value;
             } elseif (
                 str_contains($upperMemo, "TED") ||
                 str_contains($upperMemo, "TRANSF")
             ) {
-                $result["movement_type"] = "transfer";
+                $result["movement_type"] = BankMovementType::TRANSFER->value;
             } else {
-                $result["movement_type"] = "pix_out";
+                $result["movement_type"] = BankMovementType::PIX_OUT->value;
             }
             $result["clean_description"] = $result["name"];
             return $result;
@@ -93,7 +95,7 @@ class SicrediDictionary implements BankDictionaryInterface
         ) {
             $result["name"] = "Repasse " . ucfirst(strtolower($matches[1])) . " " . $matches[2];
             $result["clean_description"] = $result["name"];
-            $result["movement_type"] = "card_in";
+            $result["movement_type"] = BankMovementType::CARD_IN->value;
             return $result;
         }
 
@@ -101,7 +103,7 @@ class SicrediDictionary implements BankDictionaryInterface
         if (str_starts_with($upperMemo, "REEMBOLSO POS SICREDI")) {
             $result["name"] = "Banco Sicredi";
             $result["clean_description"] = "Reembolso Maquininha POS";
-            $result["movement_type"] = "card_in";
+            $result["movement_type"] = BankMovementType::CARD_IN->value;
             return $result;
         }
 
@@ -116,7 +118,7 @@ class SicrediDictionary implements BankDictionaryInterface
             $result["name"] = trim($matches[1]);
             $result["document"] = isset($matches[2]) ? $matches[2] : null;
             $result["clean_description"] = "Convênio / Fatura - " . $result["name"];
-            $result["movement_type"] = "fixed_bill";
+            $result["movement_type"] = BankMovementType::FIXED_BILL->value;
             return $result;
         }
 
@@ -127,21 +129,21 @@ class SicrediDictionary implements BankDictionaryInterface
             }
             $result["name"] = "Receita Federal / Impostos";
             $result["clean_description"] = "Imposto (DARF/DAS/GPS)";
-            $result["movement_type"] = "tax_bill";
+            $result["movement_type"] = BankMovementType::TAX_BILL->value;
             return $result;
         }
 
         // 9. Saque em Dinheiro
         if (str_starts_with($upperMemo, "SAQUE DINHEIRO ATM")) {
             $result["clean_description"] = "Saque em Dinheiro (ATM)";
-            $result["movement_type"] = "atm_out";
+            $result["movement_type"] = BankMovementType::ATM_OUT->value;
             return $result;
         }
 
         // 10. Folha de Pagamento em Lote
         if (str_starts_with($upperMemo, "DEB. FOLHA PAGTO")) {
             $result["clean_description"] = "Folha de Pagamento (Lote)";
-            $result["movement_type"] = "payroll";
+            $result["movement_type"] = BankMovementType::PAYROLL->value;
             return $result;
         }
 
@@ -157,7 +159,7 @@ class SicrediDictionary implements BankDictionaryInterface
             $result["clean_description"] = (str_contains($upperMemo, "CESTA") || str_contains($upperMemo, "TARIFA"))
                 ? "Tarifa Bancária"
                 : "Juros e Encargos";
-            $result["movement_type"] = "bank_fee";
+            $result["movement_type"] = BankMovementType::BANK_FEE->value;
             return $result;
         }
 

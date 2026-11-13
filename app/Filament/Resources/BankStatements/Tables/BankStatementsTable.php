@@ -7,6 +7,7 @@ use Filament\Tables\Table;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Illuminate\Support\HtmlString;
+use App\Enums\BankMovementType;
 use App\Models\BankStatement;
 use App\Models\Supplier;
 use App\Models\Employee;
@@ -31,20 +32,7 @@ class BankStatementsTable
 
                 Tables\Columns\TextColumn::make("movement_type")
                     ->label("Operação")
-                    ->badge()
-                    ->formatStateUsing(
-                        fn(string $state): string => match ($state) {
-                            "pix_in" => "Pix Recebido", "pix_out" => "Pix Pago", "boleto_out" => "Boleto",
-                            "card_in" => "Cartão", "transfer" => "Transferência", "fixed_bill" => "Conta Fixa",
-                            "tax_bill" => "Imposto", "payroll" => "Folha Pagto.", "bank_fee" => "Taxa Banco",
-                            "atm_in" => "Depósito", "atm_out" => "Saque", default => "Outros",
-                        },
-                    )
-                    ->color(fn(string $state): string => match ($state) {
-                        "pix_in", "card_in", "atm_in" => "success",
-                        "bank_fee" => "danger",
-                        default => "warning",
-                    }),
+                    ->badge(),
 
                 Tables\Columns\TextColumn::make("counterparty_name")
                     ->label("Contraparte")
@@ -116,6 +104,10 @@ class BankStatementsTable
                 Tables\Filters\SelectFilter::make('bank_account_id')
                     ->label('Conta Bancária')
                     ->relationship('bankAccount', 'name'),
+                Tables\Filters\SelectFilter::make('movement_type')
+                    ->label('Operação')
+                    ->options(BankMovementType::class)
+                    ->multiple(),
                 Tables\Filters\Filter::make('bank_date')
                     ->form([
                         \Filament\Forms\Components\DatePicker::make('from')->label('De'),
@@ -138,62 +130,7 @@ class BankStatementsTable
                 ->modalHeading("Conciliar Transação")
                 // 🚀 Abre elegantemente na lateral
                 ->slideOver()
-                ->fillForm(function (BankStatement $record): array {
-                    $cleanDoc = preg_replace('/[^0-9]/', '', $record->document);
-                    $supplierId = null;
-
-                    if (!empty($cleanDoc)) {
-                        $supplier = \App\Models\Supplier::where('document', $record->document)
-                            ->orWhere('document', $cleanDoc)
-                            ->first();
-
-                        if (!$supplier) {
-                            $supplier = \App\Models\Supplier::whereNotNull('document')->get()->first(function ($s) use ($cleanDoc) {
-                                return preg_replace('/[^0-9]/', '', $s->document) === $cleanDoc;
-                            });
-                        }
-                        $supplierId = $supplier?->id;
-                    }
-
-                    $amount = abs((float) $record->amount);
-                    $date = $record->bank_date->format('Y-m-d');
-                    $desc = $record->counterparty_name ?: $record->description;
-                    $locked = $supplierId !== null;
-
-                    return [
-                        'conciliation_type' => null,
-                        'action_mode' => null,
-                        'existing_payable_id' => null,
-                        'existing_fixed_id' => null,
-                        'existing_personal_id' => null,
-
-                        'avulsa_new' => [
-                            'amount' => $amount,
-
-                            // 🚀 O SEGREDO DO PAGAMENTO AQUI:
-                            'due_date' => $date, // Mantemos como padrão inicial caso o utilizador não queira alterar
-                            'payment_date' => $date, // A data do banco vai para a Data de Pagamento!
-                            'status' => 'paid', // Forçamos o status para Pago
-                            'is_status_locked' => true, // Injetamos a trava antifraude/anticlique!
-
-                            'description' => $desc,
-                            'supplier_id' => $supplierId,
-                            'is_supplier_locked' => $locked,
-                        ],
-                        'fixa_new' => [
-                            'default_amount' => $amount,
-                            'due_day' => $record->bank_date->format('d'),
-                            'name' => $desc,
-                            'supplier_id' => $supplierId,
-                            'is_supplier_locked' => $locked,
-                        ],
-                        'pessoal_new' => [
-                            'description' => '',
-                            'supplier_id' => $supplierId,
-                            'is_supplier_locked' => $locked,
-                        ],
-                    ];
-                })
+                ->fillForm(fn (BankStatement $record): array => ConciliationTabsSchema::detectSmartDefaults($record))
                 ->form(fn(BankStatement $record) => [ConciliationTabsSchema::make($record)])
                 ->action(function (array $data, BankStatement $record): void {
                     ConciliationTabsSchema::processConciliation($data, $record);

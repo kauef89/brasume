@@ -203,6 +203,23 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
 
             console.log("📍 [SONDA FRONTEND] Disparando requisição POST para:", endpointUrl, payload);
 
+                        // 🛑 PURGA A URL ANTES DE ENVIAR A REQUISIÇÃO (Evita que o Inertia herde os IDs em caso de redirect automático)
+            if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('append_to_order');
+                url.searchParams.delete('order_id');
+                url.searchParams.delete('order');
+                url.searchParams.delete('checkout');
+                url.searchParams.delete('edit_item');
+                url.searchParams.delete('edit_qty');
+                url.searchParams.delete('original_qty');
+                url.searchParams.delete('is_combo');
+                url.searchParams.delete('auth_reason');
+                url.searchParams.delete('is_loss');
+                const cleanSearch = url.searchParams.toString() ? `?${url.searchParams.toString()}` : '';
+                window.history.replaceState({}, document.title, `${url.pathname}${cleanSearch}`);
+            }
+
             return executeSubmit(payload, endpointUrl);
         };
 

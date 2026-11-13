@@ -24,6 +24,12 @@ class AccountReceivablesRelationManager extends RelationManager
     protected static ?string $title = 'Recebimentos (Fluxo de Caixa)';
     protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-arrow-trending-up';
 
+    public static function canViewForRecord(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): bool
+    {
+        $type = $ownerRecord->type instanceof \BackedEnum ? $ownerRecord->type->value : (string) $ownerRecord->type;
+        return $type !== \App\Enums\BankAccountType::CREDIT_CARD->value;
+    }
+
     public function table(Table $table): Table
         {
             return $table
@@ -40,7 +46,8 @@ class AccountReceivablesRelationManager extends RelationManager
 
                 ->recordTitleAttribute('description')
                 ->defaultGroup('due_date')
-                ->groupsOnly()
+                ->paginated([15, 25, 50])
+                ->defaultPaginationPageOption(25)
 
                 // 🚀 OS TRÊS NÍVEIS DE AGRUPAMENTO (BI)
                 ->groups([
@@ -204,6 +211,6 @@ class AccountReceivablesRelationManager extends RelationManager
                                 );
                         }),
                 ])
-                ->defaultSort('due_date', 'asc');
+                ->defaultSort('due_date', 'desc');
         }
     }

@@ -62,4 +62,9 @@ class BankAccount extends Model
     {
         return $this->hasMany(AccountReceivable::class);
     }
+
+    public function accountPayables(): HasMany
+    {
+        return $this->hasMany(AccountPayable::class);
+    }
 }

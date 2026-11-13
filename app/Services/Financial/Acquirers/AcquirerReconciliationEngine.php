@@ -142,17 +142,22 @@ class AcquirerReconciliationEngine
             $fallbackBankId = BankAccount::where('bank_name', 'like', '%sicredi%')->first()?->id 
                 ?? BankAccount::first()?->id;
 
-            $receivable = AccountReceivable::create([
-                'order_id'        => $order?->id,
-                'customer_id'     => $order?->customer_id,
-                'bank_account_id' => $matchedPayment->paymentMethod?->destination_account_id ?? $fallbackBankId,
-                'description'     => $desc,
-                'gross_amount'    => $acquirerTx->gross_amount,
-                'fee_amount'      => $acquirerTx->fee_amount,
-                'net_amount'      => $acquirerTx->net_amount,
-                'due_date'        => $acquirerTx->expected_settlement_date,
-                'status'          => 'pending',
-            ]);
+            $netAmount = (float) $acquirerTx->net_amount > 0
+                ? (float) $acquirerTx->net_amount
+                : round((float) $acquirerTx->gross_amount - (float) $acquirerTx->fee_amount, 2);
+
+            $receivable = ($acquirerTx->account_receivable_id ? AccountReceivable::find($acquirerTx->account_receivable_id) : null)
+                ?? AccountReceivable::create([
+                    'order_id'        => $order?->id,
+                    'customer_id'     => $order?->customer_id,
+                    'bank_account_id' => $matchedPayment->paymentMethod?->destination_account_id ?? $fallbackBankId,
+                    'description'     => $desc,
+                    'gross_amount'    => $acquirerTx->gross_amount,
+                    'fee_amount'      => $acquirerTx->fee_amount,
+                    'net_amount'      => $netAmount,
+                    'due_date'        => $acquirerTx->expected_settlement_date,
+                    'status'          => 'pending',
+                ]);
 
             $acquirerTx->update([
                 'status'                => AcquirerMatchStatus::MATCHED,

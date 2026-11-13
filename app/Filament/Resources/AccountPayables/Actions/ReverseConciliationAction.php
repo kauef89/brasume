@@ -149,25 +149,12 @@ class ReverseConciliationAction
                 $stmt = BankStatement::find($selectedId);
                 if (!$stmt) return;
 
-                $record->update([
-                    'status' => 'paid',
-                    'payment_date' => $stmt->bank_date,
-                ]);
-
-                $transaction = Transaction::create([
-                    "type" => $stmt->type,
-                    "amount" => abs((float) $stmt->amount),
-                    "description" => $record->description,
-                    "transaction_date" => clone $stmt->bank_date,
-                    "supplier_id" => $record->supplier_id,
-                ]);
-
-                $stmt->update([
-                    'status' => 'reconciled',
-                    'conciliable_id' => $record->id,
-                    'conciliable_type' => AccountPayable::class,
-                    'transaction_id' => $transaction->id,
-                ]);
+                \App\Services\Accounting\BankReconciliationService::finalize(
+                    $stmt,
+                    $record,
+                    $record->supplier_id,
+                    $record->description
+                );
 
                 Notification::make()->title('Sincronizado com o Banco!')->success()->send();
 

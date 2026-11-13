@@ -10,7 +10,6 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Validation\Rules\Unique;
 use Filament\Schemas\Schema;
@@ -26,9 +25,7 @@ class BankAccountForm
     public static function getFormSchema(): array
     {
         return [
-            Tabs::make("Tabs")
-                ->tabs([
-                    Tabs\Tab::make("Detalhes da Conta")->schema([
+            Section::make("Detalhes da Conta")->schema([
                         Grid::make(3)->schema([
                             TextInput::make("name")
                                 ->unique(ignoreRecord: true, modifyRuleUsing: fn(Unique $rule) => $rule->withoutTrashed())
@@ -131,11 +128,11 @@ class BankAccountForm
                                         ->placeholder('Ex: CNPJ ou E-mail da conta'),
                                 ]),
                             ]),
-                    ]),
+                ])->columnSpanFull(),
 
-                    Tabs\Tab::make("Taxas e Adquirentes")
-                        ->visible(fn(Get $get) => self::isBankingAccount($get("type")))
-                        ->schema([
+            Section::make("Taxas e Adquirentes")
+                ->visible(fn(Get $get) => self::isBankingAccount($get("type")))
+                ->schema([
                             Section::make("Taxas de Operação")
                                 ->description("Percentuais descontados pela maquininha/adquirente")
                                 ->schema([
@@ -172,9 +169,7 @@ class BankAccountForm
                                     ->columns(5)
                                     ->visible(fn(Get $get) => ($get("anticipation_strategy") instanceof \BackedEnum ? $get("anticipation_strategy")->value : $get("anticipation_strategy")) === "scheduled"),
                             ]),
-                        ]),
-                ])
-                ->columnSpanFull(),
+                ])->columnSpanFull(),
         ];
     }
 

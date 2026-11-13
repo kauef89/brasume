@@ -204,23 +204,35 @@ export function useCart() {
     };
 
     const resetDraftState = (type = 'table') => {
-        // 1. Esvazia in-place sem desvincular observadores reativos
+        // 1. Desvincula o array ativo de qualquer reatividade
         if (Array.isArray(cart.value)) {
             cart.value.splice(0, cart.value.length);
         }
         cart.value = [];
 
+        // Força a reinicialização profunda do routing
         globalOrderType.value = type;
-        globalDraftRouting.value = createDefaultRouting(type);
+        const freshRouting = createDefaultRouting(type);
+        globalDraftRouting.value = freshRouting;
 
-        // 2. Persistência física síncrona para eliminar ressurreição por cache
+        // 2. Purga nuclear do LocalStorage e SessionStorage ignorando o debounce do VueUse
         try {
+            localStorage.removeItem('pos_draft_cart');
+            localStorage.removeItem('pos_draft_routing');
+            localStorage.removeItem('pos_draft_type');
+            localStorage.removeItem('pos_swap_context');
+            localStorage.removeItem('pos_return_url');
+            localStorage.removeItem('pos_return_order_id');
+            sessionStorage.removeItem('customer_append_order_id');
+            sessionStorage.removeItem('customer_active_pix_order_id');
+            sessionStorage.removeItem('customer_active_pix_data');
+
+            // 3. Assentamento secundário para domar a reatividade cruzada
             localStorage.setItem('pos_draft_cart', '[]');
-            localStorage.setItem('pos_draft_routing', JSON.stringify(createDefaultRouting(type)));
+            localStorage.setItem('pos_draft_routing', JSON.stringify(freshRouting));
             localStorage.setItem('pos_draft_type', type);
         } catch (e) {}
 
-        // 3. Disparo de evento broadcast para telas e abas abertas
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('cart-cleared'));
         }

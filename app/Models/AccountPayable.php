@@ -66,6 +66,11 @@ class AccountPayable extends Model
         return $this->belongsTo(BankAccount::class);
     }
 
+    public function creditCard()
+    {
+        return $this->belongsTo(CreditCard::class);
+    }
+
         public function recurringExpense()
     {
         return $this->belongsTo(RecurringExpense::class, 'recurring_expense_id');

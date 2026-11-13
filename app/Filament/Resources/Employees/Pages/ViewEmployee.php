@@ -3,13 +3,11 @@
 namespace App\Filament\Resources\Employees\Pages;
 
 use App\Filament\Resources\Employees\EmployeeResource;
-use App\Filament\Traits\TeleportsTabs;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Actions\EditAction;
 
 class ViewEmployee extends ViewRecord
 {
-    use TeleportsTabs;
 
     protected static string $resource = EmployeeResource::class;
 

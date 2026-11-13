@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Enums\BankMovementType;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -35,6 +36,7 @@ class BankStatement extends Model
         "bank_date" => "date",
         "amount" => "decimal:2",
         "reconciled_at" => "datetime",
+        "movement_type" => BankMovementType::class,
     ];
 
     // ==========================================
@@ -95,7 +97,25 @@ class BankStatement extends Model
             return "📦 Lote: " . $this->conciliable->description;
         }
 
-        return "Outros";
+        if ($this->conciliable_type === \App\Models\AccountReceivable::class) {
+            if ($this->conciliable->order_id) {
+                $cust = $this->conciliable->order?->customer_name;
+                return "Pedido #{$this->conciliable->order_id}" . ($cust ? " • {$cust}" : '');
+            }
+            return $this->conciliable->description ?: "Recebível #{$this->conciliable_id}";
+        }
+
+        if ($this->conciliable_type === self::class) {
+            $otherDate = $this->conciliable->bank_date ? $this->conciliable->bank_date->format('d/m') : '';
+            $otherName = $this->conciliable->counterparty_name ?: $this->conciliable->description;
+            return "↩️ Estorno: {$otherName}" . ($otherDate ? " ({$otherDate})" : '');
+        }
+
+        if ($this->conciliable_type === \App\Models\BankAccount::class) {
+            return "🔁 Transf: " . ($this->conciliable->name ?? "Conta #{$this->conciliable_id}");
+        }
+
+        return $this->conciliable->description ?? "Vínculo #{$this->conciliable_id}";
     }
 
     public function suggestedReceivable(): \Illuminate\Database\Eloquent\Relations\BelongsTo

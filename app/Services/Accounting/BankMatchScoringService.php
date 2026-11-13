@@ -39,7 +39,7 @@ class BankMatchScoringService
             return $matches->sortByDesc('score')->values();
         }
 
-        $candidates = AccountPayable::with(["supplier", "employee"])
+        $candidates = AccountPayable::with(["supplier", "employee", "recurringExpense.supplier"])
             ->where("status", "pending")
             ->whereBetween("due_date", [
                 $statement->bank_date->copy()->subDays(45),
@@ -156,8 +156,9 @@ class BankMatchScoringService
         $cleanStr = fn($s) => preg_replace("/[^a-z0-9]/", "", strtolower((string) $s));
         $bankText = $cleanStr($stmtDesc . " " . $stmtCounter);
 
-        if ($candidate->supplier) {
-            return $this->scoreSupplierIdentity($candidate->supplier, $bankDoc, $bankText);
+        $effectiveSupplier = $candidate->supplier ?? $candidate->recurringExpense?->supplier;
+        if ($effectiveSupplier) {
+            return $this->scoreSupplierIdentity($effectiveSupplier, $bankDoc, $bankText);
         } elseif ($candidate->employee) {
             return $this->scoreEmployeeIdentity($candidate->employee, $bankDoc, $bankText);
         }

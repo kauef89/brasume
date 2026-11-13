@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\BankAccounts\Pages;
 
+use App\Filament\Resources\BankAccounts\Actions\ImportCreditCardStatementAction;
 use App\Filament\Resources\BankAccounts\BankAccountResource;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
@@ -14,9 +15,25 @@ class EditBankAccount extends EditRecord
 
     protected static string $resource = BankAccountResource::class;
 
+    public function hasCombinedRelationManagerTabsWithContent(): bool
+    {
+        return true;
+    }
+
+    public function getContentTabLabel(): ?string
+    {
+        return 'Detalhes da Conta';
+    }
+
+    public function getContentTabIcon(): ?string
+    {
+        return 'heroicon-o-building-library';
+    }
+
     protected function getHeaderActions(): array
     {
         return [
+            ImportCreditCardStatementAction::make(),
             DeleteAction::make(),
             ForceDeleteAction::make(),
             RestoreAction::make(),

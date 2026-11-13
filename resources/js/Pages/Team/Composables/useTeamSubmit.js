@@ -253,8 +253,16 @@ export function useTeamSubmit(state) {
 
         const backupCart = state.cart.value.map(item => ({ ...item }));
 
-        if (window.location.search) {
-            window.history.replaceState({}, '', window.location.pathname);
+                if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('append_to_order');
+            url.searchParams.delete('order_id');
+            url.searchParams.delete('edit_item');
+            window.history.replaceState({}, document.title, url.pathname);
+            
+            // Garantia extra de limpeza de rastro
+            sessionStorage.removeItem('customer_append_order_id');
+            localStorage.removeItem('pos_return_url');
         }
 
         router.post(route('operations.orders.store'), payload, {

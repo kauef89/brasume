@@ -4,14 +4,12 @@ namespace App\Filament\Resources\Employees\Pages;
 
 use App\Filament\Resources\Employees\EmployeeResource;
 use App\Filament\Traits\RedirectsToIndex;
-use App\Filament\Traits\TeleportsTabs;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 
 class EditEmployee extends EditRecord
 {
     use RedirectsToIndex;
-    use TeleportsTabs;
 
     protected static string $resource = EmployeeResource::class;
 
