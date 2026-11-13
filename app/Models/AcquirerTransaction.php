@@ -13,6 +13,7 @@ class AcquirerTransaction extends Model
     protected $casts = [
         'transaction_date'         => 'datetime',
         'expected_settlement_date' => 'date',
+        'reconciled_at'            => 'datetime',
         'gross_amount'             => 'decimal:2',
         'fee_amount'               => 'decimal:2',
         'net_amount'               => 'decimal:2',

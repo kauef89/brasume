@@ -38,12 +38,19 @@ class BankReconciliationService
                 "supplier_id"      => $supplierId,
             ]);
 
+            $isConsoleOrAuto = app()->runningInConsole() || !auth()->check();
+            $source = $isConsoleOrAuto ? 'auto' : 'manual';
+            $operator = $isConsoleOrAuto ? 'Motor Automático' : (auth()->user()?->name ?? 'Operador');
+
             // 2. Amarra o Extrato à Entidade
             $lockedStatement->update([
-                "status"           => "reconciled",
-                "conciliable_id"   => $conciliable->id,
-                "conciliable_type" => get_class($conciliable),
-                "transaction_id"   => $transaction->id,
+                "status"                => "reconciled",
+                "reconciliation_source" => $source,
+                "reconciled_by_name"    => $operator,
+                "reconciled_at"         => now(),
+                "conciliable_id"        => $conciliable->id,
+                "conciliable_type"      => get_class($conciliable),
+                "transaction_id"        => $transaction->id,
             ]);
 
             // 3. Atualiza Conta a Pagar (Vincula transaction_id para o Observer não duplicar)
@@ -89,6 +96,57 @@ class BankReconciliationService
             }
 
             return $transaction;
+        });
+    }
+
+    /**
+     * Desfaz a conciliação de uma linha do extrato bancário, estornando vínculos e devolvendo para Pendente.
+     */
+    public static function undo(BankStatement $statement): void
+    {
+        DB::transaction(function () use ($statement) {
+            $locked = BankStatement::where('id', $statement->id)->lockForUpdate()->first();
+            if (!$locked) return;
+
+            $conciliable = $locked->conciliable;
+
+            if ($conciliable instanceof AccountPayable) {
+                $conciliable->update([
+                    'status'         => 'pending',
+                    'payment_date'   => null,
+                    'transaction_id' => null,
+                ]);
+            } elseif ($conciliable instanceof PaymentBatch) {
+                $conciliable->update([
+                    'status'       => 'pending',
+                    'payment_date' => null,
+                ]);
+                AccountPayable::where('payment_batch_id', $conciliable->id)->update([
+                    'status'         => 'pending',
+                    'payment_date'   => null,
+                    'transaction_id' => null,
+                ]);
+            } elseif ($conciliable instanceof AccountReceivable) {
+                $conciliable->update([
+                    'status'         => 'pending',
+                    'payment_date'   => null,
+                    'transaction_id' => null,
+                ]);
+            }
+
+            if ($locked->transaction_id) {
+                Transaction::where('id', $locked->transaction_id)->delete();
+            }
+
+            $locked->update([
+                'status'                => 'pending',
+                'reconciliation_source' => null,
+                'reconciled_by_name'    => null,
+                'reconciled_at'         => null,
+                'conciliable_type'      => null,
+                'conciliable_id'        => null,
+                'transaction_id'        => null,
+            ]);
         });
     }
 }

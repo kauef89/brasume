@@ -60,9 +60,17 @@ class CashShiftsTable
                     ->label('Auditoria / Integridade')
                     ->badge()
                     ->state(function (CashShift $record): string {
-                        $isClosed = ($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'closed';
-                        if (! $isClosed) {
+                        $statusVal = $record->status instanceof \BackedEnum ? $record->status->value : $record->status;
+                        if ($statusVal === 'open') {
                             return 'Em Operação';
+                        }
+
+                        if ($statusVal === 'homologated') {
+                            return 'Ressalva Homologada';
+                        }
+
+                        if ($statusVal === 'reconciled') {
+                            return $record->corrected_errors_count > 0 ? 'Conciliado (Com Correção)' : '100% Conciliado';
                         }
 
                         $cashDiff = (float) $record->difference;
@@ -124,14 +132,14 @@ class CashShiftsTable
                     ->label('Dif. Cofre')
                     ->money('BRL')
                     ->color(fn ($state) => $state < 0 ? 'danger' : ($state > 0 ? 'info' : 'gray'))
-                    ->visible(fn ($record) => $record && (($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'closed'))
+                    ->visible(fn ($record) => $record && (($record->status instanceof \BackedEnum ? $record->status->value : $record->status) !== 'open'))
                     ->sortable(),
 
                 TextColumn::make('apos_breakage_amount')
                     ->label('Dif. Adquirente')
                     ->money('BRL')
                     ->color(fn ($state) => abs((float) $state) >= 0.05 ? 'warning' : 'gray')
-                    ->visible(fn ($record) => $record && (($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'closed'))
+                    ->visible(fn ($record) => $record && (($record->status instanceof \BackedEnum ? $record->status->value : $record->status) !== 'open'))
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('opened_at', 'desc')
@@ -139,17 +147,25 @@ class CashShiftsTable
                 SelectFilter::make('status')
                     ->label('Situação do Turno')
                     ->options([
-                        'open'   => 'Aberto',
-                        'closed' => 'Fechado',
+                        'open'        => 'Aberto',
+                        'closed'      => 'Fechado (Pendente Auditoria)',
+                        'reconciled'  => 'Auditado & Conciliado',
+                        'homologated' => 'Homologado c/ Ressalva',
                     ]),
 
                 Filter::make('problematic_shifts')
-                    ->label('Apenas Turnos com Problema / Quebra')
-                    ->query(fn (Builder $query): Builder => $query->where(function ($q) {
-                        $q->where('has_breakage', true)
-                            ->orWhereRaw('ABS(closing_balance_actual - closing_balance_expected) >= 0.05')
-                            ->orWhereRaw('ABS(apos_breakage_amount) >= 0.05');
-                    })),
+                    ->label('Pendentes com Problema / Quebra')
+                    ->query(fn (Builder $query): Builder => $query
+                        ->where('status', 'closed')
+                        ->where(function ($q) {
+                            $q->where('has_breakage', true)
+                                ->orWhereRaw('ABS(closing_balance_actual - closing_balance_expected) >= 0.05')
+                                ->orWhereRaw('ABS(apos_breakage_amount) >= 0.05');
+                        })),
+
+                Filter::make('homologated_shifts')
+                    ->label('Homologados com Ressalva')
+                    ->query(fn (Builder $query): Builder => $query->where('status', 'homologated')),
             ])
             ->actions([
                 // ==========================================
@@ -270,8 +286,17 @@ class CashShiftsTable
                 Action::make('auditoria')
                     ->label('Auditoria')
                     ->icon('heroicon-m-magnifying-glass-circle')
-                    ->color(fn (CashShift $record) => $record->has_breakage || abs((float) $record->difference) >= 0.05 ? 'danger' : 'gray')
-                    ->visible(fn (CashShift $record) => ($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'closed')
+                    ->color(function (CashShift $record): string {
+                        $statusVal = $record->status instanceof \BackedEnum ? $record->status->value : $record->status;
+                        if (in_array($statusVal, ['reconciled', 'homologated'], true)) {
+                            return 'gray';
+                        }
+
+                        return ($record->has_breakage || abs((float) $record->difference) >= 0.05 || abs((float) ($record->apos_breakage_amount ?? 0)) >= 0.05)
+                            ? 'danger'
+                            : 'gray';
+                    })
+                    ->visible(fn (CashShift $record) => in_array(($record->status instanceof \BackedEnum ? $record->status->value : $record->status), ['closed', 'reconciled', 'homologated'], true))
                     ->url(fn (CashShift $record) => \App\Filament\Resources\CashShifts\CashShiftResource::getUrl('audit', ['record' => $record])),
 
                 ViewAction::make()->iconButton(),

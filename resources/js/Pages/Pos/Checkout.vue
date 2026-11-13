@@ -273,6 +273,15 @@ const checkoutPrintMode = computed(() => props.companySettings?.checkout_print_m
 
 const isPostPaymentPhase = ref(false);
 
+const isCounterInescapable = computed(() => {
+    const o = liveOrder.value || {};
+    if (o.type !== 'counter') return false;
+    if (isPostPaymentPhase.value) return false;
+    if (o.payment_status === 'paid') return false;
+    if (['closed', 'cancelled', 'completed'].includes(o.status)) return false;
+    return true;
+});
+
 watch(
     () => [
         liveOrder.value?.payment_status,

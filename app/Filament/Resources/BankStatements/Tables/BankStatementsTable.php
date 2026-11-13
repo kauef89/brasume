@@ -75,15 +75,42 @@ class BankStatementsTable
                     ->color(fn($record) => $record->type === "credit" ? "success" : "danger")
                     ->weight("bold"),
 
+                Tables\Columns\TextColumn::make("related_name")
+                    ->label("Vínculo / Pedido")
+                    ->getStateUsing(function (BankStatement $record): string {
+                        if ($record->status === 'pending') return '-';
+                        return $record->related_name;
+                    })
+                    ->url(function (BankStatement $record): ?string {
+                        if ($record->conciliable_type === \App\Models\Payment::class && $record->conciliable?->order_id) {
+                            return \App\Filament\Resources\Orders\OrderResource::getUrl('edit', ['record' => $record->conciliable->order_id]);
+                        }
+                        if ($record->conciliable_type === \App\Models\Order::class && $record->conciliable_id) {
+                            return \App\Filament\Resources\Orders\OrderResource::getUrl('edit', ['record' => $record->conciliable_id]);
+                        }
+                        return null;
+                    })
+                    ->openUrlInNewTab()
+                    ->color('info')
+                    ->weight('semibold'),
+
                 Tables\Columns\TextColumn::make("status")
-                    ->label("Status")
+                    ->label("Status / Origem")
                     ->badge()
                     ->formatStateUsing(
                         fn(string $state): string => match ($state) {
                             "pending" => "Pendente", "reconciled" => "Conciliado", "ignored" => "Ignorado", default => $state,
                         }
                     )
-                    ->colors(["warning" => "pending", "success" => "reconciled", "gray" => "ignored"]),
+                    ->colors(["warning" => "pending", "success" => "reconciled", "gray" => "ignored"])
+                    ->description(function (BankStatement $record): ?string {
+                        if ($record->status === 'pending') return null;
+                        $src = $record->reconciliation_source === 'manual'
+                            ? '👤 Manual' . ($record->reconciled_by_name ? " • {$record->reconciled_by_name}" : '')
+                            : '🤖 Automática';
+                        $dt = $record->reconciled_at ? ' (' . $record->reconciled_at->format('d/m H:i') . ')' : '';
+                        return $src . $dt;
+                    }),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('bank_account_id')
@@ -185,7 +212,28 @@ class BankStatementsTable
            //         ->requiresConfirmation()
            //         ->visible(fn(BankStatement $record): bool => $record->status === "pending")
            //         ->action(fn(BankStatement $record) => $record->update(["status" => "ignored"])),
-            ])
+            
+Action::make("desfazer_conciliacao")
+                ->label("Desfazer")
+                ->icon("heroicon-m-arrow-uturn-left")
+                ->button()
+                ->outlined()
+                ->color("danger")
+                ->visible(fn(BankStatement $record): bool => in_array($record->status, ["reconciled", "ignored"], true))
+                ->requiresConfirmation()
+                ->modalHeading("Desfazer Conciliação Bancária")
+                ->modalDescription("O lançamento voltará para 'Pendente' e qualquer vínculo com pedido ou conta será desfeito. Deseja continuar?")
+                ->modalSubmitActionLabel("Sim, Desfazer")
+                ->action(function (BankStatement $record): void {
+                    \App\Services\Accounting\BankReconciliationService::undo($record);
+
+                    Notification::make()
+                        ->title("Conciliação desfeita!")
+                        ->body("O lançamento voltou para a fila de pendentes.")
+                        ->warning()
+                        ->send();
+                }),
+                        ])
             ->bulkActions([
                 BulkActionGroup::make([
                     BulkExpenseAction::make(),

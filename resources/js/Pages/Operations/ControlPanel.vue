@@ -209,10 +209,13 @@ const {
 
 const { draftRouting, orderType, clearCart } = useCart();
 
-const tabOptions = computed(() => [
-    { label: `Ativos (${activeOrders.value.length})`, value: 'active' },
-    { label: `Histórico (${historyOrders.value.length})`, value: 'history' }
-]);
+const tabOptions = computed(() => {
+    const visibleActiveCount = onSiteOrders.value.length + deliveryOrders.value.length;
+    return [
+        { label: `Ativos (${visibleActiveCount})`, value: 'active' },
+        { label: `Histórico (${historyOrders.value.length})`, value: 'history' }
+    ];
+});
 
 const availablePaymentMethods = computed(() => {
     return page.props.paymentMethods || page.props.cashierData?.paymentMethods || [];

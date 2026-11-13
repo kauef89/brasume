@@ -16,6 +16,10 @@ class ProductCombinationMatcher
 
         $products = Product::where('status', 'available')
             ->where(function ($q) {
+                $q->whereNull('type')
+                  ->orWhere('type', '!=', \App\Enums\ProductType::COMBO->value);
+            })
+            ->where(function ($q) {
                 $q->where('dine_in_price', '>', 0)
                   ->orWhere('delivery_price', '>', 0);
             })

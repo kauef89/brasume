@@ -92,10 +92,11 @@ import { useCart } from "@/Pages/Shared/Composables/useCart";
 import ParkedOrdersPopover from "@/Pages/Pos/Components/Cart/ParkedOrdersPopover.vue";
 
 const props = defineProps({
-    modelValue: { type: String, default: 'new' }
+    modelValue: { type: String, default: 'new' },
+    locked: { type: Boolean, default: false }
 });
 
-const emit = defineEmits(['update:modelValue', 'expanded-change']);
+const emit = defineEmits(['update:modelValue', 'expanded-change', 'locked-attempt']);
 
 const page = usePage();
 const { parkedOrders } = useCart();
@@ -131,6 +132,11 @@ watch(isExpanded, (newValue) => {
 });
 
 const navigate = (action, isSpaTab = false) => {
+    if (props.locked) {
+        isExpanded.value = false;
+        emit('locked-attempt', action);
+        return;
+    }
     isExpanded.value = false;
 
     if (action === 'home') {

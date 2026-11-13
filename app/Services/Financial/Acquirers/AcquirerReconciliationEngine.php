@@ -156,6 +156,9 @@ class AcquirerReconciliationEngine
 
             $acquirerTx->update([
                 'status'                => AcquirerMatchStatus::MATCHED,
+                'reconciliation_source' => 'auto',
+                'reconciled_by_name'    => 'Motor Automático',
+                'reconciled_at'         => now(),
                 'order_id'              => $order?->id,
                 'payment_id'            => $matchedPayment->id,
                 'account_receivable_id' => $receivable->id,
@@ -205,6 +208,9 @@ class AcquirerReconciliationEngine
 
             $acquirerTx->update([
                 'status'                => AcquirerMatchStatus::MATCHED,
+                'reconciliation_source' => 'auto',
+                'reconciled_by_name'    => 'Motor Automático',
+                'reconciled_at'         => now(),
                 'order_id'              => $leadOrder?->id,
                 'payment_id'            => $leadPayment->id,
                 'account_receivable_id' => $receivable->id,
@@ -486,13 +492,250 @@ class AcquirerReconciliationEngine
             }
         }
 
+        // 3. Tenta N:1 (Múltiplas passadas na maquininha somando 1 pagamento único no PDV)
+        $promoted += $this->reconcileMultiSwipePayments($matchedPaymentIdsThisRun);
+
         return $promoted;
+    }
+
+    /**
+     * Concilia N transações órfãs da maquininha contra 1 pagamento único no PDV
+     * (Ex: cliente dividiu R$ 129,00 em 3 passadas de R$ 43,00 na máquina, mas PDV lançou R$ 129,00 único).
+     */
+    public function reconcileMultiSwipePayments(array &$excludePaymentIds = []): int
+    {
+        $promoted = 0;
+
+        $unmatchedPayments = Payment::with(['order', 'paymentMethod'])
+            ->where('is_paid', true)
+            ->whereNull('acquirer_transaction_id')
+            ->whereDoesntHave('acquirerTransactions')
+            ->where(function ($q) {
+                $q->whereHas('paymentMethod', function ($pm) {
+                    $pm->whereIn('engine_type', [
+                        \App\Enums\PaymentEngineType::POS_MANUAL->value,
+                        \App\Enums\PaymentEngineType::SMART_POS->value,
+                        \App\Enums\PaymentEngineType::TEF->value,
+                        \App\Enums\PaymentEngineType::PIX_MACHINE->value,
+                    ])->where('id', '!=', 13);
+                })->orWhere(function ($fallback) {
+                    $fallback->whereNull('payment_method_id')
+                        ->where(function ($m) {
+                            $m->where('method', 'like', '%Crédito%')
+                              ->orWhere('method', 'like', '%Credito%')
+                              ->orWhere('method', 'like', '%Débito%')
+                              ->orWhere('method', 'like', '%Debito%')
+                              ->orWhere('method', 'like', '%Pix Máq%')
+                              ->orWhere('method', 'like', '%Pix Maq%');
+                        });
+                });
+            })
+            ->when(!empty($excludePaymentIds), fn($q) => $q->whereNotIn('id', $excludePaymentIds))
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        foreach ($unmatchedPayments as $payment) {
+            $target = round((float) $payment->amount, 2);
+            if ($target <= 0 || !$payment->created_at) continue;
+
+            $windowStart = $payment->created_at->copy()->subMinutes(45);
+            $windowEnd   = $payment->created_at->copy()->addMinutes(45);
+
+            $methodName = Str::ascii(mb_strtolower($payment->method ?? ''));
+            $isCredit = str_contains($methodName, 'cred');
+            $isDebit  = str_contains($methodName, 'deb');
+            $isPix    = str_contains($methodName, 'pix');
+
+            $orphanTxs = AcquirerTransaction::whereIn('status', [
+                    AcquirerMatchStatus::ORPHAN,
+                    AcquirerMatchStatus::AMBIGUOUS,
+                ])
+                ->whereBetween('transaction_date', [$windowStart, $windowEnd])
+                ->where('gross_amount', '<', $target)
+                ->orderBy('transaction_date', 'asc')
+                ->get()
+                ->filter(function ($tx) use ($isCredit, $isDebit, $isPix) {
+                    $mod = Str::ascii(mb_strtolower($tx->modality ?? ''));
+                    if ($isCredit) return str_contains($mod, 'cred');
+                    if ($isDebit)  return str_contains($mod, 'deb');
+                    if ($isPix)    return str_contains($mod, 'pix') || str_contains($mod, 'qrcode');
+                    return true;
+                })
+                ->values();
+
+            if ($orphanTxs->count() < 2 || $orphanTxs->count() > 12) continue;
+
+            $subsets = $this->findAcquirerSubsetsMatchingSum($orphanTxs, $target, 4);
+            if (count($subsets) === 1) {
+                $matchedTxs = $subsets[0];
+                $this->linkMultiSwipe($matchedTxs, $payment->order, $payment);
+                $excludePaymentIds[] = $payment->id;
+                $promoted += $matchedTxs->count();
+            }
+        }
+
+        return $promoted;
+    }
+
+    protected function findAcquirerSubsetsMatchingSum(\Illuminate\Support\Collection $items, float $target, int $maxDepth = 4): array
+    {
+        $matches = [];
+        $count = $items->count();
+
+        for ($i = 0; $i < $count; $i++) {
+            for ($j = $i + 1; $j < $count; $j++) {
+                $sum = (float)$items[$i]->gross_amount + (float)$items[$j]->gross_amount;
+                if (abs($sum - $target) < 0.02) {
+                    $matches[] = collect([$items[$i], $items[$j]]);
+                }
+            }
+        }
+
+        if ($maxDepth >= 3 && $count >= 3) {
+            for ($i = 0; $i < $count; $i++) {
+                for ($j = $i + 1; $j < $count; $j++) {
+                    for ($k = $j + 1; $k < $count; $k++) {
+                        $sum = (float)$items[$i]->gross_amount + (float)$items[$j]->gross_amount + (float)$items[$k]->gross_amount;
+                        if (abs($sum - $target) < 0.02) {
+                            $matches[] = collect([$items[$i], $items[$j], $items[$k]]);
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($maxDepth >= 4 && $count >= 4) {
+            for ($i = 0; $i < $count; $i++) {
+                for ($j = $i + 1; $j < $count; $j++) {
+                    for ($k = $j + 1; $k < $count; $k++) {
+                        for ($l = $k + 1; $l < $count; $l++) {
+                            $sum = (float)$items[$i]->gross_amount + (float)$items[$j]->gross_amount + (float)$items[$k]->gross_amount + (float)$items[$l]->gross_amount;
+                            if (abs($sum - $target) < 0.02) {
+                                $matches[] = collect([$items[$i], $items[$j], $items[$k], $items[$l]]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return $matches;
+    }
+
+    public function linkMultiSwipe(\Illuminate\Support\Collection $acquirerTxs, ?Order $order, Payment $payment): void
+    {
+        DB::transaction(function () use ($acquirerTxs, $order, $payment) {
+            $fallbackBankId = BankAccount::where('bank_name', 'like', '%sicredi%')->first()?->id
+                ?? BankAccount::first()?->id;
+
+            foreach ($acquirerTxs as $tx) {
+                $deviceName = $tx->device?->name ?? 'Maquininha';
+                $desc = "Repasse " . strtoupper($tx->acquirer_name) . " - " . strtoupper($tx->modality) . " (NSU {$tx->nsu} | {$deviceName} | Rateio Pedido #{$order?->id})";
+
+                $receivable = AccountReceivable::create([
+                    'order_id'        => $order?->id,
+                    'customer_id'     => $order?->customer_id,
+                    'bank_account_id' => $payment->paymentMethod?->destination_account_id ?? $fallbackBankId,
+                    'description'     => $desc,
+                    'gross_amount'    => $tx->gross_amount,
+                    'fee_amount'      => $tx->fee_amount,
+                    'net_amount'      => $tx->net_amount,
+                    'due_date'        => $tx->expected_settlement_date,
+                    'status'          => 'pending',
+                ]);
+
+                $tx->update([
+                    'status'                => AcquirerMatchStatus::MATCHED,
+                    'order_id'              => $order?->id,
+                    'payment_id'            => $payment->id,
+                    'account_receivable_id' => $receivable->id,
+                    'notes'                 => "Conciliado em Rateio N:1 ({$acquirerTxs->count()} passadas) com Pagamento #{$payment->id}",
+                ]);
+            }
+
+            $leadTx = $acquirerTxs->first();
+            if ($leadTx && !$payment->acquirer_transaction_id) {
+                $payment->update([
+                    'acquirer_transaction_id' => $leadTx->id,
+                ]);
+            }
+        });
     }
 
     public function linkManually(AcquirerTransaction $acquirerTx, Order $order, ?Payment $payment = null): void
     {
         if ($payment) {
             $this->linkSingle($acquirerTx, $order, $payment);
+        }
+    }
+
+    /**
+     * Desfaz a conciliação de uma transação da maquininha, devolvendo-a para Órfã e recalculando o turno.
+     */
+    public function unlink(AcquirerTransaction $acquirerTx): void
+    {
+        $shiftId = null;
+
+        DB::transaction(function () use ($acquirerTx, &$shiftId) {
+            $locked = AcquirerTransaction::where('id', $acquirerTx->id)->lockForUpdate()->first();
+            if (!$locked) return;
+
+            if ($locked->payment_id) {
+                $pay = Payment::find($locked->payment_id);
+                if ($pay) {
+                    $shiftId = $pay->cash_shift_id;
+                    if ((int) $pay->acquirer_transaction_id === (int) $locked->id) {
+                        $nextLinked = AcquirerTransaction::where('payment_id', $pay->id)
+                            ->where('id', '!=', $locked->id)
+                            ->first();
+                        $pay->update(['acquirer_transaction_id' => $nextLinked?->id]);
+                    }
+                }
+            }
+
+            if (!$shiftId && $locked->order_id) {
+                $shiftId = Order::where('id', $locked->order_id)->value('cash_shift_id');
+            }
+
+            Payment::where('acquirer_transaction_id', $locked->id)
+                ->update(['acquirer_transaction_id' => null]);
+
+            if ($locked->account_receivable_id) {
+                $rec = AccountReceivable::find($locked->account_receivable_id);
+                if ($rec && $rec->status !== 'paid') {
+                    $rec->delete();
+                }
+            }
+
+            $locked->update([
+                'status'                => AcquirerMatchStatus::ORPHAN,
+                'reconciliation_source' => null,
+                'reconciled_by_name'    => null,
+                'reconciled_at'         => null,
+                'order_id'              => null,
+                'payment_id'            => null,
+                'account_receivable_id' => null,
+                'notes'                 => 'Conciliação desfeita por ' . (auth()->user()?->name ?? 'Operador') . ' em ' . now()->format('d/m/Y H:i'),
+            ]);
+        });
+
+        if ($shiftId) {
+            $shift = \App\Models\CashShift::find($shiftId);
+            if ($shift && ($shift->status instanceof \BackedEnum ? $shift->status->value : $shift->status) !== 'open') {
+                $auditService = app(\App\Services\RestaurantOps\ShiftAuditService::class);
+                $cashierService = app(\App\Services\RestaurantOps\ShiftCashierService::class);
+                $expectedCash = (float) $cashierService->calculateExpectedCash($shift);
+                $diag = $auditService->diagnose($shift, (float) ($shift->closing_balance_actual ?? 0), $shift->terminal_settlements ?? []);
+                $electronicDiff = round((float) ($diag['electronic_difference'] ?? 0), 2);
+                $cashDiff = round((float) ($diag['cash_difference'] ?? 0), 2);
+
+                $shift->updateQuietly([
+                    'closing_balance_expected' => $expectedCash,
+                    'cash_breakage_amount'     => $cashDiff,
+                    'apos_breakage_amount'     => $electronicDiff,
+                    'has_breakage'             => abs($cashDiff) >= 0.05 || abs($electronicDiff) >= 0.05,
+                ]);
+            }
         }
     }
 }

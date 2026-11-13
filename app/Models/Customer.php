@@ -10,6 +10,7 @@ use Illuminate\Notifications\Notifiable;
 use NotificationChannels\WebPush\HasPushSubscriptions;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Str;
 
 #[ObservedBy([CustomerObserver::class])]
 class Customer extends Model
@@ -83,5 +84,81 @@ class Customer extends Model
     public function pushSubscriptions(): \Illuminate\Database\Eloquent\Relations\MorphMany
     {
         return $this->morphMany(PushSubscription::class, 'subscribable');
+    }
+
+    protected $casts = [
+        'usual_payers' => 'array',
+    ];
+
+    /**
+     * Registra ou incrementa um pagador usual (terceiro/familiar) vinculado a este cliente.
+     */
+    public function recordUsualPayer(?string $payerName, ?string $payerDocument = null): void
+    {
+        $cleanName = trim((string) $payerName);
+        $cleanDoc  = preg_replace('/[^0-9]/', '', (string) $payerDocument);
+
+        if ($cleanName === '' && $cleanDoc === '') {
+            return;
+        }
+
+        // Ignora se o pagador já é exatamente o próprio nome do cliente
+        if ($cleanName !== '' && Str::ascii(mb_strtolower($cleanName)) === Str::ascii(mb_strtolower(trim((string) $this->name)))) {
+            return;
+        }
+
+        $payers = is_array($this->usual_payers) ? $this->usual_payers : [];
+        $updated = false;
+
+        foreach ($payers as &$item) {
+            $sameDoc  = ($cleanDoc !== '' && ($item['document'] ?? '') === $cleanDoc);
+            $sameName = ($cleanName !== '' && \Illuminate\Support\Str::ascii(mb_strtolower($item['name'] ?? '')) === \Illuminate\Support\Str::ascii(mb_strtolower($cleanName)));
+
+            if ($sameDoc || $sameName) {
+                $item['name']         = $cleanName ?: ($item['name'] ?? '');
+                $item['document']     = $cleanDoc ?: ($item['document'] ?? null);
+                $item['count']        = (int) ($item['count'] ?? 1) + 1;
+                $item['last_paid_at'] = now()->toDateString();
+                $updated = true;
+                break;
+            }
+        }
+        unset($item);
+
+        if (!$updated) {
+            $payers[] = [
+                'name'         => $cleanName,
+                'document'     => $cleanDoc ?: null,
+                'count'        => 1,
+                'last_paid_at' => now()->toDateString(),
+            ];
+        }
+
+        $this->updateQuietly(['usual_payers' => $payers]);
+    }
+
+    /**
+     * Verifica se um pagador (CPF/CNPJ ou nome) consta na lista de pagadores usuais deste cliente.
+     */
+    public function matchesUsualPayer(?string $payerName, ?string $payerDocument = null): bool
+    {
+        $payers = is_array($this->usual_payers) ? $this->usual_payers : [];
+        if (empty($payers)) {
+            return false;
+        }
+
+        $cleanName = \Illuminate\Support\Str::ascii(mb_strtolower(trim((string) $payerName)));
+        $cleanDoc  = preg_replace('/[^0-9]/', '', (string) $payerDocument);
+
+        foreach ($payers as $item) {
+            if ($cleanDoc !== '' && !empty($item['document']) && $item['document'] === $cleanDoc) {
+                return true;
+            }
+            if ($cleanName !== '' && !empty($item['name']) && \Illuminate\Support\Str::ascii(mb_strtolower(trim($item['name']))) === $cleanName) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -88,6 +88,11 @@ class Payment extends Model
         return $this->belongsTo(AcquirerTransaction::class, 'acquirer_transaction_id');
     }
 
+    public function acquirerTransactions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(AcquirerTransaction::class, 'payment_id');
+    }
+
     public function paymentItems(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(OrderPaymentItem::class, 'order_payment_id');

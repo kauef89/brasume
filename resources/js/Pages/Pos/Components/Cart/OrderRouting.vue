@@ -201,7 +201,11 @@ const handleTabChange = (type) => {
     }
 
     emit('update:modelValue', type);
-    emit('open');
+    if (type === 'counter') {
+        handleApply();
+    } else {
+        emit('open');
+    }
 };
 
 watch(allowedChannels, (channels) => {

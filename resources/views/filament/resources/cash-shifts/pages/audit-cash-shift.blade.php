@@ -42,14 +42,18 @@
                     @if(!$hasSettlementsDeclared && !$hasAcquirerImported)
                         <span class="text-base font-medium text-gray-400">Não Auditável</span>
                     @else
-                        R$ {{ number_format($diag['electronic_difference'], 2, ',', '.') }}
+                        R$ {{ number_format($diag['sys_electronic_total'] ?? 0, 2, ',', '.') }}
                     @endif
                 </div>
                 <div class="mt-1 text-xs text-gray-500">
                     @if(!$hasSettlementsDeclared && !$hasAcquirerImported)
                         Turno antigo sem fita digitada e sem CSV
                     @else
-                        Fitas: {{ $acqTransactions->count() }} transações conciliadas
+                        Adquirente: R$ {{ number_format($diag['declared_electronic_total'] ?? 0, 2, ',', '.') }} |
+                        Dif: <strong class="{{ abs($diag['electronic_difference']) < 0.05 ? 'text-emerald-600' : 'text-amber-600' }}">
+                            R$ {{ number_format($diag['electronic_difference'], 2, ',', '.') }}
+                        </strong>
+                        ({{ $acqTransactions->count() }} transações)
                     @endif
                 </div>
             </div>
@@ -118,7 +122,7 @@
             </div>
         </div>
 
-        {{-- 2. TRANSAÇÕES ÓRFÃS DA MAQUININHA --}}
+        {{-- 2B. TRANSAÇÕES ÓRFÃS DA MAQUININHA --}}
         @if($orphanAcq->isNotEmpty())
             <div class="p-5 rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-800 shadow-sm space-y-4">
                 <div class="flex items-center justify-between">
@@ -134,7 +138,7 @@
 
                 <div class="divide-y divide-orange-200 dark:divide-orange-800/60">
                     @foreach($orphanAcq as $oTx)
-                        <div class="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                        <div class="py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
                             <div class="font-mono">
                                 <span class="font-bold text-gray-900 dark:text-white text-sm">R$ {{ number_format($oTx->gross_amount, 2, ',', '.') }}</span>
                                 <span class="mx-2 text-gray-400">•</span>
@@ -146,7 +150,7 @@
                                 <span class="mx-2 text-gray-400">•</span>
                                 <span class="text-gray-500">{{ $oTx->transaction_date->format('H:i:s') }}</span>
                             </div>
-                            <div class="flex items-center gap-2 shrink-0">
+                            <div class="flex flex-wrap items-center gap-2 shrink-0">
                                 <button 
                                     wire:click="abrirModalVendaAvulsa({{ $oTx->id }})"
                                     type="button"
@@ -348,10 +352,14 @@
                                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                                                 Conciliado no Extrato
                                             </span>
+                                        @elseif($bankStatements->isEmpty())
+                                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                                                ⚪ Sem Extrato Importado
+                                            </span>
                                         @else
-                                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                                                Chave Pix (Extrato)
+                                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                                Não Localizado no Extrato
                                             </span>
                                         @endif
                                     @elseif($isCardOrMachine)
@@ -416,9 +424,13 @@
                                             <div class="text-emerald-700 dark:text-emerald-400 font-mono text-[11px]">
                                                 <strong>Extrato Sicredi:</strong> {{ $pixMatch->description ?? 'Crédito Pix' }} (Doc: {{ $pixMatch->document_number ?? $pixMatch->id }})
                                             </div>
-                                        @else
+                                        @elseif($bankStatements->isEmpty())
                                             <span class="text-gray-500">
-                                                Aguardando importação do extrato bancário (OFX/API) do dia
+                                                Aguardando importação do extrato bancário (OFX/API)
+                                            </span>
+                                        @else
+                                            <span class="text-rose-600 dark:text-rose-400 font-medium">
+                                                ⚠ Não localizado no extrato bancário (incl. D+4 seg/feriado)
                                             </span>
                                         @endif
                                     @elseif($isCash)
@@ -441,19 +453,92 @@
                                         >
                                             Corrigir
                                         </button>
-                                    @elseif(isset($paymentCountByOrder) && $paymentCountByOrder->get($p->order_id)?->count() > 1 && !$pixMatches->has($p->id))
-                                        <button 
-                                            wire:click="removerPagamentoDuplicado({{ $p->id }})"
+                                    @elseif(
+    !$isMatched
+    && !$pixMatch
+    && !$isCash
+    && isset($paymentCountByOrder)
+    && ($paymentCountByOrder->get($p->order_id)?->count() ?? 0) > 1
+    && (
+        ((float) ($order?->total ?? 0) > 0 && ((float) $paymentCountByOrder->get($p->order_id)->sum('amount') - (float) $order->total) > 0.05)
+        || $paymentCountByOrder->get($p->order_id)
+            ->where('id', '!=', $p->id)
+            ->where('payment_method_id', $p->payment_method_id)
+            ->filter(fn($sib) => abs((float) $sib->amount - (float) $p->amount) < 0.02)
+            ->isNotEmpty()
+    )
+)
+    <button
+        wire:click="removerPagamentoDuplicado({{ $p->id }})"
+        type="button"
+        title="Remover este lançamento excedente sem comprovante documental"
+        class="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-bold transition shadow-sm"
+    >
+        <x-filament::icon icon="heroicon-m-trash" class="w-3.5 h-3.5" />
+        Remover Duplicado
+    </button>
+                                    @elseif(($isCardOrMachine && !$isMatched) || ($isDirectPix && !$pixMatch))
+                                        <button
+                                            wire:click="abrirModalCandidatosPagamento({{ $p->id }})"
                                             type="button"
-                                            title="Remover este lançamento duplicado sem comprovante no extrato"
-                                            class="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-bold transition shadow-sm"
+                                            class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                            title="Buscar comprovante na maquininha ou no extrato bancário (Pix)"
                                         >
-                                            <x-filament::icon icon="heroicon-m-trash" class="w-3.5 h-3.5" />
-                                            Remover Duplicado
+                                            <x-filament::icon icon="heroicon-m-magnifying-glass" class="w-3.5 h-3.5" />
+                                            Conciliar
                                         </button>
                                     @else
                                         <span class="text-gray-400 text-xs">-</span>
                                     @endif
+                                </td>
+                            </tr>
+                        @endforeach
+
+                        {{-- PEDIDOS DO TURNO SEM NENHUM PAGAMENTO REGISTRADO --}}
+                        @foreach($unpaidOrders as $uOrder)
+                            <tr class="bg-rose-50/30 dark:bg-rose-950/10 hover:bg-rose-50/60 dark:hover:bg-rose-950/20 transition">
+                                <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+                                    #{{ $uOrder->id }}
+                                    @if($uOrder->type === 'delivery')
+                                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">Delivery</span>
+                                    @elseif($uOrder->type === 'table')
+                                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Mesa {{ $uOrder->table_number }}</span>
+                                    @else
+                                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">Balcão</span>
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3 text-xs text-gray-500">
+                                    {{ $uOrder->created_at?->format('H:i') }}
+                                </td>
+                                <td class="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
+                                    {{ $uOrder->customer_name ?? 'Consumidor Final' }}
+                                </td>
+                                <td class="px-4 py-3 text-xs">
+                                    <span class="px-2 py-0.5 rounded-full font-bold {{ $uOrder->status === 'cancelled' ? 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300' }}">
+                                        {{ $uOrder->status === 'cancelled' ? 'Cancelado' : 'Sem Pagamento' }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 font-bold text-gray-900 dark:text-white">
+                                    R$ {{ number_format($uOrder->total, 2, ',', '.') }}
+                                </td>
+                                <td class="px-4 py-3">
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300">
+                                        ⚠ Pedido sem Baixa
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-xs text-rose-600 dark:text-rose-400">
+                                    {{ $uOrder->has_fiscal_document ? 'NFC-e emitida sem pagamento no PDV' : 'Pedido sem lançamento financeiro' }}
+                                </td>
+                                <td class="px-4 py-3 text-center">
+                                    <button
+                                        wire:click="abrirModalCandidatosPedido({{ $uOrder->id }})"
+                                        type="button"
+                                        class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                        title="Buscar comprovante na maquininha ou no extrato bancário (Pix)"
+                                    >
+                                        <x-filament::icon icon="heroicon-m-magnifying-glass" class="w-3.5 h-3.5" />
+                                        Conciliar
+                                    </button>
                                 </td>
                             </tr>
                         @endforeach
@@ -640,6 +725,126 @@
                             Concluir Venda e Conciliar
                         </x-filament::button>
                     </div>
+                </div>
+
+            </div>
+        </div>
+    @endif
+
+    {{-- 🚀 MODAL INTERATIVO: CANDIDATOS À CONCILIAÇÃO (MAQUININHA + EXTRATO PIX) --}}
+    @if($showCandidateModal)
+        <div class="fixed inset-0 z-[100] overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div class="relative w-full max-w-4xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-6 flex flex-col gap-5">
+                
+                {{-- CABEÇALHO DO MODAL --}}
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-200 dark:border-stone-800 pb-4">
+                    <div>
+                        <span class="text-[10px] uppercase font-black tracking-wider text-indigo-600 dark:text-indigo-400">
+                            Busca de Comprovante Documental (Maquininha & Extrato Bancário)
+                        </span>
+                        <h3 class="text-base font-black text-stone-900 dark:text-white mt-0.5">
+                            Pedido #{{ $candidateTargetInfo['order_id'] ?? '' }} • {{ $candidateTargetInfo['customer_name'] ?? '' }}
+                        </h3>
+                        <p class="text-xs text-stone-500 mt-0.5">
+                            Registrado no PDV: <strong>{{ $candidateTargetInfo['method_name'] ?? '' }}</strong> às {{ $candidateTargetInfo['time'] ?? '' }}
+                        </p>
+                    </div>
+                    <div class="text-left sm:text-right shrink-0">
+                        <span class="text-[10px] uppercase font-bold text-stone-400 block tracking-wider">Valor no PDV</span>
+                        <span class="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                            R$ {{ number_format($candidateTargetInfo['amount'] ?? 0, 2, ',', '.') }}
+                        </span>
+                    </div>
+                </div>
+
+                {{-- BARRA DE FILTRO --}}
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-stone-50 dark:bg-stone-800/50 px-4 py-2.5 rounded-xl border border-stone-200 dark:border-stone-800">
+                    <span class="text-xs text-stone-600 dark:text-stone-300">
+                        Exibindo <strong>{{ count($candidateTransactions) }}</strong> candidato(s) não conciliados (inclui compensações Pix de seg/feriado até D+4).
+                    </span>
+                    <button
+                        type="button"
+                        wire:click="alternarFiltroCandidatos"
+                        class="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline self-start sm:self-auto"
+                    >
+                        {{ $showAllWindowCandidates ? 'Filtrar apenas valores próximos (±R$ 35)' : 'Mostrar todas as transações da janela' }}
+                    </button>
+                </div>
+
+                {{-- TABELA DE CANDIDATOS --}}
+                <div class="overflow-x-auto max-h-96 border border-stone-200 dark:border-stone-800 rounded-2xl">
+                    @if(empty($candidateTransactions))
+                        <div class="py-10 px-4 text-center text-xs text-stone-500">
+                            Nenhuma transação órfã encontrada com valor próximo nesta janela. Clique em <strong>"Mostrar todas as transações da janela"</strong> acima para ampliar a busca.
+                        </div>
+                    @else
+                        <table class="w-full text-left text-xs divide-y divide-stone-200 dark:divide-stone-800">
+                            <thead class="bg-stone-50 dark:bg-stone-800/70 text-[11px] font-bold uppercase text-stone-500 sticky top-0">
+                                <tr>
+                                    <th class="px-3.5 py-2.5">Origem</th>
+                                    <th class="px-3.5 py-2.5">Data / Hora</th>
+                                    <th class="px-3.5 py-2.5">Pagador / Modalidade</th>
+                                    <th class="px-3.5 py-2.5">Valor</th>
+                                    <th class="px-3.5 py-2.5">Diferença</th>
+                                    <th class="px-3.5 py-2.5 text-right">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-stone-200 dark:divide-stone-800">
+                                @foreach($candidateTransactions as $cand)
+                                    @php
+                                        $diffVal = (float) $cand['diff'];
+                                        $isExact = abs($diffVal) < 0.02;
+                                    @endphp
+                                    <tr class="hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 transition {{ $isExact ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : '' }}">
+                                        <td class="px-3.5 py-2.5 font-bold whitespace-nowrap">
+                                            {{ $cand['source_lbl'] }}
+                                        </td>
+                                        <td class="px-3.5 py-2.5 font-mono text-stone-600 dark:text-stone-400 whitespace-nowrap">
+                                            {{ $cand['date_time'] }}
+                                        </td>
+                                        <td class="px-3.5 py-2.5">
+                                            <div class="font-bold text-stone-900 dark:text-white">{{ $cand['payer'] }}</div>
+                                            <div class="text-[11px] text-stone-500 font-mono">{{ $cand['details'] }}</div>
+                                        </td>
+                                        <td class="px-3.5 py-2.5 font-black text-stone-900 dark:text-white whitespace-nowrap">
+                                            R$ {{ number_format($cand['amount'], 2, ',', '.') }}
+                                        </td>
+                                        <td class="px-3.5 py-2.5 whitespace-nowrap">
+                                            @if($isExact)
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                                    Exato (R$ 0,00)
+                                                </span>
+                                            @elseif($diffVal > 0)
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                                                    +R$ {{ number_format($diffVal, 2, ',', '.') }} (a maior)
+                                                </span>
+                                            @else
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                                                    -R$ {{ number_format(abs($diffVal), 2, ',', '.') }} (a menor)
+                                                </span>
+                                            @endif
+                                        </td>
+                                        <td class="px-3.5 py-2.5 text-right whitespace-nowrap">
+                                            <button
+                                                type="button"
+                                                wire:click="vincularCandidatoAoAlvo('{{ $cand['source'] }}', {{ $cand['id'] }})"
+                                                class="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                            >
+                                                Vincular
+                                            </button>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    @endif
+                </div>
+
+                {{-- RODAPÉ DO MODAL --}}
+                <div class="flex items-center justify-end border-t border-stone-200 dark:border-stone-800 pt-4">
+                    <x-filament::button color="gray" wire:click="$set('showCandidateModal', false)">
+                        Fechar
+                    </x-filament::button>
                 </div>
 
             </div>

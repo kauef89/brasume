@@ -28,7 +28,7 @@
         <div class="px-2 pt-2 shrink-0 z-50 transition-all duration-300">
             <header class="flex items-center justify-between gap-2 h-14 w-full">
                 <div class="h-full flex items-center shrink-0">
-                    <DesktopNav v-model="activeTab" @expanded-change="isNavExpanded = $event" />
+                    <DesktopNav v-model="activeTab" :locked="isCheckoutLocked" @locked-attempt="notifyCheckoutLocked" @expanded-change="isNavExpanded = $event" />
                 </div>
 
                 <div class="flex-1 flex items-center justify-end gap-2 h-full min-w-0">
@@ -323,11 +323,37 @@ const goToOperations = () => {
     });
 };
 
+const isCheckoutLocked = computed(() => {
+    if (activeTab.value !== 'checkout' || !checkoutData.value?.order) return false;
+    const o = checkoutData.value.order;
+    const fromList = (page.props.initialOrders || []).find(item => Number(item.id) === Number(o.id));
+    const current = fromList ? { ...o, ...fromList } : o;
+
+    if (current.type !== 'counter') return false;
+    if (current.payment_status === 'paid') return false;
+    if (['closed', 'cancelled', 'completed'].includes(current.status)) return false;
+    return true;
+});
+
+const notifyCheckoutLocked = () => {
+    toast.add({
+        severity: 'warn',
+        summary: 'Venda de Balcão em Aberto',
+        detail: 'Finalize o recebimento ou clique em "Cancelar Venda" para sair do checkout.',
+        life: 4000
+    });
+};
+
 const handleTabChange = (e) => {
     let targetTab = e.detail;
     if (targetTab === 'operations') targetTab = 'orders';
     if (targetTab === 'pos') targetTab = 'new';
     if (targetTab.includes('schedules')) targetTab = 'schedules';
+
+    if (isCheckoutLocked.value && targetTab !== 'checkout') {
+        notifyCheckoutLocked();
+        return;
+    }
 
     if (activeTab.value === 'checkout' && targetTab !== 'checkout') {
         checkoutData.value = null;

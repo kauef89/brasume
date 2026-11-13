@@ -66,7 +66,8 @@ class CashShift extends Model
 
     public function getDifferenceAttribute(): float
     {
-        if ($this->status === 'open' || is_null($this->closing_balance_expected) || is_null($this->closing_balance_actual)) {
+        $statusVal = $this->status instanceof \BackedEnum ? $this->status->value : $this->status;
+        if ($statusVal === 'open' || is_null($this->closing_balance_expected) || is_null($this->closing_balance_actual)) {
             return 0.00;
         }
         return (float) ($this->closing_balance_actual - $this->closing_balance_expected);

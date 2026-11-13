@@ -133,7 +133,10 @@ class OrderPixService
             $updateData['notes'] = null;
         }
 
-        if (in_array($order->status, ['pending_payment', 'pending', 'cancelled'])) {
+        if (in_array($order->type, ['table', 'counter'], true)) {
+            $updateData['status'] = 'closed';
+            $updateData['closed_at'] = now();
+        } elseif (in_array($order->status, ['pending_payment', 'pending', 'cancelled'])) {
             $updateData['status'] = 'pending';
         }
 

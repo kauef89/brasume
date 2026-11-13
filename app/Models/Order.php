@@ -79,6 +79,7 @@ class Order extends Model
     public const SOURCE_CASHIER            = 'cashier';
     public const SOURCE_TEAM_APP           = 'team_app';
     public const SOURCE_KIOSK              = 'kiosk';
+    public const SOURCE_BACKOFFICE         = 'backoffice';
 
     public const VALID_SOURCES = [
         self::SOURCE_CUSTOMER_APP,
@@ -87,6 +88,7 @@ class Order extends Model
         self::SOURCE_CASHIER,
         self::SOURCE_TEAM_APP,
         self::SOURCE_KIOSK,
+        self::SOURCE_BACKOFFICE,
     ];
 
     // =========================================================================

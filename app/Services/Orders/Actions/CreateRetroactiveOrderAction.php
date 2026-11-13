@@ -5,10 +5,12 @@ namespace App\Services\Orders\Actions;
 use App\Enums\AcquirerMatchStatus;
 use App\Models\AcquirerTransaction;
 use App\Models\CashShift;
+use App\Models\CompanySetting;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentMethod;
 use App\Models\Product;
+use App\Services\Fiscal\SpedDocumentService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -16,6 +18,7 @@ class CreateRetroactiveOrderAction
 {
     /**
      * Executa a criação do pedido avulso retroativo conciliado com a adquirente
+     * e dispara a emissão fiscal respeitando auto_fiscal_emission.
      */
     public function execute(
         AcquirerTransaction $acqTx,
@@ -24,7 +27,7 @@ class CreateRetroactiveOrderAction
         ?string $customerName = null,
         ?string $notes = null
     ): Order {
-        return DB::transaction(function () use ($acqTx, $shift, $items, $customerName, $notes) {
+        $order = DB::transaction(function () use ($acqTx, $shift, $items, $customerName, $notes) {
             $grossAmount = (float) ($acqTx->gross_amount ?: ($acqTx->amount ?? 0));
             $txDate = $acqTx->transaction_date ?: now();
 
@@ -32,7 +35,7 @@ class CreateRetroactiveOrderAction
             $order = Order::create([
                 'cash_shift_id'  => $shift->id,
                 'type'           => 'counter',
-                'source'         => 'pos',
+                'source'         => Order::SOURCE_BACKOFFICE,
                 'status'         => 'closed',
                 'payment_status' => 'paid',
                 'subtotal'       => $grossAmount,
@@ -120,5 +123,49 @@ class CreateRetroactiveOrderAction
 
             return $order;
         });
+
+        // 6. Avaliação e Disparo Fiscal (fora da transação financeira para não reverter a conciliação)
+        $this->processFiscalEmission($order);
+
+        return $order->fresh();
+    }
+
+    protected function processFiscalEmission(Order $order): void
+    {
+        $settings = CompanySetting::first();
+        if (!$settings || !$settings->is_fiscal_emitter) {
+            return;
+        }
+
+        $order->loadMissing(['items.product', 'payments.paymentMethod']);
+        $spedService = app(SpedDocumentService::class);
+
+        if (!$spedService->shouldEmitAutomatically($order)) {
+            $order->update([
+                'fiscal_status' => 'skipped',
+                'fiscal_error'  => null,
+            ]);
+            return;
+        }
+
+        $hasUnlinkedProduct = $order->items->contains(fn ($item) => empty($item->product_id));
+        if ($hasUnlinkedProduct) {
+            $order->update([
+                'fiscal_status' => 'pending',
+                'fiscal_error'  => 'Item avulso sem produto vinculado (NCM ausente). Vincule um produto do catálogo para emitir NFC-e.',
+            ]);
+            return;
+        }
+
+        try {
+            $spedService->emitNfce($order, null, false, null, false);
+        } catch (\Throwable $e) {
+            $order->update([
+                'fiscal_status' => 'failed',
+                'fiscal_error'  => $e->getMessage(),
+            ]);
+
+            Log::warning("⚠ [Auditoria Fiscal] Falha ao emitir NFC-e do pedido retroativo #{$order->id}: {$e->getMessage()}");
+        }
     }
 }

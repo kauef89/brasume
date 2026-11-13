@@ -3,19 +3,18 @@
 namespace App\Filament\Resources\CashShifts\Pages;
 
 use App\Filament\Resources\CashShifts\CashShiftResource;
-use App\Models\CashShift;
+use App\Models\AcquirerTransaction;
+use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentMethod;
-use App\Models\AcquirerTransaction;
+use App\Services\Accounting\PixBankReconciliationService;
 use App\Services\RestaurantOps\ShiftAuditService;
 use App\Services\RestaurantOps\ShiftCashierService;
-use App\Services\Financial\Acquirers\AcquirerReconciliationEngine;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
-use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class AuditCashShift extends Page
 {
@@ -37,11 +36,39 @@ class AuditCashShift extends Page
     public ?int $selectedProductIdToAdd = null;
     public ?string $retroactiveCustomerName = null;
     public ?string $retroactiveNotes = null;
+    public bool $showCandidateModal = false;
+    public ?string $candidateTargetType = null;
+    public ?int $candidateTargetId = null;
+    public array $candidateTargetInfo = [];
+    public array $candidateTransactions = [];
+    public bool $showAllWindowCandidates = false;
 
     public function mount(int | string $record): void
     {
         $this->record = $this->resolveRecord($record);
         $this->managerNotes = $this->record->notes;
+
+        if (($this->record->status instanceof \BackedEnum ? $this->record->status->value : $this->record->status) !== 'open') {
+            $diag = app(ShiftAuditService::class)->diagnose(
+                $this->record,
+                (float) ($this->record->closing_balance_actual ?? 0),
+                $this->record->terminal_settlements ?? []
+            );
+
+            $electronicDiff = round((float) ($diag['electronic_difference'] ?? 0), 2);
+            $cashDiff = round((float) ($diag['cash_difference'] ?? 0), 2);
+            $hasBreakage = abs($cashDiff) >= 0.05 || abs($electronicDiff) >= 0.05;
+
+            if (
+                abs((float) ($this->record->apos_breakage_amount ?? 0) - $electronicDiff) >= 0.01
+                || (bool) $this->record->has_breakage !== $hasBreakage
+            ) {
+                $this->record->updateQuietly([
+                    'apos_breakage_amount' => $electronicDiff,
+                    'has_breakage'         => $hasBreakage,
+                ]);
+            }
+        }
     }
 
     public function getTitle(): string
@@ -69,26 +96,18 @@ class AuditCashShift extends Page
 
     public function saveNotes(): void
     {
-        $this->record->update([
-            'notes' => trim($this->managerNotes),
-        ]);
+        $this->record->update(['notes' => trim((string) $this->managerNotes)]);
 
-        Notification::make()
-            ->title('Parecer Salvo com Sucesso!')
-            ->success()
-            ->send();
+        Notification::make()->title('Parecer Salvo com Sucesso!')->success()->send();
     }
 
     public function homologarAuditoria(): void
     {
         $shift = $this->record;
-        $auditService = app(ShiftAuditService::class);
-        $diag = $auditService->diagnose($shift, (float) $shift->closing_balance_actual, $shift->terminal_settlements ?? []);
-
+        $diag = app(ShiftAuditService::class)->diagnose($shift, (float) $shift->closing_balance_actual, $shift->terminal_settlements ?? []);
         $hasRealBreakage = abs($diag['cash_difference']) >= 0.05 || abs($diag['electronic_difference']) >= 0.05;
 
-        // Se houver resíduo (ex: R$ -0,50), o gestor deve registrar justificativa no parecer
-        if ($hasRealBreakage && empty(trim($this->managerNotes ?? ''))) {
+        if ($hasRealBreakage && empty(trim((string) $this->managerNotes))) {
             Notification::make()
                 ->title('Parecer Obrigatório')
                 ->body('Existe uma divergência não zerada (R$ ' . number_format($diag['electronic_difference'], 2, ',', '.') . '). Registre a justificativa no Parecer do Gestor antes de homologar.')
@@ -101,10 +120,7 @@ class AuditCashShift extends Page
             $shift->update(['notes' => trim($this->managerNotes)]);
         }
 
-        $newStatus = $hasRealBreakage
-            ? \App\Enums\ShiftStatus::HOMOLOGATED
-            : \App\Enums\ShiftStatus::RECONCILED;
-
+        $newStatus = $hasRealBreakage ? \App\Enums\ShiftStatus::HOMOLOGATED : \App\Enums\ShiftStatus::RECONCILED;
         $operatorName = auth()->user()?->name ?? 'Gestor Administrativo';
 
         $shift->update([
@@ -122,10 +138,8 @@ class AuditCashShift extends Page
 
     public function retificarFormaPagamento(int $paymentId, int $novoMetodoId): void
     {
-        $auditService = app(ShiftAuditService::class);
         $operatorName = auth()->user()?->name ?? 'Gestor Administrativo';
-
-        $auditService->applyCorrection($this->record, $paymentId, $novoMetodoId, $operatorName);
+        app(ShiftAuditService::class)->applyCorrection($this->record, $paymentId, $novoMetodoId, $operatorName);
         $this->recalcularTurno();
 
         Notification::make()
@@ -147,8 +161,8 @@ class AuditCashShift extends Page
         $this->retroactiveNotes = null;
         $this->manualItems = [];
 
-        $matcher = app(\App\Services\Catalog\ProductCombinationMatcher::class);
-        $this->suggestedCombinations = $matcher->findMatches($this->retroactiveTargetAmount);
+        $this->suggestedCombinations = app(\App\Services\Catalog\ProductCombinationMatcher::class)
+            ->findMatches($this->retroactiveTargetAmount);
 
         $this->showRetroactiveModal = true;
     }
@@ -203,8 +217,7 @@ class AuditCashShift extends Page
         $acqTx = AcquirerTransaction::find($this->selectedAcqTxId);
         if (!$acqTx) return;
 
-        $action = app(\App\Services\Orders\Actions\CreateRetroactiveOrderAction::class);
-        $order = $action->execute(
+        $order = app(\App\Services\Orders\Actions\CreateRetroactiveOrderAction::class)->execute(
             $acqTx,
             $this->record,
             $this->manualItems,
@@ -215,11 +228,20 @@ class AuditCashShift extends Page
         $this->showRetroactiveModal = false;
         $this->recalcularTurno();
 
-        Notification::make()
+        $fiscalDetail = match ($order->fiscal_status) {
+            'authorized' => ' NFC-e autorizada na SEFAZ.',
+            'skipped'    => ' Emissão fiscal dispensada pela forma de pagamento.',
+            'pending'    => ' NFC-e pendente: item avulso sem produto/NCM vinculado.',
+            'failed'     => " Falha na NFC-e: {$order->fiscal_error}",
+            default      => '',
+        };
+
+        $notif = Notification::make()
             ->title('Venda Avulsa Criada e Conciliada!')
-            ->body("Pedido #{$order->id} gerado com sucesso para a transação NSU {$acqTx->nsu}.")
-            ->success()
-            ->send();
+            ->body("Pedido #{$order->id} gerado para NSU {$acqTx->nsu}.{$fiscalDetail}");
+
+        in_array($order->fiscal_status, ['pending', 'failed'], true) ? $notif->warning() : $notif->success();
+        $notif->send();
     }
 
     public function criarVendaDiversaRapida(): void
@@ -234,8 +256,11 @@ class AuditCashShift extends Page
         if (!$acqTx) return;
 
         $acqTx->update([
-            'status' => \App\Enums\AcquirerMatchStatus::IGNORED,
-            'notes'  => 'Ignorado na auditoria pelo gestor ' . (auth()->user()?->name ?? 'Administrador'),
+            'status'                => \App\Enums\AcquirerMatchStatus::IGNORED,
+            'reconciliation_source' => 'manual',
+            'reconciled_by_name'    => auth()->user()?->name ?? 'Administrador',
+            'reconciled_at'         => now(),
+            'notes'                 => 'Ignorado na auditoria pelo gestor ' . (auth()->user()?->name ?? 'Administrador'),
         ]);
 
         $this->recalcularTurno();
@@ -254,10 +279,8 @@ class AuditCashShift extends Page
             return;
         }
 
-        $cashierService = app(ShiftCashierService::class);
         $operatorName = auth()->user()?->name ?? 'Gestor';
-
-        $cashierService->recordTransaction([
+        app(ShiftCashierService::class)->recordTransaction([
             'type'        => 'out',
             'amount'      => $this->sangriaAmount,
             'description' => $this->sangriaReason ?: 'Ajuste de Auditoria - Saída não registrada no caixa',
@@ -265,7 +288,6 @@ class AuditCashShift extends Page
 
         $this->sangriaAmount = null;
         $this->sangriaReason = null;
-
         $this->recalcularTurno();
 
         Notification::make()
@@ -275,47 +297,90 @@ class AuditCashShift extends Page
             ->send();
     }
 
-    public function vincularPedidoExistente(int $acquirerTxId, int $orderId): void
+    public function abrirModalCandidatosPagamento(int $paymentId): void
     {
-        $acqTx = AcquirerTransaction::find($acquirerTxId);
-        $order = \App\Models\Order::find($orderId);
-        if (!$acqTx || !$order) return;
+        $payment = Payment::with('order')->find($paymentId);
+        if (!$payment) return;
 
-        DB::transaction(function () use ($acqTx, $order) {
-            if ($order->status === 'cancelled') {
-                $order->update([
-                    'status'         => 'closed',
-                    'payment_status' => 'paid',
-                    'cash_shift_id'  => $this->record->id
-                ]);
-                $order->items()->update(['status' => 'completed']);
-            }
+        $this->candidateTargetType = 'payment';
+        $this->candidateTargetId = $payment->id;
+        $this->showAllWindowCandidates = false;
+        $this->candidateTargetInfo = [
+            'order_id'      => $payment->order_id,
+            'customer_id'   => $payment->order?->customer_id,
+            'customer_name' => $payment->order?->customer_name ?? 'Consumidor Final',
+            'channel'       => $payment->order?->type ?? 'counter',
+            'method_name'   => $payment->method,
+            'amount'        => (float) $payment->amount,
+            'time'          => $payment->created_at?->format('d/m H:i') ?? '--:--',
+        ];
 
-            $payment = $order->payments()->first();
-            if (!$payment) {
-                $method = PaymentMethod::where('engine_type', 'pix_machine')->first() ?? PaymentMethod::first();
-                $payment = $order->payments()->create([
-                    'cash_shift_id'     => $this->record->id,
-                    'payment_method_id' => $method?->id,
-                    'method'            => $method?->name ?? 'Pix Máq',
-                    'amount'            => $acqTx->amount,
-                    'is_paid'           => true,
-                ]);
-            }
+        $this->carregarCandidatosParaAlvo();
+        $this->showCandidateModal = true;
+    }
 
-            $acqTx->update([
-                'order_id'   => $order->id,
-                'payment_id' => $payment->id,
-                'status'     => \App\Enums\AcquirerMatchStatus::MATCHED,
-                'notes'      => "Conciliado manualmente com Pedido #{$order->id} na auditoria."
-            ]);
-        });
+    public function abrirModalCandidatosPedido(int $orderId): void
+    {
+        $order = Order::find($orderId);
+        if (!$order) return;
 
+        $this->candidateTargetType = 'order';
+        $this->candidateTargetId = $order->id;
+        $this->showAllWindowCandidates = false;
+        $this->candidateTargetInfo = [
+            'order_id'      => $order->id,
+            'customer_id'   => $order->customer_id,
+            'customer_name' => $order->customer_name ?? 'Consumidor Final',
+            'channel'       => $order->type ?? 'counter',
+            'method_name'   => 'Sem Pagamento',
+            'amount'        => (float) $order->total,
+            'time'          => $order->created_at?->format('d/m H:i') ?? '--:--',
+        ];
+
+        $this->carregarCandidatosParaAlvo();
+        $this->showCandidateModal = true;
+    }
+
+    public function alternarFiltroCandidatos(): void
+    {
+        $this->showAllWindowCandidates = !$this->showAllWindowCandidates;
+        $this->carregarCandidatosParaAlvo();
+    }
+
+    protected function carregarCandidatosParaAlvo(): void
+    {
+        $this->candidateTransactions = app(PixBankReconciliationService::class)->findCandidatesForTarget(
+            $this->record,
+            (float) ($this->candidateTargetInfo['amount'] ?? 0),
+            $this->candidateTargetInfo['customer_id'] ?? null,
+            (string) ($this->candidateTargetInfo['customer_name'] ?? ''),
+            $this->showAllWindowCandidates
+        );
+    }
+
+    public function vincularCandidatoAoAlvo(string $source, int $sourceId): void
+    {
+        if (!$this->candidateTargetId || !$this->candidateTargetType) return;
+
+        $service = app(PixBankReconciliationService::class);
+        $operatorName = auth()->user()?->name ?? 'Gestor';
+
+        if ($this->candidateTargetType === 'payment') {
+            $payment = Payment::with('order')->find($this->candidateTargetId);
+            if (!$payment) return;
+            $msg = $service->linkCandidateToPayment($payment, $source, $sourceId, $operatorName);
+        } else {
+            $order = Order::find($this->candidateTargetId);
+            if (!$order) return;
+            $msg = $service->linkCandidateToOrder($this->record, $order, $source, $sourceId, $operatorName);
+        }
+
+        $this->showCandidateModal = false;
         $this->recalcularTurno();
 
         Notification::make()
-            ->title('Pedido Vinculado com Sucesso!')
-            ->body("A transação da maquininha foi associada ao Pedido #{$order->id}.")
+            ->title('Conciliação Realizada com Sucesso!')
+            ->body($msg)
             ->success()
             ->send();
     }
@@ -333,7 +398,7 @@ class AuditCashShift extends Page
                 $remainingPaid = (float) $order->payments()->sum('amount');
                 $orderTotal = (float) $order->total;
                 $order->update([
-                    'payment_status' => $remainingPaid >= ($orderTotal - 0.05) ? 'paid' : ($remainingPaid > 0 ? 'partial' : 'pending')
+                    'payment_status' => $remainingPaid >= ($orderTotal - 0.05) ? 'paid' : ($remainingPaid > 0 ? 'partial' : 'pending'),
                 ]);
             }
         });
@@ -350,15 +415,12 @@ class AuditCashShift extends Page
     protected function recalcularTurno(): void
     {
         $this->record->refresh();
-        $auditService = app(ShiftAuditService::class);
-        $cashierService = app(ShiftCashierService::class);
-
-        // O saldo esperado da gaveta física deve considerar estritamente numerário (dinheiro físico)
-        $expectedCash = (float) $cashierService->calculateExpectedCash($this->record);
-        $actualCash = (float) $this->record->closing_balance_actual;
-        $settlements = $this->record->terminal_settlements ?? [];
-
-        $diag = $auditService->diagnose($this->record, $actualCash, $settlements);
+        $expectedCash = (float) app(ShiftCashierService::class)->calculateExpectedCash($this->record);
+        $diag = app(ShiftAuditService::class)->diagnose(
+            $this->record,
+            (float) $this->record->closing_balance_actual,
+            $this->record->terminal_settlements ?? []
+        );
 
         $this->record->closing_balance_expected = $expectedCash;
         $this->record->apos_breakage_amount = $diag['electronic_difference'];
@@ -369,17 +431,14 @@ class AuditCashShift extends Page
     protected function getViewData(): array
     {
         $shift = $this->record;
-        $auditService = app(ShiftAuditService::class);
-        $actualCash = (float) $shift->closing_balance_actual;
         $settlements = $shift->terminal_settlements ?? [];
-
-        $diag = $auditService->diagnose($shift, $actualCash, $settlements);
+        $diag = app(ShiftAuditService::class)->diagnose($shift, (float) $shift->closing_balance_actual, $settlements);
 
         $hasSettlementsDeclared = !empty($settlements);
         $shiftDate = $shift->opened_at ? $shift->opened_at->toDateString() : null;
         $nextDate = $shiftDate ? Carbon::parse($shiftDate)->addDay()->toDateString() : null;
 
-        $hasAcquirerImported = $shiftDate 
+        $hasAcquirerImported = $shiftDate
             ? DB::table('acquirer_transactions')->whereBetween('transaction_date', [$shiftDate, $nextDate])->exists()
             : false;
 
@@ -391,71 +450,34 @@ class AuditCashShift extends Page
         $orderIds = $payments->pluck('order_id')->filter()->unique();
         $paymentIds = $payments->pluck('id')->filter()->unique();
 
-        $acqTransactions = DB::table('acquirer_transactions')
-            ->where(function($q) use ($paymentIds, $orderIds) {
-                $q->whereIn('payment_id', $paymentIds)
-                  ->orWhereIn('order_id', $orderIds);
+        $rawAcqTransactions = DB::table('acquirer_transactions')
+            ->where(function ($q) use ($paymentIds, $orderIds) {
+                $q->whereIn('payment_id', $paymentIds)->orWhereIn('order_id', $orderIds);
             })
-            ->get()
-            ->keyBy(fn($tx) => $tx->payment_id ?: "order_{$tx->order_id}");
+            ->get();
 
-        // 🚀 CONCILIAÇÃO BANCÁRIA INTELIGENTE: Consulta bank_date e created_at no turno noturno
-        $bankStatements = collect();
-        if ($shiftDate) {
-            $bankStatements = DB::table('bank_statements')
-                ->where(function($q) use ($shiftDate, $nextDate) {
-                    $q->whereBetween('bank_date', [$shiftDate, $nextDate])
-                      ->orWhereBetween(DB::raw('DATE(created_at)'), [$shiftDate, $nextDate]);
-                })
-                ->where(function($q) {
-                    $q->where('amount', '>', 0)
-                      ->orWhere('movement_type', 'credit');
-                })
-                ->whereNull('deleted_at')
-                ->get();
-        }
+        $acqTransactions = $rawAcqTransactions->keyBy(fn ($tx) => $tx->payment_id ?: "order_{$tx->order_id}");
+        $acqTransactionsByPayment = $rawAcqTransactions->filter(fn ($tx) => !empty($tx->payment_id))->groupBy('payment_id');
 
-        // 🚀 MAPEAMENTO 1x1 NO EXTRATO (Sem consumir o mesmo Pix duas vezes)
-        $pixMatches = collect();
-        $usedStatementIds = [];
-
-        // 🚀 CÁLCULO RESTRITO DE PIX DIRETO (CHAVE / API)
-        $directPixPayments = $payments->filter(function($p) {
+        $directPixPayments = $payments->filter(function ($p) {
             $engine = $p->paymentMethod?->engine_type;
             $engineVal = $engine instanceof \BackedEnum ? $engine->value : (string) $engine;
             $name = mb_strtolower($p->method ?? '');
-            
-            return in_array($engineVal, ['pix_static', 'bank_api']) 
-                || str_contains($name, 'chave') 
+
+            return in_array($engineVal, ['pix_static', 'bank_api'])
+                || str_contains($name, 'chave')
                 || (str_contains($name, 'pix') && !str_contains($name, 'máq') && !str_contains($name, 'maq'));
         });
 
-        $pixSystemTotal = (float) $directPixPayments->sum('amount');
-        $pixMatches = collect();
-        $usedStatementIds = [];
-
-        if ($bankStatements->isNotEmpty()) {
-            foreach ($directPixPayments as $p) {
-                $match = $bankStatements->first(function($stmt) use ($p, $usedStatementIds) {
-                    if (in_array($stmt->id, $usedStatementIds)) return false;
-                    return abs((float)$stmt->amount - (float)$p->amount) < 0.02;
-                });
-
-                if ($match) {
-                    $usedStatementIds[] = $match->id;
-                    $pixMatches->put($p->id, $match);
-                }
-            }
-        }
-
-        $pixStatementTotal = (float) $bankStatements->whereIn('id', $usedStatementIds)->sum('amount');
-        $pixDiff = round($pixStatementTotal - $pixSystemTotal, 2);
+        $pixData = app(PixBankReconciliationService::class)->matchShiftDirectPix($shift, $directPixPayments);
+        $bankStatements = $pixData['bankStatements'];
+        $pixMatches = $pixData['pixMatches'];
 
         $availableMethods = PaymentMethod::all();
-        $creditMethod = $availableMethods->first(fn($m) => str_contains(mb_strtolower($m->name), 'crédito') || str_contains(mb_strtolower($m->name), 'credito'));
-        $debitMethod  = $availableMethods->first(fn($m) => str_contains(mb_strtolower($m->name), 'débito') || str_contains(mb_strtolower($m->name), 'debito'));
-        $pixMaqMethod = $availableMethods->first(fn($m) => ($m->engine_type?->value ?? (string)$m->engine_type) === 'pix_machine');
-        $chavePixMethod = $availableMethods->first(fn($m) => ($m->engine_type?->value ?? (string)$m->engine_type) === 'pix_static' || str_contains(mb_strtolower($m->name), 'chave'));
+        $creditMethod = $availableMethods->first(fn ($m) => str_contains(mb_strtolower($m->name), 'crédito') || str_contains(mb_strtolower($m->name), 'credito'));
+        $debitMethod = $availableMethods->first(fn ($m) => str_contains(mb_strtolower($m->name), 'débito') || str_contains(mb_strtolower($m->name), 'debito'));
+        $pixMaqMethod = $availableMethods->first(fn ($m) => ($m->engine_type?->value ?? (string) $m->engine_type) === 'pix_machine');
+        $chavePixMethod = $availableMethods->first(fn ($m) => ($m->engine_type?->value ?? (string) $m->engine_type) === 'pix_static' || str_contains(mb_strtolower($m->name), 'chave'));
 
         $closedAt = $shift->closed_at ?? now();
         $orphanAcq = AcquirerTransaction::query()
@@ -463,7 +485,6 @@ class AuditCashShift extends Page
             ->where('status', \App\Enums\AcquirerMatchStatus::ORPHAN)
             ->get();
 
-        // 🚀 CONFLITOS DOCUMENTAIS & SUGESTÕES AUTOMÁTICAS
         $documentalConflicts = [];
         $paymentCountByOrder = $payments->groupBy('order_id');
 
@@ -472,7 +493,6 @@ class AuditCashShift extends Page
             $pMethodName = mb_strtolower($p->method ?? '');
             $isPixMaq = str_contains($pMethodName, 'máq') || str_contains($pMethodName, 'maq') || $p->paymentMethod?->engine_type === \App\Enums\PaymentEngineType::PIX_MACHINE;
 
-            // 1. Caso Paola: Marcado como Pix Máq, não está na máquina, mas consta no Extrato Bancário
             if (!$acq && $isPixMaq && $pixMatches->has($p->id)) {
                 $stmt = $pixMatches->get($p->id);
                 $documentalConflicts[$p->id] = [
@@ -488,7 +508,6 @@ class AuditCashShift extends Page
                 continue;
             }
 
-            // 2. Transações de maquininha com divergência de modalidade (ex: Crédito lançado como Débito)
             if ($acq) {
                 $statusVal = $acq->status instanceof \BackedEnum ? $acq->status->value : $acq->status;
                 if ($statusVal === 'matched') {
@@ -520,45 +539,36 @@ class AuditCashShift extends Page
             }
         }
 
-        // Busca pedidos do turno cancelados que batem com transações órfãs (ex: Diego #2282)
-        $potentialOrphanMatches = collect();
-        if ($orphanAcq->isNotEmpty()) {
-            $orphanAmounts = $orphanAcq->pluck('amount')->unique();
-            $potentialOrders = \App\Models\Order::where('cash_shift_id', $shift->id)
-                ->whereIn('total', $orphanAmounts)
-                ->get()
-                ->keyBy(fn($o) => (string) number_format((float) $o->total, 2));
-
-            foreach ($orphanAcq as $tx) {
-                $key = (string) number_format((float) $tx->amount, 2);
-                if ($potentialOrders->has($key)) {
-                    $potentialOrphanMatches->put($tx->id, $potentialOrders->get($key));
-                }
-            }
-        }
+        $unpaidOrders = Order::with('items')
+            ->where('cash_shift_id', $shift->id)
+            ->where('total', '>', 1.00)
+            ->whereDoesntHave('payments', fn ($q) => $q->where('is_paid', true)->where('amount', '>', 0))
+            ->orderBy('created_at', 'asc')
+            ->get();
 
         return [
-            'shift'                  => $shift,
-            'diag'                   => $diag,
-            'payments'               => $payments,
-            'acqTransactions'        => $acqTransactions,
-            'documentalConflicts'    => $documentalConflicts,
-            'orphanAcq'              => $orphanAcq,
-            'potentialOrphanMatches' => $potentialOrphanMatches,
-            'hasSettlementsDeclared' => $hasSettlementsDeclared,
-            'hasAcquirerImported'    => $hasAcquirerImported,
-            'bankStatements'         => $bankStatements,
-            'pixMatches'             => $pixMatches,
-            'pixSystemTotal'         => $pixSystemTotal,
-            'pixStatementTotal'      => $pixStatementTotal,
-            'pixDiff'                => $pixDiff,
-            'directPixPayments'      => $directPixPayments,
-            'availableMethods'       => $availableMethods,
-            'creditMethod'           => $creditMethod,
-            'debitMethod'            => $debitMethod,
-            'chavePixMethod'         => $chavePixMethod,
-            'pixMaqMethod'           => $pixMaqMethod,
-            'paymentCountByOrder'    => $paymentCountByOrder,
+            'shift'                    => $shift,
+            'diag'                     => $diag,
+            'payments'                 => $payments,
+            'acqTransactions'          => $acqTransactions,
+            'acqTransactionsByPayment' => $acqTransactionsByPayment,
+            'documentalConflicts'      => $documentalConflicts,
+            'orphanAcq'                => $orphanAcq,
+            'unpaidOrders'             => $unpaidOrders,
+            'hasSettlementsDeclared'   => $hasSettlementsDeclared,
+            'hasAcquirerImported'      => $hasAcquirerImported,
+            'bankStatements'           => $bankStatements,
+            'pixMatches'               => $pixMatches,
+            'pixSystemTotal'           => $pixData['pixSystemTotal'],
+            'pixStatementTotal'        => $pixData['pixStatementTotal'],
+            'pixDiff'                  => $pixData['pixDiff'],
+            'directPixPayments'        => $directPixPayments,
+            'availableMethods'         => $availableMethods,
+            'creditMethod'             => $creditMethod,
+            'debitMethod'              => $debitMethod,
+            'chavePixMethod'           => $chavePixMethod,
+            'pixMaqMethod'             => $pixMaqMethod,
+            'paymentCountByOrder'      => $paymentCountByOrder,
         ];
     }
 }

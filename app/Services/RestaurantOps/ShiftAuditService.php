@@ -28,17 +28,54 @@ class ShiftAuditService
         $expectedCash = $this->cashierService->calculateExpectedCash($shift);
         $cashDiff = round($actualCash - $expectedCash, 2);
 
-        // 1. Apuração eletrônica declarada nas maquininhas
+        // 1. Apuração eletrônica: prioriza relatório importado da adquirente; caso contrário, usa fitas digitadas no fecho
         $declaredCards = 0.0;
         $declaredPix = 0.0;
         $declaredVoucher = 0.0;
+        $electronicSource = 'none';
 
-        foreach ($terminalSettlements as $tid => $term) {
-            $declaredCards   += (float) ($term['cards'] ?? 0);
-            $declaredPix     += (float) ($term['pix'] ?? 0);
-            $declaredVoucher += (float) ($term['voucher'] ?? 0);
+        $shiftPaymentIds = Payment::where('cash_shift_id', $shift->id)->pluck('id');
+        $shiftOrderIds = Payment::where('cash_shift_id', $shift->id)->pluck('order_id')->filter()->unique();
+        $windowStart = $shift->opened_at ? $shift->opened_at->copy()->subMinutes(30) : now()->startOfDay();
+        $windowEnd = ($shift->closed_at ?? now())->copy()->addMinutes(30);
+
+        $acquirerTxs = \App\Models\AcquirerTransaction::query()
+            ->where(function ($q) use ($shiftPaymentIds, $shiftOrderIds, $windowStart, $windowEnd) {
+                if ($shiftPaymentIds->isNotEmpty()) {
+                    $q->whereIn('payment_id', $shiftPaymentIds);
+                }
+                if ($shiftOrderIds->isNotEmpty()) {
+                    $q->orWhereIn('order_id', $shiftOrderIds);
+                }
+                $q->orWhereBetween('transaction_date', [$windowStart, $windowEnd]);
+            })
+            ->where('status', '!=', \App\Enums\AcquirerMatchStatus::IGNORED->value)
+            ->get()
+            ->unique('id');
+
+        if ($acquirerTxs->isNotEmpty()) {
+            $electronicSource = 'acquirer_report';
+            foreach ($acquirerTxs as $tx) {
+                $amt = (float) ($tx->gross_amount ?: ($tx->amount ?? 0));
+                $mod = mb_strtolower((string) ($tx->modality ?? ''));
+
+                if (str_contains($mod, 'pix')) {
+                    $declaredPix += $amt;
+                } elseif (str_contains($mod, 'voucher') || str_contains($mod, 'alimenta') || str_contains($mod, 'refei')) {
+                    $declaredVoucher += $amt;
+                } else {
+                    $declaredCards += $amt;
+                }
+            }
+        } elseif (!empty($terminalSettlements)) {
+            $electronicSource = 'terminal_settlements';
+            foreach ($terminalSettlements as $tid => $term) {
+                $declaredCards   += (float) ($term['cards'] ?? 0);
+                $declaredPix     += (float) ($term['pix'] ?? 0);
+                $declaredVoucher += (float) ($term['voucher'] ?? 0);
+            }
         }
-        $declaredElectronicTotal = $declaredCards + $declaredPix + $declaredVoucher;
+        $declaredElectronicTotal = round($declaredCards + $declaredPix + $declaredVoucher, 2);
 
         // 2. Apuração eletrônica registrada nos pedidos do sistema
         $payments = Payment::with('paymentMethod')
@@ -100,12 +137,15 @@ class ShiftAuditService
         // Se tudo confere perfeitamente
         if (!$hasDiscrepancy) {
             return [
-                'has_discrepancy'       => false,
-                'difference'            => 0.00,
-                'cash_difference'       => 0.00,
-                'electronic_difference' => 0.00,
-                'suggestion'            => null,
-                'suspects'              => [],
+                'has_discrepancy'           => false,
+                'difference'                => 0.00,
+                'cash_difference'           => 0.00,
+                'electronic_difference'     => 0.00,
+                'sys_electronic_total'      => round($sysElectronicTotal, 2),
+                'declared_electronic_total' => $declaredElectronicTotal,
+                'electronic_source'         => $electronicSource,
+                'suggestion'                => null,
+                'suspects'                  => [],
             ];
         }
 
@@ -133,15 +173,18 @@ class ShiftAuditService
         }
 
         return [
-            'has_discrepancy'       => true,
-            'difference'            => $cashDiff != 0 ? $cashDiff : $electronicDiff,
-            'cash_difference'       => $cashDiff,
-            'electronic_difference' => $electronicDiff,
-            'cards_difference'      => $cardsDiff,
-            'pix_difference'        => $pixDiff,
-            'voucher_difference'    => $voucherDiff,
-            'suggestion'            => $suggestion,
-            'suspects'              => $suspects,
+            'has_discrepancy'           => true,
+            'difference'                => $cashDiff != 0 ? $cashDiff : $electronicDiff,
+            'cash_difference'           => $cashDiff,
+            'electronic_difference'     => $electronicDiff,
+            'cards_difference'          => $cardsDiff,
+            'pix_difference'            => $pixDiff,
+            'voucher_difference'        => $voucherDiff,
+            'sys_electronic_total'      => round($sysElectronicTotal, 2),
+            'declared_electronic_total' => $declaredElectronicTotal,
+            'electronic_source'         => $electronicSource,
+            'suggestion'                => $suggestion,
+            'suspects'                  => $suspects,
         ];
     }
 

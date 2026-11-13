@@ -215,24 +215,78 @@ class ShiftCashierService
         return $shift;
     }
 
-    public function recordTransaction(array $data, string $operatorName): Transaction
-    {
-        $shift = CashShift::where('status', 'open')->first();
+    public function recordTransaction(
+        array $data,
+        string $operatorName,
+        ?int $bankAccountId = null,
+        ?int $cashShiftId = null
+    ): Transaction {
+        $shift = $cashShiftId
+            ? CashShift::find($cashShiftId)
+            : CashShift::where('status', 'open')->latest('id')->first();
+
         if (!$shift) {
-            throw new \Exception('Nenhum turno aberto.');
+            throw new \Exception('Nenhum turno encontrado para registrar a movimentação.');
         }
 
+        $isClosedShift = ($shift->status instanceof \BackedEnum ? $shift->status->value : $shift->status) !== 'open';
         $typeLabel = $data['type'] === 'out' ? 'Sangria' : 'Suprimento';
 
-        return Transaction::create([
-            'cash_shift_id'   => $shift->id,
-            'bank_account_id' => $shift->bank_account_id,
-            'type'            => $data['type'],
-            'category'        => $data['type'] === 'out' ? 'cash_out' : 'cash_in',
-            'amount'          => (float) $data['amount'],
-            'description'     => $data['description'] ?? "{$typeLabel} manual",
-            'operator_name'   => $operatorName,
-            'transaction_date'=> now(),
-        ]);
+        return DB::transaction(function () use ($shift, $data, $operatorName, $bankAccountId, $isClosedShift, $typeLabel) {
+            $tx = Transaction::create([
+                'cash_shift_id'    => $shift->id,
+                'bank_account_id'  => $bankAccountId ?? $shift->bank_account_id,
+                'type'             => $data['type'],
+                'category'         => $data['type'] === 'out' ? 'cash_out' : 'cash_in',
+                'amount'           => (float) $data['amount'],
+                'description'      => $data['description'] ?? "{$typeLabel} manual",
+                'operator_name'    => $operatorName,
+                'transaction_date' => $isClosedShift ? ($shift->closed_at ?? $shift->opened_at ?? now()) : now(),
+            ]);
+
+            // Se for lançamento retroativo em turno já fechado, recalcula o esperado e reconcilia a quebra no Cofre
+            if ($isClosedShift) {
+                $newExpected = $this->calculateExpectedCash($shift);
+                $actual = (float) ($shift->closing_balance_actual ?? 0);
+                $newDiff = round($actual - $newExpected, 2);
+
+                $shift->updateQuietly([
+                    'closing_balance_expected' => $newExpected,
+                    'cash_breakage_amount'     => $newDiff,
+                    'has_breakage'             => abs($newDiff) >= 0.05 || abs((float) ($shift->apos_breakage_amount ?? 0)) >= 0.05,
+                ]);
+
+                // Atualiza ou remove a transação automática de quebra de caixa do Cofre (#1) deste turno
+                $breakageTx = Transaction::whereNull('cash_shift_id')
+                    ->where('bank_account_id', 1)
+                    ->where('description', 'like', "Quebra de Caixa (%) - Turno #{$shift->id}")
+                    ->first();
+
+                if (abs($newDiff) < 0.02) {
+                    $breakageTx?->delete();
+                } else {
+                    $isShortage = $newDiff < 0;
+                    $label = $isShortage ? 'Falta' : 'Sobra';
+                    $payload = [
+                        'bank_account_id'  => 1,
+                        'cash_shift_id'    => null,
+                        'type'             => $isShortage ? 'out' : 'in',
+                        'category'         => $isShortage ? 'bleed' : 'supply',
+                        'amount'           => abs($newDiff),
+                        'description'      => "Quebra de Caixa ({$label}) - Turno #{$shift->id}",
+                        'operator_name'    => $operatorName,
+                        'transaction_date' => $shift->closed_at ?? now(),
+                    ];
+
+                    if ($breakageTx) {
+                        $breakageTx->update($payload);
+                    } else {
+                        Transaction::create($payload);
+                    }
+                }
+            }
+
+            return $tx;
+        });
     }
 }

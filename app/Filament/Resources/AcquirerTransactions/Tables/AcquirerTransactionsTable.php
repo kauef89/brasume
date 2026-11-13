@@ -74,12 +74,23 @@ class AcquirerTransactionsTable
                     ->searchable(),
 
                 TextColumn::make('status')
-                    ->label('Status')
-                    ->badge(),
+                    ->label('Status / Origem')
+                    ->badge()
+                    ->description(function (AcquirerTransaction $r): ?string {
+                        if (!in_array($r->status, [AcquirerMatchStatus::MATCHED, AcquirerMatchStatus::IGNORED], true)) {
+                            return null;
+                        }
+                        $src = $r->reconciliation_source === 'manual'
+                            ? '👤 Manual' . ($r->reconciled_by_name ? " • {$r->reconciled_by_name}" : '')
+                            : '🤖 Automática';
+                        $dt = $r->reconciled_at ? ' (' . $r->reconciled_at->format('d/m H:i') . ')' : '';
+                        return $src . $dt;
+                    }),
 
                 TextColumn::make('order_id')
-                    ->label('Pedido')
+                    ->label('Pedido Vinculado')
                     ->formatStateUsing(fn (?int $state) => $state ? "#{$state}" : '-')
+                    ->description(fn (AcquirerTransaction $r) => $r->order?->customer_name ?: null)
                     ->url(fn (AcquirerTransaction $r) => $r->order_id ? OrderResource::getUrl('edit', ['record' => $r->order_id]) : null)
                     ->openUrlInNewTab()
                     ->color('info')
@@ -356,6 +367,27 @@ class AcquirerTransactionsTable
                         Notification::make()
                             ->title('Transação marcada como ignorada.')
                             ->info()
+                            ->send();
+                    }),
+                // 🚀 AÇÃO 5: DESFAZER CONCILIAÇÃO / VÍNCULO
+                Action::make('unlink_match')
+                    ->label('Desfazer')
+                    ->icon('heroicon-m-arrow-uturn-left')
+                    ->color('danger')
+                    ->outlined()
+                    ->requiresConfirmation()
+                    ->visible(fn (AcquirerTransaction $r) => in_array($r->status, [AcquirerMatchStatus::MATCHED, AcquirerMatchStatus::IGNORED], true))
+                    ->modalHeading('Desfazer Conciliação da Maquininha')
+                    ->modalDescription('A transação voltará para status Órfã, o vínculo com o pedido será removido e o turno correspondente será recalculado. Confirmar?')
+                    ->modalSubmitActionLabel('Sim, Desfazer')
+                    ->action(function (AcquirerTransaction $record) {
+                        $engine = new AcquirerReconciliationEngine();
+                        $engine->unlink($record);
+
+                        Notification::make()
+                            ->title('Conciliação da Maquininha Desfeita!')
+                            ->body("NSU {$record->nsu} retornou para Órfã.")
+                            ->warning()
                             ->send();
                     }),
             ]);

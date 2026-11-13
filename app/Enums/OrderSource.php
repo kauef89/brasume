@@ -13,6 +13,7 @@ enum OrderSource: string implements HasLabel, HasIcon
     case CASHIER = 'cashier';
     case TEAM_APP = 'team_app';
     case KIOSK = 'kiosk';
+    case BACKOFFICE = 'backoffice';
 
     public function getLabel(): ?string
     {
@@ -23,6 +24,7 @@ enum OrderSource: string implements HasLabel, HasIcon
             self::CASHIER => 'Caixa Fixo',
             self::TEAM_APP => 'App Garçom',
             self::KIOSK => 'Totem de Autoatendimento',
+            self::BACKOFFICE => 'Backoffice / Auditoria',
         };
     }
 
@@ -33,6 +35,7 @@ enum OrderSource: string implements HasLabel, HasIcon
             self::POS_APP, self::CASHIER => 'heroicon-o-computer-desktop',
             self::TEAM_APP => 'heroicon-o-clipboard-document-list',
             self::KIOSK => 'heroicon-o-server',
+            self::BACKOFFICE => 'heroicon-o-shield-check',
         };
     }
 }

@@ -155,7 +155,9 @@ class KitchenTicket
         $this->blueprint[] = ['cmd' => 'align', 'val' => 'ct'];
 
         $headerText = 'CLIENTE';
-        if ($this->order->source === 'team_app' && !empty($this->order->customer_name)) {
+        if ($this->order->type === 'counter') {
+            $headerText = 'BALCAO';
+        } elseif ($this->order->source === 'team_app' && !empty($this->order->customer_name)) {
             $headerText = $this->order->customer_name;
         } elseif ($this->order->type === 'table') {
             $headerText = 'MESA ' . ($this->order->table_number ?: '?');

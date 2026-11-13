@@ -34,6 +34,7 @@ class BankStatement extends Model
     protected $casts = [
         "bank_date" => "date",
         "amount" => "decimal:2",
+        "reconciled_at" => "datetime",
     ];
 
     // ==========================================
@@ -67,6 +68,21 @@ class BankStatement extends Model
     {
         if (!$this->conciliable) {
             return "-"; // Se não estiver conciliado, retorna um tracinho
+        }
+
+        // Se conciliado com Pagamento ou Pedido do PDV
+        if ($this->conciliable_type === \App\Models\Payment::class) {
+            $order = $this->conciliable->order;
+            if ($order) {
+                $cust = $order->customer_name ?: 'Consumidor';
+                return "Pedido #{$order->id} • {$cust}";
+            }
+            return "Pagamento #{$this->conciliable_id}";
+        }
+
+        if ($this->conciliable_type === \App\Models\Order::class) {
+            $cust = $this->conciliable->customer_name ?: 'Consumidor';
+            return "Pedido #{$this->conciliable_id} • {$cust}";
         }
 
         // Se pagou uma conta avulsa, pega o nome do fornecedor (Sem o trade_name antigo!)

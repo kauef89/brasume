@@ -241,9 +241,8 @@ class OrderPaymentService
                     ->where('status', '!=', 'cancelled')
                     ->update(['paid_qty' => DB::raw('quantity')]);
 
-                // O balcão pago permanece em 'preparing' (ou status atual de produção).
-                // Ele NUNCA é fechado automaticamente aqui.
-                if ($order->type === 'table') {
+                // Mesa e Balcão quitados encerram imediatamente como 'closed'
+                if (in_array($order->type, ['table', 'counter'], true)) {
                     $order->status = 'closed';
                     $order->closed_at = now();
                 } elseif (in_array($order->status, ['pending', 'pending_payment'])) {
@@ -323,7 +322,7 @@ class OrderPaymentService
     public function resolveOrderCompletion(Order $order): bool
     {
         $shouldClose = ($order->type === 'delivery' && in_array($order->status, ['dispatched', 'delivered']) && $order->payment_status === 'paid')
-            || ($order->type === 'table' && $order->payment_status === 'paid');
+            || (in_array($order->type, ['table', 'counter'], true) && $order->payment_status === 'paid');
 
         if (!$shouldClose) {
             return false;
