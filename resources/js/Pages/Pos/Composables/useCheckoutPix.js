@@ -17,7 +17,17 @@ export function useCheckoutPix(order, handlePixApprovedCallback, toast) {
         }
     };
 
+    const notifiedPixOrders = new Set();
+
     const onPixApprovedByWebhook = () => {
+        const currentOrderId = String(order.value?.id || '');
+        if (currentOrderId && notifiedPixOrders.has(currentOrderId)) {
+            return;
+        }
+        if (currentOrderId) {
+            notifiedPixOrders.add(currentOrderId);
+        }
+
         showPixPanel.value = false;
         toast.add({ severity: 'success', summary: 'PIX Confirmado!', detail: 'A transferência foi reconhecida pelo banco.', life: 5000 });
         if (typeof handlePixApprovedCallback === 'function') handlePixApprovedCallback();
@@ -25,7 +35,12 @@ export function useCheckoutPix(order, handlePixApprovedCallback, toast) {
     };
 
     const handleWebSocketsPixEvent = (e) => {
-        if (String(e.detail?.orderId) === String(order.value?.id)) onPixApprovedByWebhook();
+        const isSameOrder = String(e.detail?.orderId) === String(order.value?.id);
+        const isPixContext = e.detail?.isPixWebhook === true || showPixPanel.value === true;
+
+        if (isSameOrder && isPixContext) {
+            onPixApprovedByWebhook();
+        }
     };
 
     onMounted(() => {

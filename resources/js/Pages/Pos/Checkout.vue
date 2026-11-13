@@ -6,7 +6,7 @@
         <div class="flex items-center gap-2 shrink-0 mr-2">
             <PosTeleportButton
                 icon="pi pi-print"
-                label="Imprimir Conta"
+                :label="isPartialSelection ? 'Imprimir Parcial' : 'Imprimir Conta'"
                 color="surface"
                 @click="printBill"
             />
@@ -587,8 +587,58 @@ const handleConfirmAction = (authData) => {
     }
 };
 
+const selectedItemsForPrint = computed(() => {
+    return (reactiveItems.value || [])
+        .filter(i => (Number(i.selected_parts) || 0) > 0)
+        .map(i => {
+            const qty = Number(i.selected_parts) / (Number(i.parts_per_unit) || 1);
+            const unitPrice = Number(i.effective_unit_price || i.unit_price || 0);
+            return {
+                id: i.id,
+                qty: Math.round(qty * 10000) / 10000,
+                unit_price: unitPrice,
+                amount: Math.round(qty * unitPrice * 100) / 100,
+                is_combo_child: Boolean(i.is_combo_child)
+            };
+        });
+});
+
+const isPartialSelection = computed(() => {
+    if (selectedItemsForPrint.value.length === 0) return false;
+
+    const hasPriorPayments = totalAlreadyPaid.value > 0.01;
+    const hasSelectedComboChild = (reactiveItems.value || []).some(
+        i => i.is_combo_child && (Number(i.selected_parts) || 0) > 0
+    );
+    const unpaidParents = (reactiveItems.value || []).filter(
+        i => !i.parent_item_id && (Number(i.available_parts) || 0) > 0
+    );
+    const hasUnselectedOrSplitParent = unpaidParents.some(
+        i => (Number(i.selected_parts) || 0) < (Number(i.available_parts) || 0)
+    );
+
+    return hasPriorPayments || hasSelectedComboChild || hasUnselectedOrSplitParent;
+});
+
 const printBill = () => {
-    router.post(route('operations.print-conference', liveOrder.value.id), {}, { preserveScroll: true, preserveState: true });
+    const payload = isPartialSelection.value
+        ? {
+            partial: true,
+            items: selectedItemsForPrint.value,
+            totals: {
+                subtotal: Number(selectedItemsValue.value.toFixed(2)),
+                delivery_fee: Number(effectiveDeliveryFee.value.toFixed(2)),
+                service_fee: Number(effectiveServiceFee.value.toFixed(2)),
+                discount: Number((effectiveDiscount.value + appliedCheckoutDiscount.value).toFixed(2)),
+                total: Number(intendedPaymentTotal.value.toFixed(2))
+            }
+        }
+        : {};
+
+    router.post(route('operations.print-conference', liveOrder.value.id), payload, {
+        preserveScroll: true,
+        preserveState: true
+    });
 };
 
 const openNewCustomerModal = (initialName = "") => {

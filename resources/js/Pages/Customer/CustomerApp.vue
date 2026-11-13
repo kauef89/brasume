@@ -220,8 +220,8 @@ const { backgroundStyle } = useDynamicBackground();
 const { setMode } = useTheme();
 
 useAppLifecycleSync({
-    only: ['customerOrder', 'catalog', 'companySettings'],
-    minSleepSeconds: 15
+    only: ['myActiveOrders', 'myHistory', 'customer', 'storeStatus', 'companySettings'],
+    minSleepSeconds: 3
 });
 
 const cartContext = useCart();
@@ -372,6 +372,17 @@ useTenantEcho().listenChannel('shift', '.shift.closed', () => {
 const menuSearchQuery = ref('');
 const menuActiveCategory = ref(null);
 const menuView = ref('catalog');
+
+// 🚀 SCROLL PARA O TOPO AO PESQUISAR
+watch(menuSearchQuery, (newQuery, oldQuery) => {
+    if (newQuery !== oldQuery) {
+        // Usa um pequeno delay para garantir que o DOM já filtrou os itens
+        setTimeout(() => {
+            const scrollEl = document.querySelector('.hide-scrollbar');
+            if (scrollEl) scrollEl.scrollTo({ top: 0, behavior: 'smooth' });
+        }, 50);
+    }
+});
 const activeMenuCategories = ref([]);
 
 const productTotal = ref(0);

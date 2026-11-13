@@ -48,14 +48,13 @@ Route::middleware([
         require base_path('routes/tenant/shift.php');
     });
 
+    Route::post('/customer/addresses/{address}/location', [\App\Http\Controllers\Tenant\Customers\CustomerController::class, 'updateAddressLocation'])->name('customer.addresses.update-location');
+
     // 🚀 Rotas do ERP que exigem Turno Aberto com Ponto Batido
     Route::middleware(["auth:team,web", EnsureShiftAttendance::class])->group(function () {
         require base_path('routes/tenant/settings.php');
         require base_path('routes/tenant/operations.php');
+        Route::post('/operations/orders/{order}/discount', [\App\Http\Controllers\Tenant\Orders\OrderLogisticsController::class, 'applyDiscount'])->name('operations.orders.apply-discount');
+        Route::post('/operations/orders/{order}/remove-discount', [\App\Http\Controllers\Tenant\Orders\OrderLogisticsController::class, 'removeDiscount'])->name('operations.orders.remove-discount');
     });
 });
-
-Route::post('/customer/addresses/{address}/location', [\App\Http\Controllers\Tenant\Customers\CustomerController::class, 'updateAddressLocation'])->name('customer.addresses.update-location');
-
-Route::post('/operations/orders/{order}/discount', [\App\Http\Controllers\Tenant\Orders\OrderLogisticsController::class, 'applyDiscount'])->name('operations.orders.apply-discount');
-Route::post('/operations/orders/{order}/remove-discount', [\App\Http\Controllers\Tenant\Orders\OrderLogisticsController::class, 'removeDiscount'])->name('operations.orders.remove-discount');

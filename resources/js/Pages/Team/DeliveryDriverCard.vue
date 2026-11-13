@@ -197,7 +197,12 @@ const navigationUrl = computed(() => {
             }
         }
     }
-    const query = `${formattedAddress.value.main}${neighborhood.value ? ', ' + neighborhood.value : ''}`;
+    
+    const settings = page.props.companySettings || {};
+    const cityStr = settings.city ? `, ${settings.city}` : '';
+    const stateStr = settings.state ? ` - ${settings.state}` : '';
+    
+    const query = `${formattedAddress.value.main}${neighborhood.value ? ', ' + neighborhood.value : ''}${cityStr}${stateStr}`;
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 });
 

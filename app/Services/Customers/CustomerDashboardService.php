@@ -66,6 +66,8 @@ class CustomerDashboardService
                     'no_number'       => (bool) $a->no_number,
                     'complement'      => $a->complement,
                     'reference'       => $a->reference,
+                    'location'        => $a->location,
+                    'coordinates'     => $a->coordinates,
                     'full_address'    => trim(($a->street?->name ?? 'Rua') . ", " . ($a->number ?? 'S/N') . " - " . ($a->neighborhood?->name ?? 'Bairro')),
                     'delivery_fee'    => (float) ($a->delivery_fee ?? $a->neighborhood?->delivery_fee ?? 0)
                 ])

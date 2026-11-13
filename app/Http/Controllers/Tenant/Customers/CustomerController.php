@@ -204,10 +204,15 @@ class CustomerController extends Controller
             'street'          => 'required|string',
             'street_id'       => 'nullable|integer',
             'number'          => 'required|string',
+            'noNumber'        => 'nullable|boolean',
+            'no_number'       => 'nullable|boolean',
             'neighborhood'    => 'required|string',
             'neighborhood_id' => 'nullable|integer',
+            'zipcode'         => 'nullable|string|max:15',
             'complement'      => 'nullable|string',
+            'reference'       => 'nullable|string|max:255',
             'nickname'        => 'nullable|string',
+            'location'        => 'nullable|string|max:500',
         ]);
 
         try {

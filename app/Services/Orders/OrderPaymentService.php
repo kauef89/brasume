@@ -259,12 +259,14 @@ class OrderPaymentService
         });
 
         // Resolve liberação de mesas (sem auto-split) e verificação de entrega de delivery
-        $this->resolveOrderCompletion($order);
+        $closedAndBroadcasted = $this->resolveOrderCompletion($order);
 
-        try {
-            broadcast(new OrderUpdated($order));
-        } catch (\Throwable $e) {
-            Log::error('🚨 [WebSockets] Falha ao transmitir OrderUpdated #'.$order->id.': '.$e->getMessage());
+        if (!$closedAndBroadcasted) {
+            try {
+                broadcast(new OrderUpdated($order));
+            } catch (\Throwable $e) {
+                Log::error('🚨 [WebSockets] Falha ao transmitir OrderUpdated #'.$order->id.': '.$e->getMessage());
+            }
         }
     }
 
@@ -318,13 +320,13 @@ class OrderPaymentService
     /**
      * Conclui pedidos e libera mesas físicas com integridade de layout.
      */
-    public function resolveOrderCompletion(Order $order): void
+    public function resolveOrderCompletion(Order $order): bool
     {
         $shouldClose = ($order->type === 'delivery' && in_array($order->status, ['dispatched', 'delivered']) && $order->payment_status === 'paid')
             || ($order->type === 'table' && $order->payment_status === 'paid');
 
         if (!$shouldClose) {
-            return;
+            return false;
         }
 
         $order->status = 'closed';
@@ -359,5 +361,7 @@ class OrderPaymentService
         }
 
         broadcast(new OrderUpdated($order->fresh()));
+
+        return true;
     }
 }

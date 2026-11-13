@@ -72,7 +72,7 @@ class OrderPrintService
         $this->dispatcher->dispatch($printer, $document);
     }
 
-    public function printConferenceBill(Order $order): void
+    public function printConferenceBill(Order $order, ?array $partialPayload = null): void
     {
         $printer = $this->resolveCashierPrinter();
 
@@ -83,8 +83,79 @@ class OrderPrintService
             'payments.paymentMethod'
         ]);
 
+        $partialData = null;
+
+        if ($partialPayload !== null && !empty($partialPayload['items'])) {
+            $selectedIds = collect($partialPayload['items'])->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $clonedItems = collect();
+
+            foreach ($partialPayload['items'] as $reqItem) {
+                $dbItem = $order->items->firstWhere('id', (int) $reqItem['id']);
+                if (!$dbItem || $dbItem->status === 'cancelled') {
+                    continue;
+                }
+
+                $origQty = max(0.0001, (float) ($dbItem->quantity ?: 1));
+                $selQty = (float) ($reqItem['qty'] ?? $origQty);
+                $ratio = $selQty / $origQty;
+
+                $clone = clone $dbItem;
+                $clone->setRelations($dbItem->getRelations());
+                $clone->quantity = $selQty;
+                $clone->unit_price = isset($reqItem['unit_price']) ? (float) $reqItem['unit_price'] : (float) $dbItem->unit_price;
+                $clone->total_price = isset($reqItem['amount']) ? (float) $reqItem['amount'] : round($clone->unit_price * $selQty, 2);
+
+                if (!empty($reqItem['is_combo_child'])) {
+                    $clone->parent_item_id = null;
+                }
+
+                if ($dbItem->relationLoaded('modifiers') && $dbItem->modifiers) {
+                    $scaledMods = $dbItem->modifiers->map(function ($mod) use ($ratio) {
+                        $mClone = clone $mod;
+                        $mClone->quantity = round(((float) ($mod->quantity ?: 1)) * $ratio, 4);
+                        return $mClone;
+                    });
+                    $clone->setRelation('modifiers', $scaledMods);
+                }
+
+                $clonedItems->push($clone);
+
+                // Se for item pai de combo, inclui também seus subitens proporcionalmente
+                if (empty($reqItem['is_combo_child'])) {
+                    $children = $order->items->filter(
+                        fn ($c) => (int) $c->parent_item_id === (int) $dbItem->id
+                            && $c->status !== 'cancelled'
+                            && !in_array((int) $c->id, $selectedIds, true)
+                    );
+
+                    foreach ($children as $child) {
+                        $cClone = clone $child;
+                        $cClone->setRelations($child->getRelations());
+                        $cClone->quantity = round(((float) ($child->quantity ?: 1)) * $ratio, 4);
+                        $cClone->total_price = round(((float) ($child->total_price ?: 0)) * $ratio, 2);
+
+                        if ($child->relationLoaded('modifiers') && $child->modifiers) {
+                            $scaledChildMods = $child->modifiers->map(function ($mod) use ($ratio) {
+                                $mClone = clone $mod;
+                                $mClone->quantity = round(((float) ($mod->quantity ?: 1)) * $ratio, 4);
+                                return $mClone;
+                            });
+                            $cClone->setRelation('modifiers', $scaledChildMods);
+                        }
+
+                        $clonedItems->push($cClone);
+                    }
+                }
+            }
+
+            $partialData = [
+                'items'  => $clonedItems,
+                'totals' => $partialPayload['totals'] ?? [],
+            ];
+        }
+
         $settings = CompanySetting::getCached()?->toArray() ?? [];
-        $document = new ConferenceBill($order, $settings);
+        $document = new ConferenceBill($order, $settings, $partialData);
 
         $this->dispatcher->dispatch($printer, $document);
     }

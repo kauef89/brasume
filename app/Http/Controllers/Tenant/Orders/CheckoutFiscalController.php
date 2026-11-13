@@ -12,11 +12,38 @@ use Throwable;
 
 class CheckoutFiscalController extends Controller
 {
-    public function printConference(Order $order, OrderPrintService $printService)
+    public function printConference(Order $order, Request $request, OrderPrintService $printService)
     {
+        $validated = $request->validate([
+            'partial'                => 'nullable|boolean',
+            'items'                  => 'nullable|array',
+            'items.*.id'             => 'required_with:items|integer',
+            'items.*.qty'            => 'required_with:items|numeric|gt:0',
+            'items.*.unit_price'     => 'nullable|numeric|min:0',
+            'items.*.amount'         => 'nullable|numeric|min:0',
+            'items.*.is_combo_child' => 'nullable|boolean',
+            'totals'                 => 'nullable|array',
+            'totals.subtotal'        => 'nullable|numeric|min:0',
+            'totals.delivery_fee'    => 'nullable|numeric|min:0',
+            'totals.service_fee'     => 'nullable|numeric|min:0',
+            'totals.discount'        => 'nullable|numeric|min:0',
+            'totals.total'           => 'nullable|numeric|min:0',
+        ]);
+
+        $isPartial = $request->boolean('partial') && !empty($validated['items']);
+        $partialPayload = $isPartial
+            ? [
+                'items'  => $validated['items'],
+                'totals' => $validated['totals'] ?? [],
+            ]
+            : null;
+
         try {
-            $printService->printConferenceBill($order);
-            return back()->with('success', 'Conta enviada para a impressora!');
+            $printService->printConferenceBill($order, $partialPayload);
+            return back()->with(
+                'success',
+                $isPartial ? 'Conta parcial enviada para a impressora!' : 'Conta enviada para a impressora!'
+            );
         } catch (Throwable $e) {
             return back()->with('error', $e->getMessage());
         }

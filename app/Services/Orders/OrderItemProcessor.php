@@ -61,12 +61,13 @@ class OrderItemProcessor
             ?? $itemData["product_name"]
             ?? 'Produto';
 
-        // Detecção e aplicação uniforme de takeaway
-        $isTakeaway = (bool) (!empty($itemData["isTakeaway"]) || !empty($itemData["is_takeaway"]));
+        // Remove qualquer sufixo legado vindo do payload para manter product_name canônico
+        $resolvedName = trim((string) preg_replace('/\s*[\(\[](Viagem|Para Levar|Takeaway)[\)\]]/i', '', $resolvedName));
 
-        if ($isTakeaway && !str_contains($resolvedName, '(Viagem)')) {
-            $resolvedName .= " (Viagem)";
-        }
+        // Pedidos de delivery, retirada ou balcão são sempre viagem; mesa respeita a marcação do item
+        $isTakeaway = in_array($order->type, ['counter', 'delivery', 'pickup', 'takeaway'], true)
+            || !empty($itemData["isTakeaway"])
+            || !empty($itemData["is_takeaway"]);
 
         $notes = !empty($itemData["notes"]) ? trim((string) $itemData["notes"]) : null;
         if ($isReplacement) {

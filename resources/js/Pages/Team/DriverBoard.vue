@@ -248,9 +248,16 @@ const resolveDestinationString = (order) => {
             const lng = addr.coordinates.lng || addr.coordinates.longitude;
             if (lat && lng) return `${lat},${lng}`;
         }
-        return `${addr.street || ''}, ${addr.number || ''}, ${addr.neighborhood || ''}, ${settings.value.city || ''}`;
+        
+        const cityStr = settings.value.city ? `, ${settings.value.city}` : '';
+        const stateStr = settings.value.state ? ` - ${settings.value.state}` : '';
+        
+        return `${addr.street || ''}, ${addr.number || ''}, ${addr.neighborhood || ''}${cityStr}${stateStr}`;
     }
-    return String(order.address || '');
+    
+    const cityStrFallback = settings.value.city ? `, ${settings.value.city}` : '';
+    const stateStrFallback = settings.value.state ? ` - ${settings.value.state}` : '';
+    return String(order.address || '') + cityStrFallback + stateStrFallback;
 };
 
 const openGoogleMaps = () => {

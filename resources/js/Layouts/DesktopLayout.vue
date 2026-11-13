@@ -14,10 +14,12 @@ import ConfirmDialog from "primevue/confirmdialog";
 import { usePushNotifications } from "@/Composables/usePushNotifications";
 import { useAudioAlert } from "@/Composables/useAudioAlert";
 import { useTenantEcho } from "@/Composables/useTenantEcho";
+import { useFlashToast } from "@/Composables/useFlashToast";
 
 const { sendPushNotification } = usePushNotifications();
 const { playBeep } = useAudioAlert();
 const { listenChannel } = useTenantEcho();
+useFlashToast();
 
 onMounted(() => {
     listenChannel('orders', '.order.created', (payload) => {

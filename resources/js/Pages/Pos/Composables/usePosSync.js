@@ -29,10 +29,13 @@ export function usePosSync(activeTab, checkoutData) {
                 if (e.status) checkoutData.value.order.status = e.status;
                 if (e.payment_status) checkoutData.value.order.payment_status = e.payment_status;
 
-                // 🚀 Notifica a tela de Checkout Pix que o pagamento foi liquidado pelo banco
+                // 🚀 Notifica a tela de Checkout Pix apenas se houver confirmação Pix/Webhook
                 if (e.payment_status === 'paid') {
                     window.dispatchEvent(new CustomEvent('pos-pix-approved', {
-                        detail: { orderId }
+                        detail: {
+                            orderId,
+                            isPixWebhook: Boolean(e.is_pix_webhook)
+                        }
                     }));
                 }
             }

@@ -21,7 +21,7 @@
                 <div class="flex flex-col gap-1">
                     <h3 class="font-black text-base text-surface-text">Facilitar a Entrega?</h3>
                     <p class="text-xs text-surface-muted leading-relaxed">
-                        A sua morada ainda não tem o ponto exato no mapa. Deseja anexar a sua localização GPS para ajudar o nosso estafeta a chegar mais rápido?
+                        Este endereço ainda não tem o ponto exato no mapa. Deseja anexar a sua localização GPS para ajudar o nosso motoboy a chegar mais rápido?
                     </p>
                 </div>
                 <div class="flex flex-col gap-2 w-full mt-2">

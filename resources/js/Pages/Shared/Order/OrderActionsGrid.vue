@@ -25,6 +25,16 @@
                 @click="$emit('action', 'add_items', order)"
             />
 
+            <OrderContextAction
+                v-if="!isTeamMode"
+                :disabled="!order || order?.status === 'cancelled'"
+                label="Copiar Resumo"
+                subtitle="Enviar no WhatsApp"
+                icon="pi pi-whatsapp"
+                icon-color="text-emerald-500"
+                @click="copyWhatsAppOrderSummary"
+            />
+
             <!-- ==================== MESAS ==================== -->
             <OrderContextAction
                 v-if="isTeamMode ? (order?.type === 'table' && order?.status !== 'closed') : true"
@@ -133,6 +143,7 @@ import { usePage, router } from '@inertiajs/vue3';
 import { useToast } from 'primevue/usetoast';
 import OrderContextAction from "./OrderContextAction.vue";
 import { useWhatsAppMessages } from "@/Composables/useWhatsAppMessages";
+import { useOrderExport } from "@/Pages/Shared/Composables/useOrderExport";
 
 const props = defineProps({
     order: { type: Object, required: true },
@@ -143,6 +154,38 @@ const emit = defineEmits(['action']);
 const page = usePage();
 const toast = useToast();
 const { notifyDeliveryOut, notifyPickupReady } = useWhatsAppMessages();
+const { buildWhatsAppOrderSummary } = useOrderExport();
+
+const copyWhatsAppOrderSummary = async () => {
+    if (!props.order) return;
+    const text = buildWhatsAppOrderSummary(props.order);
+
+    try {
+        await navigator.clipboard.writeText(text);
+        toast.add({
+            severity: 'success',
+            summary: 'Resumo Copiado!',
+            detail: `Pedido #${props.order.id} pronto para colar no WhatsApp.`,
+            life: 3000
+        });
+    } catch (err) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+
+        toast.add({
+            severity: 'success',
+            summary: 'Resumo Copiado!',
+            detail: `Pedido #${props.order.id} pronto para colar no WhatsApp.`,
+            life: 3000
+        });
+    }
+};
 
 const companySettings = computed(() => page.props.companySettings || {});
 const hasOpenShift = computed(() => Boolean(page.props.hasOpenShift));

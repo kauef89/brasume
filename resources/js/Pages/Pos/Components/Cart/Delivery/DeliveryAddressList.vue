@@ -46,41 +46,45 @@
                         ? 'bg-primary-500/10 border-primary-500 shadow-sm'
                         : 'bg-surface-3/50 border-surface-border/60 hover:bg-surface-3 hover:border-primary-500/40'"
                 >
-                    <div class="flex flex-col min-w-0 pr-3">
-                        <span class="text-sm font-bold text-surface-text leading-tight truncate">
-                            {{ addr.full_address || addr.street?.name || addr.street }}
-                        </span>
-                        <div class="flex items-center gap-2 mt-0.5">
-                            <span class="text-xs text-surface-muted">
-                                {{ addr.neighborhood?.name || addr.neighborhood || 'Bairro' }} — Taxa: {{ $formatCurrency(addr.delivery_fee ?? addr.neighborhood?.delivery_fee ?? 0) }}
+                    <!-- COL 1: CHECKBOX -->
+                    <div class="w-5 h-5 rounded-full flex items-center justify-center border-2 shrink-0 transition-colors mr-3"
+                        :class="isSelected(addr) ? 'bg-primary-500 border-primary-500 text-white shadow-sm' : 'border-surface-border text-surface-muted group-hover:border-primary-500/50'"
+                    >
+                        <div v-if="isSelected(addr)" class="w-2 h-2 rounded-full bg-white"></div>
+                    </div>
+
+                    <!-- COL 2: ENDEREÇO E LIXEIRA -->
+                    <div class="flex flex-col min-w-0 flex-1">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-sm font-bold text-surface-text leading-tight truncate">
+                                {{ addr.full_address || addr.street?.name || addr.street }}
                             </span>
-                            <span v-if="addr.location" class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <button
+                                type="button"
+                                @click.stop="handleDeactivateAddress(addr)"
+                                class="w-6 h-6 rounded-md bg-transparent hover:bg-red-500/10 text-surface-muted/50 hover:text-red-500 flex items-center justify-center border-none cursor-pointer transition-colors shrink-0"
+                                title="Inativar Endereço"
+                            >
+                                <i class="pi pi-trash text-[10px]"></i>
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <span class="text-xs text-surface-muted truncate">
+                                {{ addr.neighborhood?.name || addr.neighborhood || 'Bairro' }}
+                                <span v-if="addr.reference"> — Ref: {{ addr.reference }}</span>
+                            </span>
+                            <span v-if="addr.location" class="px-1.5 rounded text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
                                 GPS
                             </span>
                         </div>
-                        <span v-if="addr.reference" class="text-[11px] text-surface-muted/70 italic mt-0.5 truncate">
-                            Ref: {{ addr.reference }}
-                        </span>
                     </div>
 
-                    <div class="flex items-center gap-2 shrink-0">
-                        <button
-                            type="button"
-                            @click.stop="handleDeactivateAddress(addr)"
-                            class="w-8 h-8 rounded-xl bg-surface-2 hover:bg-red-500/10 text-surface-muted hover:text-red-500 flex items-center justify-center border-none cursor-pointer transition-colors"
-                            title="Inativar Endereço"
-                        >
-                            <i class="pi pi-trash text-xs"></i>
-                        </button>
-
-                        <div
-                            class="w-7 h-7 rounded-full flex items-center justify-center border transition-all"
-                            :class="isSelected(addr)
-                                ? 'bg-primary-500 border-primary-500 text-white shadow-sm'
-                                : 'border-surface-border text-surface-muted group-hover:border-primary-500/50 group-hover:text-primary-500'"
-                        >
-                            <i :class="isSelected(addr) ? 'pi pi-check' : 'pi pi-arrow-right'" class="text-[10px] font-black"></i>
-                        </div>
+                    <!-- COL 3: TAXA -->
+                    <div class="shrink-0 text-right ml-2 pl-3 border-l border-surface-border flex flex-col justify-center min-w-[70px]">
+                        <span class="text-[9px] uppercase font-bold text-surface-muted tracking-wider">Taxa</span>
+                        <span class="text-sm font-black text-surface-text">
+                            {{ $formatCurrency(addr.delivery_fee ?? addr.neighborhood?.delivery_fee ?? 0) }}
+                        </span>
                     </div>
                 </div>
 

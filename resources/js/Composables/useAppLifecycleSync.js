@@ -13,14 +13,15 @@ export function useAppLifecycleSync(options = {}) {
     let isChecking = false;
 
     const handleSessionExpired = () => {
+        // 🚀 DERRUBA A TRAVA HÍBRIDA DO PDV SE A SESSÃO MORREU
+        localStorage.removeItem('brasume_terminal_locked');
+        
         if (typeof onSessionExpired === 'function') {
             onSessionExpired();
             return;
         }
 
         // Força um recarregamento total via HTTP GET.
-        // Isso renova os cookies, obtém um novo token CSRF e deixa o middleware
-        // de autenticação do Laravel redirecionar o utilizador para a tela de PIN/Login.
         window.location.reload();
     };
 

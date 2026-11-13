@@ -135,16 +135,29 @@ class HandleInertiaRequests extends Middleware
                 }
             },
 
-            'flash' => [
-                'success'         => fn () => $request->session()->get('success'),
-                'error'           => fn () => $request->session()->get('error'),
-                'info'            => fn () => $request->session()->get('info'),
-                'warning'         => fn () => $request->session()->get('warning'),
-                'pix_data'        => fn () => $request->session()->get('pix_data'),
-                'order_id'        => fn () => $request->session()->get('order_id'),
-                'createdCustomer' => fn () => $request->session()->get('createdCustomer'),
-                'createdAddress'  => fn () => $request->session()->get('createdAddress'),
-            ],
+            'flash' => function () use ($request) {
+                $success = $request->session()->get('success');
+                $error   = $request->session()->get('error');
+                $info    = $request->session()->get('info');
+                $warning = $request->session()->get('warning');
+                $event   = $request->session()->get('flash_event');
+
+                $hasNotification = $success || $error || $info || $warning || $event;
+
+                return [
+                    'success'         => $success,
+                    'error'           => $error,
+                    'info'            => $info,
+                    'warning'         => $warning,
+                    'pix_data'        => $request->session()->get('pix_data'),
+                    'order_id'        => $request->session()->get('order_id'),
+                    'createdCustomer' => $request->session()->get('createdCustomer'),
+                    'createdAddress'  => $request->session()->get('createdAddress'),
+                    'nonce'           => $hasNotification ? uniqid('flash_', true) : null,
+                    'event'           => $event,
+                    'data'            => $request->session()->get('flash_data') ?? $request->session()->get('address'),
+                ];
+            },
 
             'tenant'          => $isTenant ? tenant() : null,
             'tenantId'        => $isTenant ? tenant('id') : 'central',

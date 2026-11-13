@@ -181,6 +181,12 @@ class OrderPixService
             Log::error("🚨 [PIX WEBHOOK PRINT] Pedido #{$order->id}: " . $e->getMessage());
         }
 
+        try {
+            broadcast(new OrderUpdated($order->fresh(['items', 'payments']), true));
+        } catch (\Throwable $e) {
+            Log::error("🚨 [PIX WEBHOOK BROADCAST] Pedido #{$order->id}: " . $e->getMessage());
+        }
+
         return $order;
     }
 }

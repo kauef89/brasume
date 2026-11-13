@@ -18,16 +18,23 @@ export function useCustomerSync(props, activeTab, couponContext, flowContext) {
         if (event.state && event.state.tab) activeTab.value = event.state.tab;
     };
 
+    const resolveCurrentCustomerId = () => {
+        return props.customer?.id
+            || page.props.customer?.id
+            || page.props.auth?.user?.customer?.id
+            || localStorage.getItem('brasume_guest_anchor');
+    };
+
     const applyOrderRealTimeUpdate = (e) => {
         // 🚀 Suporte transparente tanto para payload enxuto (raiz) quanto empacotado
         const order = e?.orderData || e?.order || e;
-        const currentCustomerId = page.props.customer?.id || localStorage.getItem('brasume_guest_anchor');
+        const currentCustomerId = resolveCurrentCustomerId();
         const eventCustomerId = order?.customer_id;
         const orderId = order?.id || order?.orderId;
         const status = order?.status;
 
         // 🛡️ TRAVA ESTRITA: Só processa se o evento pertencer inequivocamente a este cliente
-        if (!eventCustomerId || String(eventCustomerId) !== String(currentCustomerId)) {
+        if (!eventCustomerId || !currentCustomerId || String(eventCustomerId) !== String(currentCustomerId)) {
             return;
         }
 
@@ -55,12 +62,39 @@ export function useCustomerSync(props, activeTab, couponContext, flowContext) {
             }
         }
 
+        // ⚡ Atualização otimista imediata caso o pedido tenha sido cancelado/finalizado
+        const terminalStatuses = ['cancelled', 'canceled', 'closed', 'completed', 'delivered', 'finished'];
+        if (orderId && status && terminalStatuses.includes(status) && Array.isArray(page.props.myActiveOrders)) {
+            page.props.myActiveOrders = page.props.myActiveOrders.filter(o => String(o.id) !== String(orderId));
+        }
+
         router.reload({
             only: ['myActiveOrders', 'myHistory', 'customer'],
             preserveScroll: true,
             preserveState: true
         });
     };
+
+    // 📡 Garante assinatura dinâmica assim que o cliente se identifica ou cria pedido
+    const bindCustomerOrderChannel = (customerId) => {
+        if (!customerId) return;
+        localStorage.setItem('brasume_guest_anchor', String(customerId));
+
+        if (window.Echo) {
+            listenChannel(`customer.${customerId}`, '.order.updated', applyOrderRealTimeUpdate);
+            listenChannel(`customer.${customerId}`, '.order.cancelled', applyOrderRealTimeUpdate);
+        }
+    };
+
+    watch(
+        () => props.customer?.id || page.props.customer?.id || page.props.auth?.user?.customer?.id,
+        (newCustomerId) => {
+            if (newCustomerId) {
+                bindCustomerOrderChannel(newCustomerId);
+            }
+        },
+        { immediate: true }
+    );
 
     const handleShiftEvent = (isOpen, message) => {
         toast.add({
@@ -126,12 +160,11 @@ export function useCustomerSync(props, activeTab, couponContext, flowContext) {
         }
 
         if (window.Echo) {
-            const customerId = serverCustomerId || localStorage.getItem('brasume_guest_anchor');
+            const customerId = resolveCurrentCustomerId();
 
             // 🚀 Canal privativo do cliente (sem duplicações de alias e sem canal fantasma 'orders')
             if (customerId) {
-                listenChannel(`customer.${customerId}`, '.order.updated', applyOrderRealTimeUpdate);
-                listenChannel(`customer.${customerId}`, '.order.cancelled', applyOrderRealTimeUpdate);
+                bindCustomerOrderChannel(customerId);
             }
 
             // 🚀 Sincronização de Turno: Atualiza "Aberto/Fechado" na hora

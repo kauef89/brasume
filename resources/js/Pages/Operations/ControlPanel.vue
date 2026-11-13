@@ -1,5 +1,4 @@
 <template>
-    <ConfirmDialog :style="{ width: '400px' }" :breakpoints="{ '575px': '90vw' }" />
 
     <Teleport v-if="isMounted && isActive && !focusedOrder" to="#dynamic-island-portal">
         <div class="flex items-center gap-3 h-10 md:h-12 shrink-0">

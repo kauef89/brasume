@@ -81,7 +81,8 @@ class OrderTableBuilder
         BlueprintBuilder $b,
         $items,
         int|string $columnsOrFont = 'A',
-        int $paperWidth = 80
+        int $paperWidth = 80,
+        bool $isTableOrder = false
     ): void {
         $activeItems = collect($items)->filter(function ($item) {
             return ($item->status ?? null) !== 'cancelled';
@@ -110,6 +111,10 @@ class OrderTableBuilder
             $qtyStr = substr(self::formatQty($qty, $hasDecimal) . 'x', 0, $qtySize);
 
             $rawName = trim(strtoupper(Str::ascii($parent->product_name)));
+            $rawName = trim((string) preg_replace('/\s*[\(\[]VIAGEM[\)\]]/i', '', $rawName));
+            if ($isTableOrder && !empty($parent->is_takeaway)) {
+                $rawName .= ' (VIAGEM)';
+            }
             if (!empty($parent->is_reward)) {
                 $rawName .= ' [CORTESIA]';
             }
@@ -186,6 +191,7 @@ class OrderTableBuilder
             $qtyStr = substr(self::formatQty($qty, $hasDecimal) . 'x', 0, $qtySize);
 
             $rawName = trim(strtoupper(Str::ascii($parent->product_name)));
+            $rawName = trim((string) preg_replace('/\s*[\(\[]VIAGEM[\)\]]/i', '', $rawName));
             if (!empty($parent->is_reward)) {
                 $rawName .= ' [CORTESIA]';
             }

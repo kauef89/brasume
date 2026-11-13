@@ -21,13 +21,28 @@ export function useOrderExport() {
         }
 
         if (metadata?.type === 'delivery') {
-            const addr = metadata.address || metadata.address_snapshot;
-            if (addr) {
-                const streetLine = addr.full_address || `${addr.street?.name || addr.street || ''}, ${addr.number || 'S/N'} - ${addr.neighborhood?.name || addr.neighborhood || ''}`;
-                summary += `📍 *Endereço:* ${streetLine}\n`;
+            const addr = (typeof metadata.address === 'object' && metadata.address !== null)
+                ? metadata.address
+                : (metadata.address_snapshot || metadata.address);
 
-                if (addr.complement) summary += `   ↳ Comp: ${addr.complement}\n`;
-                if (addr.reference) summary += `   ↳ Ref: ${addr.reference}\n`;
+            if (addr) {
+                if (typeof addr === 'string') {
+                    summary += `📍 *Endereço:* ${addr}\n`;
+                } else {
+                    const streetName = addr.street?.name || addr.street_name || addr.street || '';
+                    const numberVal = addr.no_number ? 'S/N' : (addr.number || 'S/N');
+                    const neighborhoodName = addr.neighborhood?.name || addr.neighborhood_name || addr.neighborhood || '';
+                    const fallbackLine = streetName
+                        ? `${streetName}, ${numberVal}${neighborhoodName ? ' - ' + neighborhoodName : ''}`
+                        : '';
+                    const streetLine = addr.full_address || fallbackLine;
+
+                    if (streetLine) {
+                        summary += `📍 *Endereço:* ${streetLine}\n`;
+                    }
+                    if (addr.complement) summary += `   ↳ Comp: ${addr.complement}\n`;
+                    if (addr.reference) summary += `   ↳ Ref: ${addr.reference}\n`;
+                }
             }
         }
 
@@ -35,7 +50,8 @@ export function useOrderExport() {
 
         cart.forEach((item) => {
             const isCortesia = item.is_reward ? ' [CORTESIA]' : '';
-            summary += `*${item.qty} × ${item.name}${isCortesia}* - ${formatCurrency(item.price * item.qty)}\n`;
+            const cleanItemName = String(item.name || '').replace(/\s*[\(\[](Viagem|Para Levar|Takeaway)[\)\]]/gi, '').trim();
+            summary += `*${item.qty} × ${cleanItemName}${isCortesia}* - ${formatCurrency(item.price * item.qty)}\n`;
 
             const modsList = formatModifiersList(item);
             if (modsList && modsList.length > 0) {
@@ -52,7 +68,8 @@ export function useOrderExport() {
 
             if (item.comboItems && item.comboItems.length > 0) {
                 item.comboItems.forEach((c) => {
-                    summary += `   ↳ 1 × ${c.name}`;
+                    const cleanChildName = String(c.name || '').replace(/\s*[\(\[](Viagem|Para Levar|Takeaway)[\)\]]/gi, '').trim();
+                    summary += `   ↳ 1 × ${cleanChildName}`;
 
                     if (c.price > 0 || c.additional_price > 0) {
                         const extraPrice = c.price || c.additional_price;
@@ -96,5 +113,84 @@ export function useOrderExport() {
         return summary;
     };
 
-    return { buildWhatsAppSummary };
+    const buildWhatsAppOrderSummary = (order) => {
+        if (!order) return '';
+
+        const rawItems = (order.items || []).filter(i => i.status !== 'cancelled');
+        const rootItems = rawItems.filter(i => !i.parent_item_id);
+        const childItems = rawItems.filter(i => Boolean(i.parent_item_id));
+
+        const mappedCart = rootItems.map(item => {
+            const qty = Math.max(1, Number(item.quantity || 1));
+            const unitPrice = Number(item.unit_price ?? (Number(item.total_price || 0) / qty));
+
+            const dbChildren = childItems.filter(c => String(c.parent_item_id) === String(item.id));
+            const nestedChildren = item.sub_items || item.subItems || [];
+            const allChildren = dbChildren.length > 0 ? dbChildren : nestedChildren;
+
+            const comboItems = allChildren
+                .filter(c => c.status !== 'cancelled')
+                .map(c => ({
+                    name: c.product_name || c.name,
+                    price: Number(c.unit_price || c.additional_price || 0),
+                    modifiers: c.modifiers || c.structuredModifiers || [],
+                    notes: c.notes || ''
+                }));
+
+            return {
+                qty,
+                name: item.product_name || item.name,
+                price: unitPrice,
+                modifiers: item.modifiers || item.structuredModifiers || [],
+                notes: item.notes || '',
+                comboItems
+            };
+        });
+
+        const metadata = {
+            type: order.type,
+            table: order.dining_table || order.diningTable || (order.table_number ? { name: order.table_number } : null),
+            table_number: order.table_number,
+            customer: order.customer || (order.customer_name ? { name: order.customer_name } : null),
+            identifier: order.identifier || order.customer_name,
+            address: order.address_snapshot || order.address || order.delivery_address
+        };
+
+        const calculatedSubtotal = mappedCart.reduce((acc, i) => acc + (i.price * i.qty), 0);
+        const subtotal = Number(order.subtotal || calculatedSubtotal);
+        const deliveryFee = Number(order.delivery_fee || 0);
+        const serviceFee = Number(order.service_fee || 0);
+        const discount = Number(order.discount || 0);
+        const finalTotal = Number(order.total ?? Math.max(0, subtotal + deliveryFee + serviceFee - discount));
+
+        let text = buildWhatsAppSummary(mappedCart, metadata, {
+            subtotal,
+            deliveryFee,
+            serviceFee,
+            discount,
+            finalTotal
+        });
+
+        if (order.id) {
+            text = text.replace('*RESUMO DO PEDIDO*', `*RESUMO DO PEDIDO #${order.id}*`);
+        }
+
+        const alreadyPaid = (order.payments || [])
+            .filter(p => p.status !== 'cancelled')
+            .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+        if (alreadyPaid > 0) {
+            const balanceDue = Math.max(0, Number((finalTotal - alreadyPaid).toFixed(2)));
+            text += `*Já Pago:* ${formatCurrency(alreadyPaid)}\n`;
+            if (balanceDue > 0.01) {
+                text += `*Saldo Restante:* ${formatCurrency(balanceDue)}\n`;
+            } else {
+                text += `*Status:* PAGO ✅\n`;
+            }
+        }
+
+        return text;
+    };
+
+    return { buildWhatsAppSummary, buildWhatsAppOrderSummary };
 }

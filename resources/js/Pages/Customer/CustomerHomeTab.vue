@@ -150,15 +150,17 @@ const onOrderPlacedSuccess = (e) => {
 
 // 🎯 Vigia o flash message deste cliente específico
 watch(
-    [() => page.props.flash?.success, () => page.props.flash?.order_id],
-    ([hasSuccess, flashOrderId]) => {
+    [() => page.props.flash?.nonce, () => page.props.flash?.event, () => page.props.flash?.success, () => page.props.flash?.order_id],
+    ([, flashEvent, hasSuccess, flashOrderId]) => {
         if (!flashOrderId) return;
 
-        const isOrderCreation = Boolean(page.props.flash?.order_id) && (
-            !hasSuccess || (
-                /pedido/i.test(hasSuccess) &&
-                /(realizado|criado|confirmado|recebido|enviado)/i.test(hasSuccess) &&
-                !/cancelad/i.test(hasSuccess)
+        const isOrderCreation = flashEvent === 'order_created' || (
+            Boolean(flashOrderId) && (
+                !hasSuccess || (
+                    /pedido/i.test(hasSuccess) &&
+                    /(realizado|criado|confirmado|recebido|enviado)/i.test(hasSuccess) &&
+                    !/cancelad/i.test(hasSuccess)
+                )
             )
         );
 

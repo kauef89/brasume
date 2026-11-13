@@ -13,11 +13,13 @@ class ConferenceBill
 {
     protected Order $order;
     protected array $settings;
+    protected ?array $partialData;
 
-    public function __construct(Order $order, array $settings)
+    public function __construct(Order $order, array $settings, ?array $partialData = null)
     {
         $this->order = $order;
         $this->settings = $settings;
+        $this->partialData = $partialData;
     }
 
     public function getJobType(): string
@@ -62,8 +64,11 @@ class ConferenceBill
         if ($order->type === 'pickup' || $order->type === 'takeaway') $typeTitle = 'RETIRADA';
         if ($order->type === 'table') $typeTitle = 'MESA ' . ($order->table_number ?: '?');
 
-        $b->text("*** {$typeTitle} ***", true, '2x')
-          ->text(' ', false, '1x');
+        $b->text("*** {$typeTitle} ***", true, '2x');
+        if ($this->partialData !== null) {
+            $b->text('CONFERENCIA PARCIAL', true, '1x');
+        }
+        $b->text(' ', false, '1x');
 
         $b->blueprint[] = ['cmd' => 'align', 'val' => 'lt'];
         $b->text('PEDIDO: #' . $order->id, true, '1x');
@@ -88,10 +93,14 @@ class ConferenceBill
             if (!empty($addr['reference'])) $b->text($this->cleanText('REF: ' . $addr['reference']));
         }
 
-        $b->divider()->text('CONFERENCIA DE ITENS:', true);
+        $b->divider()->text($this->partialData !== null ? 'ITENS SELECIONADOS (PARCIAL):' : 'CONFERENCIA DE ITENS:', true);
 
-        $activeItems = $order->items ? $order->items->where('status', '!=', 'cancelled') : collect();
-        OrderTableBuilder::buildConference($b, $activeItems);
+        $sourceItems = ($this->partialData !== null && isset($this->partialData['items']))
+            ? collect($this->partialData['items'])
+            : ($order->items ?? collect());
+
+        $activeItems = $sourceItems->where('status', '!=', 'cancelled');
+        OrderTableBuilder::buildConference($b, $activeItems, 'A', 80, $order->type === 'table');
 
         if ($order->notes) {
             $b->divider()->text('OBSERVACOES:', true)->text($this->cleanText($order->notes));
@@ -99,6 +108,42 @@ class ConferenceBill
 
         $b->divider();
         $b->blueprint[] = ['cmd' => 'align', 'val' => 'rt'];
+
+        if ($this->partialData !== null) {
+            $pTotals = $this->partialData['totals'] ?? [];
+            $pSubtotal = (float) ($pTotals['subtotal'] ?? 0);
+            $pDelivery = (float) ($pTotals['delivery_fee'] ?? 0);
+            $pService  = (float) ($pTotals['service_fee'] ?? 0);
+            $pDiscount = (float) ($pTotals['discount'] ?? 0);
+            $pTotal    = (float) ($pTotals['total'] ?? max(0, $pSubtotal + $pDelivery + $pService - $pDiscount));
+
+            if ($pSubtotal > 0) $b->text('PRODUTOS R$: ' . $this->money($pSubtotal));
+            if ($pDelivery > 0) $b->text('TAXA ENTREGA R$: ' . $this->money($pDelivery));
+            if ($pService > 0)  $b->text('TAXA SERVICO R$: ' . $this->money($pService));
+            if ($pDiscount > 0) $b->text('DESCONTO R$: -' . $this->money($pDiscount));
+
+            $b->text('PARCIAL R$: ' . $this->money($pTotal), true, '2x')->space();
+
+            $b->blueprint[] = ['cmd' => 'align', 'val' => 'ct'];
+            $b->text('*** PARCIAL R$: ' . $this->money($pTotal) . ' ***', true, '2x')->space();
+            $b->text('CONFERENCIA PARCIAL DE ITENS', true);
+            if ((float) $order->total > 0 && abs((float) $order->total - $pTotal) > 0.05) {
+                $b->text('TOTAL GERAL DA CONTA: R$ ' . $this->money($order->total));
+            }
+            $b->space();
+            $b->divider();
+
+            $dbSettings = CompanySetting::getCached();
+            if ($dbSettings && !empty($dbSettings->receipt_footer_text)) {
+                $b->text($this->cleanText($dbSettings->receipt_footer_text));
+            }
+
+            if (!empty($settings['receipt_promo_qrcode'])) {
+                $b->qrCode($settings['receipt_promo_qrcode'], 6);
+            }
+
+            return $b->cut()->get();
+        }
 
         if ($order->subtotal > 0) $b->text('PRODUTOS R$: ' . $this->money($order->subtotal));
         if ($order->delivery_fee > 0) $b->text('TAXA ENTREGA R$: ' . $this->money($order->delivery_fee));

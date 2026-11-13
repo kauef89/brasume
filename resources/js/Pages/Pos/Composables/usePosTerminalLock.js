@@ -9,9 +9,11 @@ export function usePosTerminalLock() {
 
     // 🔒 Defensivo: se o servidor indicar bloqueado ou se o localStorage marcar bloqueio, bloqueia
     const serverLocked = page.props.initialTerminalLocked ?? true;
+    const isGuest = !page.props?.auth?.user;
     const localLocked = localStorage.getItem('brasume_terminal_locked');
 
-    const initialLockState = localLocked !== null ? localLocked === 'true' : serverLocked;
+    // 🚀 Se for guest (sessão expirada), ignora o Lock e deixa o middleware redirecionar pro Login
+    const initialLockState = isGuest ? false : (localLocked !== null ? localLocked === 'true' : serverLocked);
 
     const isTerminalLocked = ref(initialLockState);
 

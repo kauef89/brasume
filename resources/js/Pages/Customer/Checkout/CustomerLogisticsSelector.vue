@@ -52,21 +52,30 @@
                         ? 'bg-primary-500/20 border-primary-400 shadow-sm'
                         : 'bg-white/5 border-white/10 hover:bg-white/10'"
                 >
-                    <div class="flex flex-col min-w-0 pr-3">
+                    <!-- COL 1: CHECKBOX -->
+                    <div class="w-5 h-5 rounded-full flex items-center justify-center border-2 shrink-0 transition-colors mr-3"
+                        :class="activeAddress?.id === addr.id ? 'bg-primary-500 border-primary-400 text-white' : 'border-white/20'"
+                    >
+                        <div v-if="activeAddress?.id === addr.id" class="w-2 h-2 rounded-full bg-white"></div>
+                    </div>
+
+                    <!-- COL 2: ENDEREÇO -->
+                    <div class="flex flex-col min-w-0 flex-1">
                         <span class="text-sm font-bold text-white leading-tight truncate">
-                            {{ addr.full_address || addr.street }}
+                            {{ addr.full_address || addr.street?.name || addr.street }}
                         </span>
-                        <span class="text-xs text-white/60 mt-0.5">
-                            {{ addr.neighborhood || 'Bairro' }}
-                            <span v-if="addr.delivery_fee !== undefined"> — Taxa: {{ formatCurrency(addr.delivery_fee) }}</span>
+                        <span class="text-xs text-white/60 mt-0.5 truncate">
+                            {{ addr.neighborhood?.name || addr.neighborhood || 'Bairro' }}
+                            <span v-if="addr.reference"> — Ref: {{ addr.reference }}</span>
                         </span>
                     </div>
 
-                    <div
-                        class="w-6 h-6 rounded-full flex items-center justify-center border shrink-0 transition-colors"
-                        :class="activeAddress?.id === addr.id ? 'bg-primary-500 border-primary-400 text-white' : 'border-white/20'"
-                    >
-                        <i v-if="activeAddress?.id === addr.id" class="pi pi-check text-[10px] font-black"></i>
+                    <!-- COL 3: TAXA -->
+                    <div class="shrink-0 text-right ml-2 pl-3 border-l border-white/10 flex flex-col justify-center">
+                        <span class="text-[10px] uppercase font-bold text-white/40 tracking-wider">Taxa</span>
+                        <span class="text-sm font-black text-emerald-400">
+                            {{ formatCurrency(addr.delivery_fee ?? addr.neighborhood?.delivery_fee ?? 0) }}
+                        </span>
                     </div>
                 </div>
 
