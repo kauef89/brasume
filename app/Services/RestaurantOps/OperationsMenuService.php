@@ -24,13 +24,14 @@ class OperationsMenuService
 
     public function getOrderEntryData(Request $request): array
     {
-        // 🚀 OTIMIZAÇÃO: Injetado latestCostHistory
+        // 🚀 OTIMIZAÇÃO: Evita sub-select pesado de latestCostHistory no cardápio do PDV (não utilizado no mapProductData)
         $products = Product::whereIn("type", ["dish", "combo", "resale"])
             ->whereIn("status", ["available", "out_of_stock", "paused", "active"])
             ->where("show_on_menu", true)
             ->with(["modifiers" => fn ($q) => $q->where("modifier_groups.is_active", true)->where("modifier_groups.show_on_pos", true),
-            "modifiers.options" => fn ($q) => $q->where("modifier_options.is_active", true)->where("modifier_options.show_on_pos", true), "comboGroups.items.product", "latestCostHistory"])
-            ->get();
+            "modifiers.options" => fn ($q) => $q->where("modifier_options.is_active", true)->where("modifier_options.show_on_pos", true), "comboGroups.items.product"])
+            ->get()
+            ->each->setAppends([]);
 
         $categories = Category::where("type", "external")
             ->whereNotIn("status", ["archived", "arquivado"])
@@ -58,13 +59,18 @@ class OperationsMenuService
 
         $validExternalCategoryIds = $categories->pluck("id")->toArray();
 
-        // 🚀 OTIMIZAÇÃO: Injetado latestCostHistory
-        $categoryProductsCache = Product::whereNotNull('category_id')
-            ->whereIn("type", ["dish", "resale", "manufactured"])
+        // 🚀 OTIMIZAÇÃO: Reaproveita produtos já carregados + busca apenas 'manufactured' se existir
+        $manufacturedProducts = Product::whereNotNull('category_id')
+            ->where("type", "manufactured")
             ->whereIn("status", ["available", "out_of_stock", "paused", "active"])
             ->where("show_on_menu", true)
-            ->with("latestCostHistory")
+            ->select("id", "category_id", "name", "status")
             ->get()
+            ->each->setAppends([]);
+
+        $categoryProductsCache = $products
+            ->filter(fn ($p) => !is_null($p->category_id) && in_array($p->type, ["dish", "resale"]))
+            ->concat($manufacturedProducts)
             ->groupBy('category_id');
 
         $mappedProducts = $products
@@ -123,13 +129,18 @@ class OperationsMenuService
 
         $tableAreas = $this->getTableAreas();
 
-        // 🚀 OTIMIZAÇÃO: Injetado latestCostHistory
-        $categoryProductsCache = Product::whereNotNull('category_id')
-            ->whereIn("type", ["dish", "resale", "manufactured"])
+        // 🚀 OTIMIZAÇÃO: Reaproveita produtos já carregados + busca apenas 'manufactured' se existir
+        $manufacturedProducts = Product::whereNotNull('category_id')
+            ->where("type", "manufactured")
             ->whereIn("status", ["available", "out_of_stock", "paused", "active"])
             ->where("show_on_menu", true)
-            ->with("latestCostHistory")
+            ->select("id", "category_id", "name", "status")
             ->get()
+            ->each->setAppends([]);
+
+        $categoryProductsCache = $products
+            ->filter(fn ($p) => !is_null($p->category_id) && in_array($p->type, ["dish", "resale"]))
+            ->concat($manufacturedProducts)
             ->groupBy('category_id');
 
         // 🚀 OTIMIZAÇÃO: Injetado latestCostHistory

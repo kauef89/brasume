@@ -31,7 +31,7 @@ class OperationsDashboardService
         $orders = Order::with([
                     "items.modifiers", "items.subItems.modifiers", "items.product.category",
                     "items.kitchen", "items.product.kitchen",
-                    "customer.addresses.street", "customer.addresses.neighborhood",
+                    "customer.addresses.street", "customer.addresses.neighborhood", "customer.supplier",
                     "addressModel.street", "addressModel.neighborhood",
                     "payments.items.modifiers",
                     "fiscalDocument",

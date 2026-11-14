@@ -86,5 +86,41 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(OrderCancelled::class, ProcessGatewayRefund::class);
         Event::listen(OrderCancelled::class, ReturnStockAndNotifyCatalog::class);
+
+        // =========================================================
+        // 💾 BACKUP MULTI-TENANT DINÂMICO (SPATIE LARAVEL-BACKUP)
+        // =========================================================
+        if ($this->app->runningInConsole()) {
+            Event::listen(\Illuminate\Console\Events\CommandStarting::class, function ($event) {
+                if (!str_starts_with((string) $event->command, 'backup:')) {
+                    return;
+                }
+
+                try {
+                    $centralConn = config('database.default', 'mysql');
+                    $baseConfig = config("database.connections.{$centralConn}");
+                    $connections = [$centralConn];
+
+                    foreach (\App\Models\Tenant::all() as $tenant) {
+                        $dbName = $tenant->database()->getName();
+                        if (!$dbName) {
+                            continue;
+                        }
+
+                        $connName = 'backup_tenant_' . $tenant->id;
+                        config([
+                            "database.connections.{$connName}" => array_merge($baseConfig, [
+                                'database' => $dbName,
+                            ]),
+                        ]);
+                        $connections[] = $connName;
+                    }
+
+                    config(['backup.backup.source.databases' => array_unique($connections)]);
+                } catch (\Throwable $e) {
+                    Log::warning('[Backup] Falha ao registrar bancos dos tenants: ' . $e->getMessage());
+                }
+            });
+        }
     }
 }

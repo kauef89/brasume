@@ -41,8 +41,6 @@ class PosAppController extends Controller
         $data['activeTab'] = $activeTab;
         $data['tab'] = $activeTab;
         $data['defaultTab'] = $activeTab;
-        $data['initialStreets'] = fn () => Street::with('segments.neighborhood')->get();
-
         $data['initialOrders'] = fn () => $opsService->getActiveOrdersDashboard()['initialOrders'] ?? [];
 
         // 🚀 Busca de entregadores via Enum
@@ -114,13 +112,17 @@ class PosAppController extends Controller
 
         $data['crmData'] = fn () => app(CrmService::class)->getDashboardData();
 
-        // 🚀 Escala 5x2
+        // 🚀 Escala 5x2 (memoizada para evitar 3 execuções repetidas na mesma request)
         $scheduleStartDate = $request->query('start_date', Carbon::now()->startOfWeek()->format('Y-m-d'));
+        $weeklyScheduleCache = null;
+        $getWeeklyScheduleOnce = function () use (&$weeklyScheduleCache, $scheduleService, $scheduleStartDate) {
+            return $weeklyScheduleCache ??= $scheduleService->getWeeklySchedule($scheduleStartDate);
+        };
 
         $data['scheduleStartDate'] = $scheduleStartDate;
-        $data['employees'] = fn () => $scheduleService->getWeeklySchedule($scheduleStartDate)['employees'];
-        $data['slots'] = fn () => $scheduleService->getWeeklySchedule($scheduleStartDate)['slots'];
-        $data['initialSchedules'] = fn () => $scheduleService->getWeeklySchedule($scheduleStartDate)['schedules'];
+        $data['employees'] = fn () => $getWeeklyScheduleOnce()['employees'];
+        $data['slots'] = fn () => $getWeeklyScheduleOnce()['slots'];
+        $data['initialSchedules'] = fn () => $getWeeklyScheduleOnce()['schedules'];
 
         // 🔒 Guarda Física do Terminal
         $deviceUuid = $request->cookie('brasume_device_uuid')
