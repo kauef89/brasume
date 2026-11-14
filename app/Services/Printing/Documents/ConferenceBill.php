@@ -125,7 +125,6 @@ class ConferenceBill
             $b->text('PARCIAL R$: ' . $this->money($pTotal), true, '2x')->space();
 
             $b->blueprint[] = ['cmd' => 'align', 'val' => 'ct'];
-            $b->text('*** PARCIAL R$: ' . $this->money($pTotal) . ' ***', true, '2x')->space();
             $b->text('CONFERENCIA PARCIAL DE ITENS', true);
             if ((float) $order->total > 0 && abs((float) $order->total - $pTotal) > 0.05) {
                 $b->text('TOTAL GERAL DA CONTA: R$ ' . $this->money($order->total));
@@ -161,7 +160,11 @@ class ConferenceBill
         if ($isPaidStatus || $toCollect <= 0.02) {
             $b->text('PAGO', true, '2x')->text('NAO COBRAR DO CLIENTE.');
         } else {
-            $b->text('*** A COBRAR R$: ' . $this->money($toCollect) . ' ***', true, '2x')->space();
+            if ($order->type !== 'table') {
+                $b->text('*** A COBRAR R$: ' . $this->money($toCollect) . ' ***', true, '2x')->space();
+            } elseif ($paidAmount > 0.02) {
+                $b->text('RESTANTE R$: ' . $this->money($toCollect), true, '1x')->space();
+            }
 
             $methods = $order->payment_intent_methods ?? [];
             $hasPendingIntents = (!empty($methods) && is_array($methods))

@@ -270,7 +270,6 @@ const handleConfirmAuth = (authData) => {
                 preserveScroll: true,
                 onSuccess: () => {
                     isReasonModalVisible.value = false;
-                    toast.add({ severity: "success", summary: "Cancelado", detail: "Pedido cancelado.", life: 3000 });
                     emit("close");
                 },
                 onError: (err) => {

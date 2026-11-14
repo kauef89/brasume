@@ -19,9 +19,6 @@ export function useItemActions(selectedOrderContext, contextMenuVisible, routeNa
         }, {
             preserveScroll: true,
             preserveState: true,
-            onSuccess: () => {
-                toast.add({ severity: 'success', summary: 'Item Duplicado', detail: 'Nova comanda enviada para produção (+1).', life: 3000 });
-            },
             onError: () => {
                 toast.add({ severity: 'error', summary: 'Erro', detail: 'Não foi possível duplicar o item.', life: 4000 });
             }
@@ -92,7 +89,6 @@ export function useItemActions(selectedOrderContext, contextMenuVisible, routeNa
         }, {
             preserveScroll: true,
             preserveState: true,
-            onSuccess: () => toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Item estornado!', life: 3000 }),
             onError: (e) => toast.add({ severity: 'error', summary: 'Acesso Negado', detail: e.pin || e.reason || 'Erro ao estornar.', life: 5000 }),
         });
     };

@@ -143,6 +143,7 @@ const listenForWebSocket = () => {
             console.log('✅ [Axios] Resposta do Servidor:', response.data);
 
             if (response.data?.success) {
+                sessionStorage.setItem('pos_terminal_window_alive', '1');
                 console.log('🎉 [Axios] Sucesso! Redirecionando a tela em 800ms...');
                 setTimeout(() => {
                     window.location.href = response.data.redirect || '/team';

@@ -28,7 +28,6 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
                 preserveScroll: true,
                 onSuccess: (pageResp) => {
                     if (pageResp.props.flash?.error) {
-                        toast.add({ severity: "error", summary: "Atenção", detail: pageResp.props.flash.error, life: 5000 });
                         reject(new Error(pageResp.props.flash.error));
                         return;
                     }

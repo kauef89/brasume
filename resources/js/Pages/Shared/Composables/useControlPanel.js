@@ -200,12 +200,13 @@ export function useControlPanel(initialOrders) {
             return;
         }
 
-        if (order.type === 'counter' && order.status === 'ready' && newStatus === 'dispatched') {
+        if (['pickup', 'counter'].includes(order.type) && order.status === 'ready' && newStatus === 'dispatched') {
             if (order.payment_status === 'paid') {
                 handleAdvanceStatus(order, 'closed');
                 return;
             }
-            if (confirm("Pedidos de Balcão não possuem entrega. Deseja abrir a tela de recebimento para liquidar a conta?")) {
+            const label = order.type === 'pickup' ? 'Retirada' : 'Balcão';
+            if (confirm(`Pedidos de ${label} não possuem entrega. Deseja abrir a tela de recebimento para liquidar a conta?`)) {
                 window.dispatchEvent(new CustomEvent('pos-open-checkout', { detail: { orderId: order.id } }));
             }
             return;
@@ -245,10 +246,11 @@ export function useControlPanel(initialOrders) {
                     }
                 }
 
-                if (order.type === 'counter' && newStatus === 'ready') {
+                if (['pickup', 'counter'].includes(order.type) && newStatus === 'ready') {
                     const phone = order.customer?.phone || order.customer_phone || null;
                     if (phone && phone.replace(/\D/g, '').length >= 10) {
-                        if (confirm("Pedido de balcão pronto! Notificar cliente no WhatsApp?")) {
+                        const readyLabel = order.type === 'pickup' ? 'Pedido de retirada pronto!' : 'Pedido de balcão pronto!';
+                        if (confirm(`${readyLabel} Notificar cliente no WhatsApp?`)) {
                             notifyPickupReady(order);
                         }
                     }

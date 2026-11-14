@@ -12,7 +12,7 @@ class AuthService
     /**
      * Autentica no terminal via PIN comparando a hash Bcrypt dos operadores ativos
      */
-    public function loginWithPin(string $pin): void
+    public function loginWithPin(string $pin, bool $remember = true): void
     {
         $activeStaff = User::where('is_active', true)
             ->whereNotNull('pin')
@@ -36,8 +36,10 @@ class AuthService
             throw new Exception('PIN incorreto ou operador não autorizado para operar terminais.');
         }
 
-        Auth::guard('team')->login($matchedUser, true);
-        Auth::guard('web')->login($matchedUser, true);
+        Auth::guard('team')->login($matchedUser, $remember);
+        if ($remember) {
+            Auth::guard('web')->login($matchedUser, true);
+        }
     }
 
     public function loginWithEmail(string $email, string $password): void

@@ -69,8 +69,8 @@
 
             <!-- ==================== LOGÍSTICA (DESKTOP) ==================== -->
             <OrderContextAction
-                v-if="isTeamMode ? (['counter', 'delivery'].includes(order?.type) && hasPhone) : true"
-                :disabled="!['counter', 'delivery'].includes(order?.type) || !hasPhone"
+                v-if="isTeamMode ? (['counter', 'pickup', 'delivery'].includes(order?.type) && hasPhone) : true"
+                :disabled="!['counter', 'pickup', 'delivery'].includes(order?.type) || !hasPhone"
                 :label="order?.type === 'pickup' ? 'Avisar Coleta' : (order?.type === 'counter' ? 'Chamar Balcão' : 'Avisar Saída')"
                 subtitle="Notificar cliente"
                 icon="pi pi-send"
@@ -232,7 +232,7 @@ const primaryActionLabel = computed(() => {
 const primaryActionSubtitle = computed(() => {
     if (canFinishDirectly.value) {
         if (props.order?.type === 'table') return 'Liberar mesa e concluir';
-        if (props.order?.type === 'counter') return 'Entregar ao cliente';
+        if (['counter', 'pickup'].includes(props.order?.type)) return 'Entregar ao cliente';
         return 'Concluir pedido';
     }
     if (!hasOpenShift.value && !isPaid.value) return 'Abra o caixa para receber';

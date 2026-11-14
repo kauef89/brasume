@@ -20,7 +20,9 @@ class LogoutController extends Controller
 
         // 1. O colaborador (Caixa, KDS, Garçom/Equipe) está saindo?
         if ($isTeam) {
+            $teamRecaller = Auth::guard('team')->getRecallerName();
             Auth::guard('team')->logout();
+            \Illuminate\Support\Facades\Cookie::queue(\Illuminate\Support\Facades\Cookie::forget($teamRecaller));
         }
 
         // 2. O cliente B2C (Cardápio) ou Admin está saindo?

@@ -91,6 +91,7 @@ class RemoteUnlockController extends Controller
             $userId = $this->unlockService->exchangeToken($request->token);
             auth('team')->loginUsingId($userId);
             $request->session()->regenerate();
+            $request->session()->put('pos_just_logged_in', true);
 
             if ($request->wantsJson()) return response()->json(['success' => true]);
             return back()->with('success', 'Acesso liberado.');

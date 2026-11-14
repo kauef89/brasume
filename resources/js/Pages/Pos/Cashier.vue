@@ -341,7 +341,7 @@ const resetViews = () => {
     }
 };
 
-watch(() => [props.currentShift?.id, props.currentShift?.status], ([newId, newStatus], [oldId, oldStatus]) => {
+watch(() => [props.currentShift?.id, props.currentShift?.status], ([newId, newStatus], [oldId, oldStatus] = []) => {
     if (newId !== oldId || newStatus !== oldStatus) {
         resetViews();
     }

@@ -17,6 +17,8 @@ class PinAuthController extends Controller
 
         $email = trim($request->email ?? '');
         $pin = trim($request->pin ?? '');
+        $isFixedTerminal = $request->filled('device_uuid');
+        $isFixedTerminal = $request->filled('device_uuid');
 
         try {
             if ($request->filled('email')) {
@@ -31,13 +33,16 @@ class PinAuthController extends Controller
                     return back()->withErrors(['pin' => 'PIN incorreto. Tente novamente.']);
                 }
 
-                Auth::guard('web')->login($user, true);
-                Auth::guard('team')->login($user, true);
+                Auth::guard('team')->login($user, !$isFixedTerminal);
+                if (!$isFixedTerminal) {
+                    Auth::guard('web')->login($user, true);
+                }
             } else {
-                $authService->loginWithPin($pin);
+                $authService->loginWithPin($pin, !$isFixedTerminal);
             }
 
             $request->session()->regenerate();
+            $request->session()->put('pos_just_logged_in', true);
             return redirect()->intended('/team');
 
         } catch (\Exception $e) {

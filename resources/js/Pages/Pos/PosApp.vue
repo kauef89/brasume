@@ -1,5 +1,5 @@
 <template>
-    <div class="flex flex-col h-full w-full relative bg-surface-1 text-surface-text font-sans">
+    <div v-if="isPosSessionVerified" class="flex flex-col h-full w-full relative bg-surface-1 text-surface-text font-sans">
 
         <!-- OVERLAY DE BLOQUEIO INTERNO -->
         <div v-if="isTerminalLocked" class="fixed inset-0 z-[9999] bg-surface-900/95 backdrop-blur-xl flex flex-col items-center justify-center text-white animate-in fade-in duration-300 p-6 select-none">
@@ -53,6 +53,16 @@
                         <div class="flex items-center gap-2 pl-2 md:pl-0 md:border-none">
                             <button @click="toggleTheme" class="w-10 h-10 rounded-full bg-surface-1 flex items-center justify-center text-surface-muted hover:text-primary-smart hover:bg-primary-500/10 transition-colors cursor-pointer outline-none shrink-0 border-none" title="Alternar Tema">
                                 <i class="pi font-medium" :class="themeIcon"></i>
+                            </button>
+
+                            <button
+                                type="button"
+                                @click="syncPosData"
+                                :disabled="isSyncing"
+                                class="w-10 h-10 rounded-full bg-surface-1 flex items-center justify-center text-surface-muted hover:text-primary-smart hover:bg-primary-500/10 transition-colors cursor-pointer outline-none shrink-0 border-none disabled:opacity-60"
+                                title="Sincronizar Dados"
+                            >
+                                <i class="pi pi-sync font-medium" :class="{ 'pi-spin text-primary-smart': isSyncing }"></i>
                             </button>
 
                             <button class="w-10 h-10 rounded-full bg-surface-1 flex items-center justify-center text-surface-muted hover:text-primary-smart hover:bg-primary-500/10 transition-colors cursor-pointer outline-none shrink-0 border-none" title="Perfil">
@@ -245,6 +255,55 @@ const themeIcon = computed(() => {
     if (currentMode.value === 'dark') return 'pi-moon';
     return 'pi-desktop';
 });
+
+const isSyncing = ref(false);
+
+const syncPosData = async () => {
+    if (isSyncing.value) return;
+    isSyncing.value = true;
+
+    try {
+        if (activeTab.value === 'checkout' && checkoutData.value?.order?.id) {
+            const response = await axios.get(route('operations.checkout', checkoutData.value.order.id), {
+                headers: { 'Accept': 'application/json' }
+            });
+            const payload = response.data?.props || response.data;
+            if (payload?.order) {
+                checkoutData.value = {
+                    order: payload.order,
+                    paymentMethods: payload.paymentMethods || payload.payment_methods || checkoutData.value.paymentMethods || [],
+                    companySettings: payload.companySettings || payload.company_settings || page.props.companySettings
+                };
+            }
+        }
+    } catch (e) {
+        console.warn('Falha ao revalidar checkout durante sincronização:', e);
+    }
+
+    router.reload({
+        preserveState: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            toast.add({
+                severity: 'success',
+                summary: 'Sincronizado',
+                detail: 'Dados da operação atualizados.',
+                life: 2500
+            });
+        },
+        onError: () => {
+            toast.add({
+                severity: 'error',
+                summary: 'Falha na Sincronização',
+                detail: 'Verifique a conexão com a internet.',
+                life: 4000
+            });
+        },
+        onFinish: () => {
+            isSyncing.value = false;
+        }
+    });
+};
 
 const purgeShiftData = (notify = false) => {
     localStorage.removeItem('pos_parked_orders');
@@ -445,7 +504,23 @@ useTenantEcho().listenChannel('shift', '.shift.closed', () => {
     localStorage.removeItem('pos_active_shift_id');
 });
 
+const checkPosWindowSession = () => {
+    if (typeof window === 'undefined') return true;
+    if (page.props.justLoggedIn || sessionStorage.getItem('pos_terminal_window_alive') === '1') {
+        sessionStorage.setItem('pos_terminal_window_alive', '1');
+        return true;
+    }
+    return false;
+};
+
+const isPosSessionVerified = ref(checkPosWindowSession());
+
+if (!isPosSessionVerified.value && typeof window !== 'undefined') {
+    window.location.replace('/pos/end-session');
+}
+
 onMounted(() => {
+    if (!isPosSessionVerified.value) return;
     checkShiftIntegrity();
 
     if (window.location.pathname === '/pos' || window.location.pathname === '/pos/') {
@@ -470,8 +545,7 @@ onBeforeUnmount(() => {
 });
 
 const handleLogout = () => {
-    router.post(route('logout'), {}, {
-        onFinish: () => { window.location.href = '/pos/login'; }
-    });
+    sessionStorage.removeItem('pos_terminal_window_alive');
+    window.location.replace('/pos/end-session');
 };
 </script>

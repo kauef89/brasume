@@ -19,6 +19,22 @@ Route::get('/manifest.json', [DynamicManifestController::class, 'show']);
 // Logout Unificado
 Route::post('/logout', [LogoutController::class, 'destroy'])->name('logout');
 
+// Encerramento limpo de sessão do terminal fixo (evita 409 Inertia ao reabrir PWA)
+Route::get('/pos/end-session', function (\Illuminate\Http\Request $request) {
+    if (\Illuminate\Support\Facades\Auth::guard('team')->check()) {
+        $recaller = \Illuminate\Support\Facades\Auth::guard('team')->getRecallerName();
+        \Illuminate\Support\Facades\Auth::guard('team')->logout();
+        \Illuminate\Support\Facades\Cookie::queue(\Illuminate\Support\Facades\Cookie::forget($recaller));
+    }
+    if (\Illuminate\Support\Facades\Auth::guard('web')->check()) {
+        \Illuminate\Support\Facades\Auth::guard('web')->logout();
+    }
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+
+    return redirect()->route('pos.login');
+})->name('pos.end-session');
+
 // Gateway B2C (Cliente)
 Route::get("/customer/login", function () {
     if (auth()->check()) {

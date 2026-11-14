@@ -620,7 +620,6 @@ const handleFinishOrder = () => {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
-            toast.add({ severity: 'success', summary: 'Pedido Finalizado', detail: `Pedido #${props.order.id} concluído e arquivado no histórico.`, life: 3000 });
             closeOrderDetails();
         },
         onError: (err) => {
@@ -673,7 +672,6 @@ const handleConfirmAuth = (authData) => {
             preserveState: true,
             onSuccess: () => {
                 isReasonModalVisible.value = false;
-                toast.add({ severity: 'success', summary: 'Pedido Cancelado', detail: 'O pedido foi estornado e encerrado.', life: 4000 });
                 closeOrderDetails();
             },
             onError: (err) => {

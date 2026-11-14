@@ -279,6 +279,7 @@ watch([activeDeviceUuid, isDeviceAuthorized], ([newUuid, isAuthorized]) => {
                 toast.add({ severity: 'success', summary: 'Autorizado', detail: 'O gestor liberou o terminal!', life: 3000 });
 
                 try {
+                    sessionStorage.setItem('pos_terminal_window_alive', '1');
                     router.post(route('auth.remote.exchange'), { token: event.token }, {
                         preserveScroll: true,
                         preserveState: false,
@@ -300,6 +301,7 @@ watch([activeDeviceUuid, isDeviceAuthorized], ([newUuid, isAuthorized]) => {
                                 }
                             }
 
+                            sessionStorage.setItem('pos_terminal_window_alive', '1');
                             window.location.href = targetPath;
                         },
                         onError: (errors) => {
@@ -358,15 +360,18 @@ const submitPin = () => {
     if (pin.value.length !== 4) return;
 
     isSubmitting.value = true;
+    sessionStorage.setItem('pos_terminal_window_alive', '1');
     router.post(route('auth.pin.login'), {
         pin: pin.value,
         device_uuid: activeDeviceUuid.value
     }, {
         preserveScroll: true,
         onSuccess: () => {
+            sessionStorage.setItem('pos_terminal_window_alive', '1');
             isSubmitting.value = false;
         },
         onError: (errors) => {
+            sessionStorage.removeItem('pos_terminal_window_alive');
             isSubmitting.value = false;
             pin.value = '';
             toast.add({ severity: 'error', summary: 'Acesso Negado', detail: errors.pin || 'PIN incorreto ou turno fechado.', life: 4000 });

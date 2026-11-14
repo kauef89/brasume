@@ -187,10 +187,8 @@ export function useOrderDetailsOrchestrator(props, activeItemsGrouped) {
                     if (page.props.order && ['cancelled', 'merged', 'transferred'].includes(page.props.order.status)) {
                         const returnRoute = route().current('team.*') ? route('team.index') : route('operations.index');
 
-                        toast.add({ severity: 'success', summary: 'Mesa Transferida', detail: 'A comanda original foi encerrada.', life: 3000 });
                         router.visit(returnRoute);
                     } else {
-                        toast.add({ severity: 'success', summary: 'Transferência Concluída', detail: 'Os itens selecionados foram movidos.', life: 3000 });
                     }
                 },
                 onError: (errors) => {
@@ -247,12 +245,6 @@ export function useOrderDetailsOrchestrator(props, activeItemsGrouped) {
                 preserveState: true,
                 preserveScroll: true,
                 onSuccess: () => {
-                    toast.add({
-                        severity: 'success',
-                        summary: 'Endereço Atualizado',
-                        detail: 'O local de entrega e a taxa foram atualizados com sucesso.',
-                        life: 3000
-                    });
                     isChangeAddressModalVisible.value = false;
                     activeSidebarView.value = 'menu';
                 },

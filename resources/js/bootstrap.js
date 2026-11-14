@@ -63,10 +63,26 @@ document.addEventListener('visibilitychange', () => {
 // 📱 REGISTRO DO SERVICE WORKER (PWA)
 // ==========================================
 if ('serviceWorker' in navigator) {
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    let isRefreshingSw = false;
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController || isRefreshingSw) return;
+        isRefreshingSw = true;
+        window.location.reload();
+    });
+
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
             .then((registration) => {
                 console.log('✅ PWA: Service Worker registrado com sucesso!', registration.scope);
+                registration.update().catch(() => {});
+
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        registration.update().catch(() => {});
+                    }
+                });
             })
             .catch((error) => {
                 console.error('❌ PWA: Falha ao registrar o Service Worker:', error);

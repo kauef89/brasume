@@ -394,7 +394,7 @@ const handleConfirmAuth = (authData) => {
 
 const isPaid = computed(() => props.order?.payment_status === 'paid');
 const translatedType = computed(() => {
-  const types = { table: "Mesa", counter: "Balcão", delivery: "Delivery" };
+  const types = { table: "Mesa", counter: "Balcão", pickup: "Retirada", delivery: "Delivery" };
   return props.order ? types[props.order.type] : "";
 });
 

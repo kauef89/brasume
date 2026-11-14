@@ -51,6 +51,44 @@ class CustomerCheckoutService
         }
 
         $isAppend = !empty($payload['append_to_order']);
+
+        // 🛡️ TRAVA DE IDEMPOTÊNCIA (60s): Evita pedidos duplicados se o cliente reenviar o mesmo carrinho
+        if (!$isAppend && !empty($customer?->id)) {
+            $orderTypeCheck = $payload['routing']['type'] ?? 'delivery';
+            $incomingSig = collect($payload['items'] ?? [])
+                ->map(fn ($i) => (int) ($i['id'] ?? $i['product_id'] ?? 0) . ':' . (int) ($i['qty'] ?? 1))
+                ->sort()
+                ->values()
+                ->implode('|');
+
+            $recentOrders = Order::with('items')
+                ->where('customer_id', $customer->id)
+                ->where('type', $orderTypeCheck)
+                ->whereNotIn('status', ['cancelled'])
+                ->where('created_at', '>=', now()->subSeconds(60))
+                ->latest('id')
+                ->get();
+
+            foreach ($recentOrders as $recent) {
+                $existingSig = $recent->items
+                    ->whereNull('parent_item_id')
+                    ->map(fn ($i) => (int) $i->product_id . ':' . (int) $i->quantity)
+                    ->sort()
+                    ->values()
+                    ->implode('|');
+
+                if ($incomingSig !== '' && $incomingSig === $existingSig) {
+                    Log::warning("🛡️ [Idempotency] Pedido duplicado bloqueado para Cliente #{$customer->id}. Reutilizando Pedido #{$recent->id}.");
+                    $pendingPix = $recent->payments()->where('status', 'pending')->whereNotNull('txid')->latest('id')->first();
+
+                    return [
+                        'isBankApi' => (bool) ($recent->status === 'pending_payment' && $pendingPix),
+                        'order'     => $recent,
+                        'pixData'   => $pendingPix ? ['txid' => $pendingPix->txid, 'qr_code' => $pendingPix->pix_payload] : null,
+                    ];
+                }
+            }
+        }
         $order = null;
         $remainingBalance = 0.00;
         $needsPixPayment = false;

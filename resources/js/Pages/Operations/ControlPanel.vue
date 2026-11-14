@@ -91,7 +91,7 @@
                             <div class="flex flex-col">
                                 <span class="text-sm font-black text-surface-text">{{ order.customer_name || 'Cliente Avulso' }}</span>
                                 <span class="text-[10px] font-bold text-surface-muted uppercase tracking-wider">
-                                    {{ order.type === 'delivery' ? 'Entrega' : (order.type === 'table' ? `Mesa ${order.table_number || ''}` : 'Balcão') }}
+                                    {{ order.type === 'delivery' ? 'Entrega' : (order.type === 'table' ? `Mesa ${order.table_number || ''}` : (order.type === 'pickup' ? 'Retirada' : 'Balcão')) }}
                                 </span>
                             </div>
                         </div>
@@ -244,11 +244,6 @@ const executeBulkComplete = () => {
     router.post(route('operations.orders.bulk-complete-dispatched'), {}, {
         preserveScroll: true,
         preserveState: true,
-        onSuccess: (pageProps) => {
-            const flash = pageProps.props.flash || {};
-            if (flash.success) toast.add({ severity: 'success', summary: 'Rota Baixada', detail: flash.success, life: 5000 });
-            if (flash.warning) toast.add({ severity: 'warn', summary: 'Atenção (Inconsistências)', detail: flash.warning, life: 8000 });
-        }
     });
 };
 
@@ -340,13 +335,6 @@ const handleItemReprint = (item) => {
     router.post(route('operations.kds.print-item', item.id), {}, {
         preserveScroll: true,
         preserveState: true,
-        onSuccess: (pageProps) => {
-            if (pageProps.props.flash?.error) {
-                toast.add({ severity: 'error', summary: 'Atenção', detail: pageProps.props.flash.error, life: 4000 });
-            } else {
-                toast.add({ severity: 'success', summary: 'Reimpressão', detail: `Via de ${item.product_name || item.name} enviada para a produção!`, life: 3000 });
-            }
-        }
     });
 };
 

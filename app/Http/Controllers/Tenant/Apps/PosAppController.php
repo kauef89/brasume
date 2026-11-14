@@ -136,6 +136,7 @@ class PosAppController extends Controller
 
         $data['device'] = fn () => $device;
         $data['initialTerminalLocked'] = $isDeviceLocked;
+        $data['justLoggedIn'] = (bool) $request->session()->pull('pos_just_logged_in', false);
 
         return Inertia::render('Pos/PosApp', $data);
     }

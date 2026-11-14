@@ -37,7 +37,6 @@ class CustomerCheckoutController extends Controller
                 return back()->with([
                     'pix_data' => $result['pixData'],
                     'order_id' => $result['order']->id,
-                    'success'  => 'Código PIX gerado com sucesso!'
                 ]);
             }
 

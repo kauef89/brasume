@@ -54,6 +54,7 @@ class QrAuthController extends Controller
             if ($userId) {
                 auth('team')->loginUsingId($userId);
                 $request->session()->regenerate();
+                $request->session()->put('pos_just_logged_in', true);
 
                 return response()->json([
                     'success'  => true,

@@ -52,14 +52,8 @@ export function usePosSync(activeTab, checkoutData) {
         echo.listenChannel('operations', '.table.updated', reloadOperationsBoard);
 
         // Turno
-        echo.listenChannel('shift', '.shift.opened', () => {
-            toast.add({ severity: 'success', summary: 'Turno Aberto', detail: 'O caixa foi aberto.', life: 3000 });
-            reloadOperationsBoard();
-        });
-        echo.listenChannel('shift', '.shift.closed', () => {
-            toast.add({ severity: 'warn', summary: 'Turno Fechado', detail: 'O turno operacional foi encerrado.', life: 4000 });
-            reloadOperationsBoard();
-        });
+        echo.listenChannel('shift', '.shift.opened', reloadOperationsBoard);
+        echo.listenChannel('shift', '.shift.closed', reloadOperationsBoard);
 
         // Vitrine de produtos
         echo.listenChannel('catalog', '.catalog.updated', () => {

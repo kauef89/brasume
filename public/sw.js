@@ -1,4 +1,4 @@
-const CACHE_NAME = 'brasume-v1.02.00'; // Incrementado para forçar atualização nos aparelhos
+const CACHE_NAME = 'brasume-v1.03.00'; // Incrementado para forçar atualização nos aparelhos
 
 const URLS_TO_CACHE = [
     '/',

@@ -524,7 +524,6 @@ const handleUpdateProfile = (formData, closeEditCallback) => {
         preserveState: true,
         onSuccess: () => {
             if (closeEditCallback) closeEditCallback();
-            toast.add({ severity: 'success', summary: 'Perfil atualizado!', detail: 'Os seus dados foram guardados.', life: 3000 });
         },
         onError: (err) => toast.add({ severity: 'error', summary: 'Atenção', detail: Object.values(err)[0] || 'Verifique os dados.', life: 4000 })
     });
@@ -533,7 +532,6 @@ const handleUpdateProfile = (formData, closeEditCallback) => {
 const handleDeactivateAddress = (addressId) => {
     router.post(route('customer.profile.deactivate-address', addressId), {}, {
         preserveScroll: true, preserveState: true,
-        onSuccess: () => toast.add({ severity: 'success', summary: 'Endereço Removido', detail: 'Endereço removido com sucesso.', life: 3000 })
     });
 };
 

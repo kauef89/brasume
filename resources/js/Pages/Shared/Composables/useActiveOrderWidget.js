@@ -80,9 +80,6 @@ export function useActiveOrderWidget(initialOrders = []) {
         router.post(route('customer.orders.cancel', orderId), { preserveState: true, }, {
             preserveScroll: true,
             preserveState: true,
-            onSuccess: (pageResp) => {
-                if (pageResp.props.flash?.success) toast.add({ severity: 'success', summary: 'Cancelado', detail: pageResp.props.flash.success, life: 5000 });
-            },
             onError: (errors) => toast.add({ severity: 'error', summary: 'Ops!', detail: Object.values(errors)[0] || 'Erro ao cancelar.', life: 5000 })
         });
     };
@@ -120,11 +117,7 @@ export function useActiveOrderWidget(initialOrders = []) {
             activeOrders.value = updated;
             now.value = Date.now();
 
-            if (incoming.status === 'preparing') {
-                toast.add({ severity: 'info', summary: 'Na Cozinha!', detail: 'Seu pedido começou a ser preparado.', life: 5000 });
-            } else if (['dispatched', 'out_for_delivery'].includes(incoming.status)) {
-                toast.add({ severity: 'info', summary: 'Saiu para entrega! 🛵', detail: 'O entregador já está a caminho.', life: 6000 });
-            } else if (['closed', 'cancelled'].includes(incoming.status)) {
+            if (['closed', 'cancelled'].includes(incoming.status)) {
                 activeOrders.value = activeOrders.value.filter(o => Number(o.id) !== incomingId);
             }
         }

@@ -76,7 +76,6 @@ export function useCustomerCheckoutFlow(props, cartContext, activeTab) {
 
                             if (pageResp.props.flash?.error) {
                                 cart.value = backupCart;
-                                toast.add({ severity: 'error', summary: 'Erro no Pedido', detail: pageResp.props.flash.error, life: 5000 });
                                 return;
                             }
 
@@ -106,7 +105,6 @@ export function useCustomerCheckoutFlow(props, cartContext, activeTab) {
                                 removeCoupon();
                                 isCheckoutModalVisible.value = false;
                                 activeTab.value = isTableMode.value ? 'orders' : 'home';
-                                toast.add({ severity: 'success', summary: 'Pedido Recebido!', detail: 'O seu pedido já está sendo preparado!', life: 4000 });
                             }
                         },
             onError: (errors) => {

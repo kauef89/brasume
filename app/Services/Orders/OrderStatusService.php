@@ -115,7 +115,7 @@ class OrderStatusService
         if ($newStatus === 'closed') return "✨ Pedido concluído. Muito obrigado pela preferência!";
 
         if ($newStatus === 'ready') {
-            if ($order->type === 'counter') {
+            if (in_array($order->type, ['counter', 'pickup'], true)) {
                 return "✅ Tudo pronto! Já pode vir retirar o seu pedido no balcão.";
             } elseif ($order->type === 'delivery' && ($order->courier_id || $order->driver_id)) {
                 $driver = $order->courier?->user ?? User::find($order->driver_id);
