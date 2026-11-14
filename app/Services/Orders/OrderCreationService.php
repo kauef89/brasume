@@ -147,17 +147,21 @@ class OrderCreationService
         $order->loadMissing('items.product');
 
         $activeStations = $order->items->pluck('product.production_station')->filter()->unique();
+        $notifiedBar = false;
+        $notifiedKitchen = false;
 
         foreach ($activeStations as $station) {
             $stationLower = strtolower($station);
-            if (str_contains($stationLower, 'bar') || $stationLower === 'bebidas') {
+            if (!$notifiedBar && (str_contains($stationLower, 'bar') || $stationLower === 'bebidas')) {
+                $notifiedBar = true;
                 $barStaff = $attendanceService->getActiveShiftStaffByRoles(['bar', 'bartender', 'copa']);
                 if ($barStaff->isNotEmpty()) {
                     \Illuminate\Support\Facades\Notification::send($barStaff, new \App\Notifications\OrderStatusUpdated($order, "🍹 Preparo de Bar solicitado para o Pedido #{$order->id}!"));
                 }
             }
 
-            if (str_contains($stationLower, 'cozinha') || $stationLower === 'quente') {
+            if (!$notifiedKitchen && (str_contains($stationLower, 'cozinha') || $stationLower === 'quente')) {
+                $notifiedKitchen = true;
                 $kitchenStaff = $attendanceService->getActiveShiftStaffByRoles(['cozinha', 'cook', 'chef', 'kds']);
                 if ($kitchenStaff->isNotEmpty()) {
                     \Illuminate\Support\Facades\Notification::send($kitchenStaff, new \App\Notifications\OrderStatusUpdated($order, "🍳 Novos pratos na tela do KDS - Pedido #{$order->id}!"));

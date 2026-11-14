@@ -328,9 +328,11 @@ class OrderPaymentService
             return false;
         }
 
-        $order->status = 'closed';
-        $order->closed_at = now();
-        $order->save();
+        if ($order->status !== 'closed') {
+            $order->status = 'closed';
+            $order->closed_at = $order->closed_at ?? now();
+            $order->save();
+        }
 
         // Libera a mesa física preservando o layout de junção (sem auto-split)
         if ($order->type === 'table') {
@@ -343,11 +345,9 @@ class OrderPaymentService
                 DiningTable::whereIn('id', $groupTableIds)->update(['status' => 'available']);
 
                 $broadcastTables = function () use ($groupTableIds) {
-                    foreach ($groupTableIds as $id) {
-                        $t = DiningTable::find($id);
-                        if ($t) {
-                            broadcast(new DiningTableUpdated($t));
-                        }
+                    $tables = DiningTable::whereIn('id', $groupTableIds)->get();
+                    foreach ($tables as $t) {
+                        broadcast(new DiningTableUpdated($t));
                     }
                 };
 
