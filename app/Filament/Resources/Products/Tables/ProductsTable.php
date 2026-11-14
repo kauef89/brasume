@@ -75,12 +75,17 @@ class ProductsTable
                 Tables\Columns\TextColumn::make('lucratividade')
                     ->label('Margem')
                     ->state(function (Product $record) {
-                        if (in_array($record->type, [
+                        $typeVal = $record->type instanceof ProductType ? $record->type->value : (string) $record->type;
+
+                        if (in_array($typeVal, [
                             ProductType::INGREDIENT->value,
                             ProductType::CONSUMABLE->value,
                             ProductType::PACKAGING->value,
                             ProductType::MANUFACTURED->value,
-                        ])) return null;
+                            ProductType::COMBO->value,
+                        ], true)) {
+                            return null;
+                        }
 
                         $data = ProductCostingService::getMarginData($record);
                         return $data['margin_percentage'] ?? 0;
@@ -135,12 +140,27 @@ class ProductsTable
                         $livewire->dispatch('$refresh');
                     }),
 
-                // 🚀 COLUNA CADEIA DE CUSTOS MULTI-NÍVEL
+                // 🚀 COLUNA CADEIA DE CUSTOS MULTI-NÍVEL (Oculta status de ficha técnica para Combos)
                 Tables\Columns\TextColumn::make('connection_status')
                     ->label('Cadeia de Custos')
-                    ->state(fn (Product $record): \App\Enums\CostChainStatus => $record->cost_chain_status)
+                    ->state(function (Product $record): ?\App\Enums\CostChainStatus {
+                        $typeVal = $record->type instanceof ProductType ? $record->type->value : (string) $record->type;
+
+                        if ($typeVal === ProductType::COMBO->value) {
+                            return null;
+                        }
+
+                        return $record->cost_chain_status;
+                    })
+                    ->placeholder('-')
                     ->badge()
                     ->tooltip(function (Product $record): ?string {
+                        $typeVal = $record->type instanceof ProductType ? $record->type->value : (string) $record->type;
+
+                        if ($typeVal === ProductType::COMBO->value) {
+                            return 'Combo: custo dinâmico calculado a partir dos itens escolhidos em cada passo.';
+                        }
+
                         $eval = $record->cost_chain_evaluation;
                         if (!empty($eval['issues'])) {
                             return implode("\n• ", array_merge(['Pendências encontradas:'], $eval['issues']));
@@ -173,8 +193,8 @@ class ProductsTable
                         $targetStatus = \App\Enums\CostChainStatus::tryFrom($value);
                         if (!$targetStatus) return $query;
 
-                        // Avalia os IDs correspondentes em memória para precisão total da árvore
-                        $allIds = Product::pluck('id');
+                        // Avalia os IDs correspondentes em memória para precisão total da árvore (ignorando Combos)
+                        $allIds = Product::where('type', '!=', ProductType::COMBO->value)->pluck('id');
                         $matchingIds = [];
 
                         foreach ($allIds as $pId) {

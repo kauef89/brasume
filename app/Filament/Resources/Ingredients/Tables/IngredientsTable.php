@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\Ingredients\Tables;
 
+use App\Enums\CategoryType;
 use App\Enums\ProductStatus;
+use App\Enums\ProductType;
 use App\Filament\Resources\Ingredients\IngredientResource;
 use App\Filament\Resources\Products\Actions\SmartStatusAction;
 use App\Models\Category;
@@ -26,13 +28,26 @@ class IngredientsTable
             ->defaultSort('cost_variation', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Insumo')
+                    ->label('Insumo / Pré-Preparo')
                     ->searchable()
                     ->sortable()
                     ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('category.name')
-                    ->label('Categoria')
+                    ->label('Família')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('type')
+                    ->label('Origem')
+                    ->badge()
+                    ->formatStateUsing(function ($state): string {
+                        $enum = $state instanceof ProductType ? $state : ProductType::tryFrom((string) $state);
+                        return $enum === ProductType::MANUFACTURED ? 'Pré-Preparo' : 'Comprado';
+                    })
+                    ->color(function ($state): string {
+                        $enum = $state instanceof ProductType ? $state : ProductType::tryFrom((string) $state);
+                        return $enum === ProductType::MANUFACTURED ? 'purple' : 'amber';
+                    })
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('current_stock')
@@ -127,6 +142,21 @@ class IngredientsTable
                     ->sortable(),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('type')
+                    ->label('Origem do Item')
+                    ->options([
+                        ProductType::INGREDIENT->value   => 'Comprado (Matéria-Prima)',
+                        ProductType::MANUFACTURED->value => 'Produzido na Loja (Pré-Preparo)',
+                    ]),
+
+                Tables\Filters\SelectFilter::make('category_id')
+                    ->label('Família / Grupo')
+                    ->options(
+                        fn () => Category::where('type', CategoryType::INTERNAL->value)
+                            ->orderBy('name')
+                            ->pluck('name', 'id'),
+                    ),
+
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Disponibilidade')
                     ->options(ProductStatus::class)
@@ -136,15 +166,6 @@ class IngredientsTable
                         }
                         return $query;
                     }),
-
-                Tables\Filters\SelectFilter::make('category_id')
-                    ->label('Filtrar Categoria')
-                    ->options(
-                        fn () => Category::where('type', 'internal')->pluck(
-                            'name',
-                            'id',
-                        ),
-                    ),
 
                 Tables\Filters\Filter::make('anomalous_cost_spike')
                     ->label('🚨 Salto Suspeito (> 50% de aumento)')

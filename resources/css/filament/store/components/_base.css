@@ -57,3 +57,14 @@ body {
 .dark .fi-btn-label {
     @apply !text-white/95;
 }
+
+.fi-badge {
+    --tw-ring-color: transparent !important;
+}
+
+div#search-wrapper
+Especificidade: (1,0,1)
+ {
+    padding: 0;
+    border: none;
+}

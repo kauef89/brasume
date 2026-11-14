@@ -184,7 +184,7 @@ class CostChainAnalyzer
 
     private static function resolveDirectCost(Product $product): float
     {
-        $latest = $product->latestCostHistory ?? ProductCostHistory::where('product_id', $product->id)->latest('id')->first();
+        $latest = $product->latestCostHistory ?? ProductCostHistory::where('product_id', $product->id)->orderByDesc('created_at')->orderByDesc('id')->first();
         if ($latest && (float)$latest->unit_cost > 0) {
             return (float) $latest->unit_cost;
         }

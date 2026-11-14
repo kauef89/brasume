@@ -10,9 +10,11 @@ class GoodsReceiptItem extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'quantity' => 'decimal:4',
+        'raw_quantity'        => 'decimal:4',
+        'conversion_factor'   => 'decimal:4',
+        'quantity'            => 'decimal:4',
         'unit_cost_estimated' => 'decimal:5',
-        'reconciled_qty' => 'decimal:4',
+        'reconciled_qty'      => 'decimal:4',
     ];
 
     public function goodsReceipt(): BelongsTo

@@ -15,6 +15,7 @@ class BillingDashboard extends Dashboard
     protected static ?string $navigationLabel = 'Faturamento (BI)';
     protected static ?string $title = 'Inteligência de Faturamento';
     protected static ?int $navigationSort = 1;
+    protected static string $routePath = '/billing-dashboard';
 
     /**
      * Move os filtros para uma Drawer acionada via Header Action

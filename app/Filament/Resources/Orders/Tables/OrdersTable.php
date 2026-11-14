@@ -143,7 +143,7 @@ class OrdersTable {
                 ->form([
                     Select::make('packaging_product_id')
                         ->label('Embalagem Sugerida')
-                        ->options(Product::whereIn('type', [ProductType::PACKAGING->value, ProductType::CONSUMABLE->value])->pluck('name', 'id'))
+                        ->options(Product::whereIn('type', [ProductType::PACKAGING->value, ProductType::CONSUMABLE->value])->where('status', '!=', 'archived')->pluck('name', 'id'))
                         ->searchable()
                         ->required()
                         ->helperText('O sistema calculou o volume deste pedido e sugeriu a embalagem ideal.'),

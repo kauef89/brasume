@@ -22,7 +22,7 @@ class InventoryLossForm
                     Grid::make(3)->schema([
                         Components\Select::make('product_id')
                             ->label('Produto / Insumo')
-                            ->relationship('product', 'name')
+                            ->relationship('product', 'name', fn ($query) => $query->whereIn('type', ['ingredient', 'manufactured', 'packaging', 'consumable', 'resale'])->where('status', '!=', 'archived'))
                             ->searchable()
                             ->preload()
                             ->required()

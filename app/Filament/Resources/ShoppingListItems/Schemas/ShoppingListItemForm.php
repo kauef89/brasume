@@ -12,7 +12,7 @@ class ShoppingListItemForm
     {
         return [
             Components\Select::make('product_id')
-                ->relationship('product', 'name')
+                ->relationship('product', 'name', fn ($query) => $query->whereIn('type', ['ingredient', 'packaging', 'consumable', 'resale', 'manufactured'])->where('status', '!=', 'archived'))
                 ->searchable()
                 ->required()
                 ->label('Produto'),

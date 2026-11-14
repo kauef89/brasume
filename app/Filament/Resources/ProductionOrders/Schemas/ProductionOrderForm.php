@@ -12,7 +12,7 @@ class ProductionOrderForm
     {
         return [
             Components\Select::make('product_id')
-                ->relationship('product', 'name')
+                ->relationship('product', 'name', fn ($query) => $query->where('type', 'manufactured')->where('status', '!=', 'archived'))
                 ->searchable()
                 ->required()
                 ->label('Produto Manufaturado'),

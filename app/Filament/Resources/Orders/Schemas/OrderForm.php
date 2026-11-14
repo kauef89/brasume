@@ -119,7 +119,7 @@ class OrderForm
                         ->schema([
                             SchemaComponents\Grid::make(11)->schema([
                                 FormComponents\Select::make("product_id")
-                                    ->relationship("product", "name")
+                                    ->relationship("product", "name", fn ($query) => $query->whereIn('type', ['dish', 'combo', 'resale', 'service'])->where('status', '!=', 'archived'))
                                     ->label("Vincular ao Cadastro")
                                     ->searchable()
                                     ->live()

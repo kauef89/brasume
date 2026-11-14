@@ -78,7 +78,7 @@ class ComboSection
 
                                 Forms\Components\Select::make("product_id")
                                     ->label("Qual Produto?")
-                                    ->options(fn() => Product::whereIn("type", ["dish", "resale", "manufactured"])->pluck("name", "id"))
+                                    ->options(fn() => Product::whereIn("type", ["dish", "resale", "manufactured"])->where("status", "!=", "archived")->pluck("name", "id"))
                                     ->searchable()
                                     ->preload()
                                     ->required(fn(Get $get) => $get("selection_type") === "product")

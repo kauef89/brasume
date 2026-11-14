@@ -82,7 +82,7 @@ class Product extends Model
             if ($this->relationLoaded('latestCostHistory')) {
                 $latestPurchase = $this->latestCostHistory;
             } elseif ($this->relationLoaded('costHistories')) {
-                $latestPurchase = $this->costHistories->sortByDesc('id')->first();
+                $latestPurchase = $this->costHistories->sortByDesc(fn ($h) => ($h->created_at?->timestamp ?? 0) . '_' . str_pad((string) $h->id, 10, '0', STR_PAD_LEFT))->first();
             } else {
                 $latestPurchase = $this->latestCostHistory()->first();
             }
@@ -149,7 +149,7 @@ class Product extends Model
 
     public function latestCostHistory(): HasOne
     {
-        return $this->hasOne(ProductCostHistory::class)->latestOfMany('id');
+        return $this->hasOne(ProductCostHistory::class)->ofMany(['created_at' => 'max', 'id' => 'max']);
     }
 
     public function storageRules(): HasMany

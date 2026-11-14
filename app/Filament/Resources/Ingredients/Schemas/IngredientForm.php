@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Ingredients\Schemas;
 
+use App\Enums\CategoryType;
 use App\Enums\ProductType;
 use App\Enums\UnitOfMeasure;
 use App\Models\Category;
@@ -20,7 +21,7 @@ class IngredientForm
     public static function getFormSchema(): array
     {
         return [
-            Section::make('Dados do Insumo / Preparo')
+            Section::make('Dados do Insumo / Pré-Preparo')
                 ->schema([
                     Grid::make(3)->schema([
                         self::getNameField(),
@@ -52,7 +53,7 @@ class IngredientForm
                 ignoreRecord: true,
                 modifyRuleUsing: fn (Unique $rule) => $rule->withoutTrashed(),
             )
-            ->label('Nome do Insumo/Preparo')
+            ->label('Nome do Insumo / Pré-Preparo')
             ->required()
             ->columnSpan(2);
     }
@@ -60,33 +61,30 @@ class IngredientForm
     private static function getCategoryField(): Forms\Components\Select
     {
         return Forms\Components\Select::make('category_id')
-            ->label('Categoria de Insumo')
+            ->label('Família / Grupo de Estoque')
             ->options(
-                fn () => Category::where('type', 'internal')->pluck('name', 'id'),
+                fn () => Category::where('type', CategoryType::INTERNAL->value)
+                    ->orderBy('name')
+                    ->pluck('name', 'id'),
             )
             ->required()
             ->searchable()
             ->preload()
-            ->live()
-            ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                $category = Category::find($state);
-                // Sugere Preparado se a categoria indicar preparo interno, sem sobrescrever escolhas manuais
-                if ($category && str_contains(strtolower($category->name), 'preparo interno')) {
-                    $set('type', ProductType::MANUFACTURED->value);
-                }
-            })
             ->columnSpan(1);
     }
 
     private static function getTypeField(): Forms\Components\Select
     {
         return Forms\Components\Select::make('type')
-            ->label('Tipo de Item')
+            ->label('Origem do Item')
             ->options([
-                ProductType::INGREDIENT->value   => 'Insumo (Comprado)',
-                ProductType::MANUFACTURED->value => 'Preparado (Receita Interna)',
+                ProductType::INGREDIENT->value   => 'Comprado (Matéria-Prima)',
+                ProductType::MANUFACTURED->value => 'Produzido na Loja (Pré-Preparo)',
             ])
             ->default(ProductType::INGREDIENT->value)
+            ->helperText(fn (Get $get) => $get('type') === ProductType::MANUFACTURED->value
+                ? 'Possui Ficha Técnica própria e ordem de produção.'
+                : 'Adquirido de fornecedores via NF-e ou Romaneio.')
             ->required()
             ->live()
             ->columnSpan(1);
@@ -167,7 +165,7 @@ class IngredientForm
     {
         return Forms\Components\Toggle::make('track_inventory')
             ->label('Controlar Estoque Físico?')
-            ->default(true)
+            ->default(false)
             ->inline(false)
             ->columnSpan(1);
     }

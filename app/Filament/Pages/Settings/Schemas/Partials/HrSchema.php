@@ -112,7 +112,7 @@ class HrSchema
                                 ->multiple()
                                 ->searchable()
                                 ->preload()
-                                ->options(fn () => \App\Models\Product::where('status', 'available')->orderBy('name')->pluck('name', 'id')->toArray())
+                                ->options(fn () => \App\Models\Product::whereIn('status', ['available', 'out_of_stock'])->where('type', '!=', 'ingredient')->orderBy('name')->pluck('name', 'id')->toArray())
                                 ->columnSpan(1),
                         ])
                 ])

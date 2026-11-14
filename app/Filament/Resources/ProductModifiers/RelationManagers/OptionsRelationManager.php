@@ -48,7 +48,7 @@ class OptionsRelationManager extends RelationManager
                 ->relationship(
                     name: "linkedProduct",
                     titleAttribute: "name",
-                    modifyQueryUsing: fn (Builder $query) => $query->whereIn("type", ["ingredient", "manufactured"]),
+                    modifyQueryUsing: fn (Builder $query) => $query->whereIn("type", ["ingredient", "manufactured", "resale"])->where('status', '!=', 'archived'),
                 )
                 ->searchable()
                 ->preload()
@@ -82,7 +82,7 @@ class OptionsRelationManager extends RelationManager
                 ->relationship(
                     name: "removesIngredient",
                     titleAttribute: "name",
-                    modifyQueryUsing: fn (Builder $query) => $query->whereIn("type", ["ingredient", "manufactured"]),
+                    modifyQueryUsing: fn (Builder $query) => $query->whereIn("type", ["ingredient", "manufactured", "resale"])->where('status', '!=', 'archived'),
                 )
                 ->searchable()
                 ->preload()

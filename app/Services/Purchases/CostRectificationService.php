@@ -109,7 +109,7 @@ class CostRectificationService
                 $product->increment('current_stock', $preview['delta_quantity']);
             }
 
-            $latest = ProductCostHistory::where('product_id', $record->product_id)->latest('id')->first();
+            $latest = ProductCostHistory::where('product_id', $record->product_id)->orderByDesc('created_at')->orderByDesc('id')->first();
             if ($latest && $latest->id === $record->id && $product) {
                 $product->updateQuietly(['base_cost' => $preview['new_unit_cost']]);
             }

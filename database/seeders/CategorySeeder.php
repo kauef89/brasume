@@ -17,7 +17,7 @@ class CategorySeeder extends Seeder
             ['name' => 'Laticínios', 'sort_order' => 4],
             ['name' => 'Embalagens e Descartáveis', 'sort_order' => 5],
             ['name' => 'Material de Limpeza e Uso', 'sort_order' => 6],
-            ['name' => 'Bebidas (Estoque Central)', 'sort_order' => 7],
+            ['name' => 'Bebidas', 'sort_order' => 7],
             ['name' => 'Preparo Interno', 'sort_order' => 9],
             ['name' => 'Pães & Massas', 'sort_order' => 8]
         ];

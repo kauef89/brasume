@@ -13,7 +13,7 @@ class ProductionSection
     {
         return Section::make("Produção")
             ->icon("heroicon-o-fire")
-            ->visible(fn(Get $get) => $get("type") !== "combo")
+            ->visible(fn(Get $get) => in_array($get("type"), ["dish", "manufactured"]))
             ->schema([
                 Grid::make(2)->schema([
                     Forms\Components\Select::make("kitchen_id")

@@ -53,7 +53,7 @@ class CostHistoriesRelationManager extends RelationManager
 
         return $table
             ->recordTitleAttribute('xml_name')
-            ->defaultSort('id', 'desc')
+            ->defaultSort('created_at', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Data')
@@ -181,5 +181,19 @@ class CostHistoriesRelationManager extends RelationManager
                     DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    public static function canViewForRecord($ownerRecord, string $pageClass): bool
+    {
+        $type = $ownerRecord->type instanceof \App\Enums\ProductType 
+            ? $ownerRecord->type 
+            : \App\Enums\ProductType::tryFrom((string) $ownerRecord->type);
+
+        return in_array($type?->value, [
+            \App\Enums\ProductType::INGREDIENT->value,
+            \App\Enums\ProductType::CONSUMABLE->value,
+            \App\Enums\ProductType::PACKAGING->value,
+            \App\Enums\ProductType::RESALE->value,
+        ], true);
     }
 }

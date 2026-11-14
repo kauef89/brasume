@@ -111,6 +111,6 @@ class PriceLogsRelationManager extends RelationManager
 
     public static function canViewForRecord($ownerRecord, string $pageClass): bool
     {
-        return in_array($ownerRecord->type, ['dish', 'combo', 'resale']);
+        return in_array(is_object($ownerRecord->type) ? $ownerRecord->type->value : $ownerRecord->type, ['dish', 'combo', 'resale']);
     }
 }

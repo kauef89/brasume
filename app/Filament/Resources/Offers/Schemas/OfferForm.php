@@ -27,7 +27,7 @@ class OfferForm
                         ->columnSpan(1),
 
                     FormComponents\Select::make("trigger_product_id")
-                        ->relationship("triggerProduct", "name")
+                        ->relationship("triggerProduct", "name", fn ($query) => $query->whereIn('type', ['dish', 'combo', 'resale'])->where('status', '!=', 'archived'))
                         ->label("Produto Gatilho (Opcional)")
                         ->searchable()
                         ->preload()

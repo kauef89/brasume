@@ -27,7 +27,7 @@ class BaseCostCalculator
         $sheetItems = $query->get();
 
         if ($sheetItems->isEmpty()) {
-            $latestHistory = ProductCostHistory::where("product_id", $product->id)->latest("id")->first();
+            $latestHistory = ProductCostHistory::where("product_id", $product->id)->orderByDesc("created_at")->orderByDesc("id")->first();
             $cost = $latestHistory ? (float) $latestHistory->unit_cost : (float) ($product->base_cost ?? 0);
             return self::$costCache[$cacheKey] = $cost;
         }

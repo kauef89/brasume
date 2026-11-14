@@ -312,7 +312,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                                 ->searchable()
                                 ->preload()
                                 ->options(fn($livewire) => Product::where("id", "!=", $livewire->getOwnerRecord()->id)
-                                    ->whereIn("type", ["dish", "combo", "manufactured", "ingredient"])
+                                    ->whereIn("type", ["dish", "combo", "manufactured", "ingredient"])->where('status', '!=', 'archived')
                                     ->pluck("name", "id"))
                                 ->required(),
 
@@ -427,6 +427,6 @@ class TechnicalSheetsRelationManager extends RelationManager
             ? $ownerRecord->type
             : \App\Enums\ProductType::tryFrom((string) $ownerRecord->type);
 
-        return $type?->canHaveRecipe() ?? false;
+        return in_array($type?->value, ["dish", "combo", "manufactured"]);
     }
 }
