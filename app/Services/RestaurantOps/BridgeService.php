@@ -51,6 +51,24 @@ class BridgeService
 
         broadcast(new BridgeStatusUpdated($tenantId, $status, $bridgeVersion));
 
+        // 🔄 Auto-cura: retransmite jobs recentes (últimos 10 min) que ficaram pendentes há mais de 20s
+        if ($status === 'online') {
+            try {
+                $staleJobIds = PrintJob::where('status', 'pending')
+                    ->where('attempts', '<', 3)
+                    ->where('created_at', '>=', now()->subMinutes(10))
+                    ->where('updated_at', '<=', now()->subSeconds(20))
+                    ->pluck('id')
+                    ->toArray();
+
+                if (!empty($staleJobIds)) {
+                    app(\App\Services\Printing\PrintDispatcher::class)->retryJobs($staleJobIds);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('[BridgeService] Falha ao retransmitir jobs pendentes no handshake: ' . $e->getMessage());
+            }
+        }
+
         return [
             'status' => $status,
             'tenant_id' => $tenantId,

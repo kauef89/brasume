@@ -136,25 +136,24 @@ export function useCart() {
         const comboHash = isCombo ? generateComboHash(comboItems) : null;
         const modHash = generateModifiersHash(structuredModifiers);
 
-        const existingItem = cart.value.find(
-            (item) => item.id === product.id && item.modHash === modHash && item.isTakeaway === isTakeaway && item.comboHash === comboHash
-        );
+        const totalUnits = Math.max(1, Math.floor(Number(qty || 1)));
+        const isAuditReplacement = Boolean(replaces_item_id || is_combo_child);
+        const loopCount = isAuditReplacement ? 1 : totalUnits;
+        const unitQty = isAuditReplacement ? totalUnits : 1;
 
-        if (existingItem && !replaces_item_id) {
-            existingItem.qty += qty;
-        } else {
+        for (let i = 0; i < loopCount; i++) {
             cart.value.push({
-                cartId: Date.now() + Math.random(),
+                cartId: Date.now() + Math.random() + i,
                 id: product.id,
                 name: isSubItemOfCombo ? `${product.name} (Adicional Combo)` : product.name,
                 price: finalPrice,
                 extra_price: Number(extraPrice || 0),
-                qty: qty,
-                structuredModifiers: structuredModifiers,
+                qty: unitQty,
+                structuredModifiers: JSON.parse(JSON.stringify(structuredModifiers || [])),
                 isTakeaway: isTakeaway,
                 productOriginal: product,
                 isCombo: isCombo,
-                comboItems: comboItems,
+                comboItems: comboItems ? JSON.parse(JSON.stringify(comboItems)) : null,
                 comboHash: comboHash,
                 modHash: modHash,
                 replaces_item_id: replaces_item_id,
@@ -163,18 +162,35 @@ export function useCart() {
                 auth_reason: auth_reason,
                 is_loss: is_loss
             });
+            trackAddToCart(product, extraPrice + (product.promo_price || product.price || 0));
         }
-        trackAddToCart(product, extraPrice + (product.promo_price || product.price || 0));
         return true;
     };
 
     const updateQty = (index, delta) => {
-        if (cart.value[index]) {
-            const current = Number(cart.value[index].qty ?? cart.value[index].quantity ?? 1);
-            const next = current + Number(delta);
-            cart.value[index].qty = next;
-            if (cart.value[index].qty <= 0) cart.value.splice(index, 1);
+        const target = cart.value[index];
+        if (!target) return;
+
+        const numericDelta = Number(delta);
+        if (numericDelta > 0) {
+            const copiesToAdd = Math.max(1, Math.floor(numericDelta));
+            for (let i = 0; i < copiesToAdd; i++) {
+                const clone = {
+                    ...target,
+                    cartId: Date.now() + Math.random() + i,
+                    qty: 1,
+                    structuredModifiers: JSON.parse(JSON.stringify(target.structuredModifiers || [])),
+                    comboItems: target.comboItems ? JSON.parse(JSON.stringify(target.comboItems)) : null
+                };
+                cart.value.splice(index + 1 + i, 0, clone);
+            }
+            return;
         }
+
+        const current = Number(target.qty ?? target.quantity ?? 1);
+        const next = current + numericDelta;
+        target.qty = next;
+        if (target.qty <= 0) cart.value.splice(index, 1);
     };
 
     const updateItemModifiers = (index, { extraPrice, isTakeaway, structuredModifiers = [] }) => {

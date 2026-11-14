@@ -238,7 +238,13 @@ const checkDeviceAuthorization = async () => {
             handleUnauthorized();
         }
     } catch (error) {
-        handleUnauthorized();
+        const status = error.response?.status;
+        if (status && status >= 400 && status < 500) {
+            handleUnauthorized();
+        } else {
+            console.warn("[TeamGateway] Falha temporária ao validar dispositivo; mantendo UUID salvo.", error.message);
+            isDeviceAuthorized.value = true;
+        }
     } finally {
         isCheckingDevice.value = false;
     }
