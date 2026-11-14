@@ -289,7 +289,18 @@ export function useOrderFlow(props, cartContext, autoCheckoutCallback = null) {
     const handleModifiersConfirm = (configuredItem) => {
         if (editItemIndex.value !== null) {
             updateItemModifiers(editItemIndex.value, { ...configuredItem, orderType: orderType.value });
-            cart.value[editItemIndex.value].qty = configuredItem.qty;
+            const editedQty = Math.max(1, Math.floor(Number(configuredItem.qty || 1)));
+            cart.value[editItemIndex.value].qty = 1;
+            if (editedQty > 1) {
+                const editedItem = cart.value[editItemIndex.value];
+                addToCart({
+                    product: editedItem.productOriginal,
+                    extraPrice: configuredItem.extraPrice,
+                    isTakeaway: configuredItem.isTakeaway,
+                    structuredModifiers: configuredItem.structuredModifiers,
+                    qty: editedQty - 1
+                });
+            }
         } else {
             let itemToAdd = { product: activeProduct.value, ...configuredItem, orderType: orderType.value };
             if (_finalizeContextualAction(itemToAdd)) return;

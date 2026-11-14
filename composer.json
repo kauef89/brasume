@@ -30,6 +30,7 @@
         "saade/filament-fullcalendar": "^4.0@beta",
         "simplesoftwareio/simple-qrcode": "^4.2",
         "smalot/pdfparser": "^2.13",
+        "spatie/laravel-backup": "^10.4",
         "spatie/laravel-permission": "^7.3",
         "stancl/tenancy": "^3.9",
         "tightenco/ziggy": "^2.6"

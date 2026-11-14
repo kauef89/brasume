@@ -24922,6 +24922,41 @@ namespace SimpleSoftwareIO\QrCode\Facades {
             }
     }
 
+namespace Spatie\SignalAwareCommand\Facades {
+    /**
+     * @see \Spatie\SignalAwareCommand\Signal
+     */
+    class Signal {
+        /**
+         * @static
+         */
+        public static function handle($signal, $callable)
+        {
+            /** @var \Spatie\SignalAwareCommand\Signal $instance */
+            return $instance->handle($signal, $callable);
+        }
+
+        /**
+         * @static
+         */
+        public static function executeSignalHandlers($signal, $command)
+        {
+            /** @var \Spatie\SignalAwareCommand\Signal $instance */
+            return $instance->executeSignalHandlers($signal, $command);
+        }
+
+        /**
+         * @static
+         */
+        public static function clearHandlers($signal = null)
+        {
+            /** @var \Spatie\SignalAwareCommand\Signal $instance */
+            return $instance->clearHandlers($signal);
+        }
+
+            }
+    }
+
 namespace Stancl\Tenancy\Facades {
     /**
      */
@@ -34034,6 +34069,7 @@ namespace  {
     class Socialite extends \Laravel\Socialite\Facades\Socialite {}
     class Livewire extends \Livewire\Livewire {}
     class QrCode extends \SimpleSoftwareIO\QrCode\Facades\QrCode {}
+    class Signal extends \Spatie\SignalAwareCommand\Facades\Signal {}
     class Tenancy extends \Stancl\Tenancy\Facades\Tenancy {}
     class GlobalCache extends \Stancl\Tenancy\Facades\GlobalCache {}
 }

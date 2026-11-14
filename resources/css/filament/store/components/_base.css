@@ -63,7 +63,7 @@ body {
 }
 
 div#search-wrapper
-Especificidade: (1,0,1)
+    --tw-ring-color: transparent !important;
  {
     padding: 0;
     border: none;
