@@ -283,7 +283,10 @@
                     </div>
 
                     <div class="flex flex-col gap-2 overflow-y-auto pr-1 hide-scrollbar max-h-56">
-                        <SelectableCard v-for="bank in bankAccounts" :key="bank.id" @select="selectMethod('bank', bank.id)" color="success" icon="pi-building-columns" :title="bank.name" :subtitle="bank.bank_name || 'Conta Digital / Chave PIX'" />
+                        <SelectableCard v-for="bank in checkingBankAccounts" :key="bank.id" @select="selectMethod('bank', bank.id)" color="success" icon="pi-building-columns" :title="bank.name" :subtitle="bank.bank_name || 'Conta Corrente / Chave PIX'" />
+                        <div v-if="checkingBankAccounts.length === 0" class="p-4 rounded-xl bg-surface-1 border border-surface-border text-center text-xs text-surface-muted font-medium">
+                            Nenhuma Conta Corrente ativa encontrada para pagamento via PIX.
+                        </div>
                     </div>
                 </div>
             </template>
@@ -356,6 +359,10 @@ const payoutData = ref({
     courier_details: null,
     user: {}
 });
+
+const checkingBankAccounts = computed(() =>
+    (props.bankAccounts || []).filter(b => b.type === 'checking' && b.is_active !== false)
+);
 
 const courierData = computed(() => payoutData.value.courier_details);
 
