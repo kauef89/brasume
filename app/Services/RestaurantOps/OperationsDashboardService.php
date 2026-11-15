@@ -277,8 +277,8 @@ class OperationsDashboardService
 
     public function getManagerShiftSummary(?User $user): ?array
     {
-        // Garante que só quem é da diretoria/gerência veja os dados
-        if (!$user || !$user->hasAnyRole([EmployeeRole::ADMIN->value, EmployeeRole::MANAGER->value])) return null;
+        // Garante que só quem é da diretoria/gerência ou sócio investidor veja os dados
+        if (!$user || !$user->hasAnyRole([EmployeeRole::ADMIN->value, EmployeeRole::MANAGER->value, 'investor'])) return null;
 
         // Pega o turno aberto... ou, se estiver fechado, pega o último turno!
         $shift = CashShift::where('status', 'open')->latest('opened_at')->first()

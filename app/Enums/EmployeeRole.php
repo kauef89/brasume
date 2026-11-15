@@ -15,6 +15,7 @@ enum EmployeeRole: string implements HasLabel, HasColor, HasIcon
     case KITCHEN  = 'kitchen';
     case COURIER  = 'courier';
     case CLEANING = 'cleaning';
+    case INVESTOR = 'investor';
 
     public function getLabel(): ?string
     {
@@ -26,6 +27,7 @@ enum EmployeeRole: string implements HasLabel, HasColor, HasIcon
             self::KITCHEN  => 'Cozinha / Produção',
             self::COURIER  => 'Entregador / Motoboy',
             self::CLEANING => 'Limpeza / Apoio',
+            self::INVESTOR => 'Sócio Investidor',
         };
     }
 
@@ -39,6 +41,7 @@ enum EmployeeRole: string implements HasLabel, HasColor, HasIcon
             self::KITCHEN  => 'amber',
             self::COURIER  => 'success',
             self::CLEANING => 'gray',
+            self::INVESTOR => 'purple',
         };
     }
 
@@ -52,6 +55,7 @@ enum EmployeeRole: string implements HasLabel, HasColor, HasIcon
             self::KITCHEN  => 'heroicon-o-fire',
             self::COURIER  => 'heroicon-o-truck',
             self::CLEANING => 'heroicon-o-sparkles',
+            self::INVESTOR => 'heroicon-o-presentation-chart-line',
         };
     }
 

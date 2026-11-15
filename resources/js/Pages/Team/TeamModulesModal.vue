@@ -38,6 +38,7 @@
 
             <!-- 3. REPOSIÇÃO (WMS PRATELEIRA) -->
             <button
+                v-if="!isStrictlyCourier && !isInvestorOnly"
                 type="button"
                 @click="handleSelect('restock')"
                 class="flex flex-col items-center justify-center gap-1.5 p-2.5 rounded-2xl bg-surface-1/50 hover:bg-surface-2 text-surface-text outline-none relative transition-all active:scale-95 cursor-pointer border border-surface-border/40"
@@ -54,6 +55,7 @@
 
             <!-- 4. ESTOQUE / INVENTÁRIO (WMS GERAL) -->
             <button
+                v-if="!isStrictlyCourier && !isInvestorOnly"
                 type="button"
                 @click="handleSelect('inventory')"
                 class="flex flex-col items-center justify-center gap-1.5 p-2.5 rounded-2xl bg-surface-1/50 hover:bg-surface-2 text-surface-text outline-none transition-all active:scale-95 cursor-pointer border border-surface-border/40"
@@ -64,6 +66,7 @@
 
             <!-- 5. TAREFAS / CHECKLISTS -->
             <button
+                v-if="!isStrictlyCourier && !isInvestorOnly"
                 type="button"
                 @click="handleSelect('checklists')"
                 class="flex flex-col items-center justify-center gap-1.5 p-2.5 rounded-2xl bg-surface-1/50 hover:bg-surface-2 text-surface-text outline-none transition-all active:scale-95 cursor-pointer border border-surface-border/40"
@@ -74,6 +77,7 @@
 
             <!-- 6. PRODUÇÃO (KDS / MRP) -->
             <button
+                v-if="!isStrictlyCourier && !isInvestorOnly"
                 type="button"
                 @click="handleSelect('production')"
                 class="flex flex-col items-center justify-center gap-1.5 p-2.5 rounded-2xl bg-surface-1/50 hover:bg-surface-2 text-surface-text outline-none transition-all active:scale-95 cursor-pointer border border-surface-border/40"
@@ -84,6 +88,7 @@
 
             <!-- 7. COMPRAS -->
             <button
+                v-if="!isStrictlyCourier && !isInvestorOnly"
                 type="button"
                 @click="handleSelect('shopping')"
                 class="flex flex-col items-center justify-center gap-1.5 p-2.5 rounded-2xl bg-surface-1/50 hover:bg-surface-2 text-surface-text outline-none transition-all active:scale-95 cursor-pointer border border-surface-border/40"
@@ -137,6 +142,17 @@ const isVisible = computed({
 
 const canManageFleet = computed(() => {
     return Boolean(page.props.canManageDevices);
+});
+
+const isStrictlyCourier = computed(() => {
+    const roles = page.props.auth?.user?.roles?.map(r => r.name) || [];
+    if (roles.includes('admin') || roles.includes('manager') || roles.includes('waiter') || roles.includes('cashier')) return false;
+    return roles.includes('courier') || roles.includes('driver') || roles.includes('motoboy');
+});
+
+const isInvestorOnly = computed(() => {
+    const roles = page.props.auth?.user?.roles?.map(r => r.name) || [];
+    return roles.includes('investor') && !roles.includes('admin') && !roles.includes('manager');
 });
 
 const handleSelect = (tab) => {

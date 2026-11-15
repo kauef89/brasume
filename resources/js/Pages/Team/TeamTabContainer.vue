@@ -18,9 +18,9 @@
             />
         </div>
 
-        <!-- 📖 ABA: CARDÁPIO -->
+        <!-- 📖 ABA: CARDÁPIO (Oculto para Motoboys Puros e Investidores) -->
         <TeamMenuTab
-            v-show="activeTab === 'menu'"
+            v-show="activeTab === 'menu' && !isStrictlyCourier && !isInvestorOnly"
             :is-active="activeTab === 'menu'"
             :search-query="searchQuery"
             @update:search-query="$emit('update:searchQuery', $event)"
@@ -169,6 +169,8 @@ const ShoppingList = defineAsyncComponent(() => import('@/Pages/Shared/SupplyCha
 const DeviceFleetPanel = defineAsyncComponent(() => import('@/Pages/Team/DeviceFleetPanel.vue'));
 const TeamBarTab = defineAsyncComponent(() => import('@/Pages/Team/TeamBarTab.vue'));
 
+import { usePage } from '@inertiajs/vue3';
+
 const props = defineProps({
     activeTab: String,
     searchQuery: { type: String, default: '' },
@@ -206,6 +208,18 @@ defineEmits([
 
 const cartRef = ref(null);
 const mealTabRef = ref(null);
+const page = usePage();
+
+const isStrictlyCourier = computed(() => {
+    const roles = page.props.auth?.user?.roles?.map(r => r.name) || [];
+    if (roles.includes('admin') || roles.includes('manager') || roles.includes('waiter') || roles.includes('cashier')) return false;
+    return roles.includes('courier') || roles.includes('driver') || roles.includes('motoboy');
+});
+
+const isInvestorOnly = computed(() => {
+    const roles = page.props.auth?.user?.roles?.map(r => r.name) || [];
+    return roles.includes('investor') && !roles.includes('admin') && !roles.includes('manager');
+});
 
 const toggleCartRouting = () => {
     cartRef.value?.toggleRouting();
