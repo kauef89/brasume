@@ -238,7 +238,9 @@ const initAttendanceData = () => {
         } else {
             let defaultStatus = 'absent';
 
-            if (u.employment_type === 'clt' || u.employment_type === 'partner' || u.is_scheduled) {
+            // Só pré-marca como 'present' automaticamente na ABERTURA do turno ('open').
+            // No meio/fechamento do turno, quem não está em currentAttendees ainda não foi salvo no banco.
+            if (effectiveMode.value === 'open' && (u.employment_type === 'clt' || u.employment_type === 'partner' || u.is_scheduled)) {
                 defaultStatus = 'present';
             }
 

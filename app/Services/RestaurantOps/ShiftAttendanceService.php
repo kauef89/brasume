@@ -64,6 +64,7 @@ class ShiftAttendanceService
             'pos'     => 'Caixa',
             'cashier' => 'Caixa',
             'waiter'  => 'Garçom',
+            'courier' => 'Motoboy',
             'driver'  => 'Motoboy',
             'kitchen' => 'Cozinha',
         ];
