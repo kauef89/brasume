@@ -241,7 +241,8 @@ class CourierSettlementService
             $orderCash = 0.0;
             if ($order->payments && $order->payments->isNotEmpty()) {
                 foreach ($order->payments as $pay) {
-                    $engine = strtolower((string) ($pay->paymentMethod?->engine_type ?? $pay->payment_method_name ?? ''));
+                    $rawEngine = $pay->paymentMethod?->engine_type ?? $pay->payment_method_name ?? '';
+                    $engine = strtolower($rawEngine instanceof \BackedEnum ? (string) $rawEngine->value : (string) $rawEngine);
                     if (in_array($engine, ['money', 'cash', 'dinheiro'], true) || str_contains($engine, 'dinheiro')) {
                         $orderCash += (float) $pay->amount;
                     }
