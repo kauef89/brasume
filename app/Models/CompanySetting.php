@@ -53,6 +53,7 @@ class CompanySetting extends Model
         'global_allowance_amount'    => 'decimal:2',
         'allow_table_self_service'   => 'boolean',
         'attention_categories'       => 'array',
+        'courier_keeps_cash'         => 'boolean',
         'cashier_auth_methods'       => 'array',
         'kds_auth_methods'           => 'array',
         'request_order_rating'       => 'boolean',

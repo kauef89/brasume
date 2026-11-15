@@ -379,8 +379,11 @@ class ShiftAttendanceService
             $courierService = app(CourierSettlementService::class);
             $statement = $courierService->getCourierStatement($employee, $shift->opened_at, now());
 
+            $cashDeducted = (float) ($statement['cash_deducted'] ?? 0);
+
             $details['courier_details'] = [
                 'is_courier'           => true,
+                'courier_keeps_cash'   => (bool) ($statement['courier_keeps_cash'] ?? false),
                 'payment_model'        => $statement['payment_model'],
                 'payment_model_label'  => $statement['payment_model_label'],
                 'default_delivery_fee' => $statement['default_delivery_fee'],
@@ -394,13 +397,14 @@ class ShiftAttendanceService
                 'minimum_complement'   => $statement['minimum_complement'],
                 'final_payable'        => $statement['final_payable'],
                 'cash_collected'       => $statement['cash_collected'],
+                'cash_deducted'        => $cashDeducted,
                 'net_cash_balance'     => $statement['net_cash_balance'],
             ];
 
             $details['gross_rate'] = $statement['final_payable'];
             $details['service_item']['amount'] = $statement['daily_fee'];
-            $details['net_amount'] = max(0, $previousBalance + $statement['final_payable'] - $consumptionAmount);
-            $details['total_due'] = max(0, $previousBalance + $statement['final_payable'] - $consumptionAmount);
+            $details['net_amount'] = max(0, $previousBalance + $statement['final_payable'] - $consumptionAmount - $cashDeducted);
+            $details['total_due'] = max(0, $previousBalance + $statement['final_payable'] - $consumptionAmount - $cashDeducted);
         }
 
         return $details;

@@ -224,18 +224,34 @@ class FreelancerReceipt
         $b->alignLeft();
 
         if ($this->isConference) {
-            $b->text($this->justifyLine('VALOR TOTAL DA DIARIA (LIQ):', $this->netAmount), bold: true);
+            $b->text($this->justifyLine('VALOR TOTAL A PAGAR (LIQ):', $this->netAmount), bold: true);
 
             if ($hasCourierBlock && (float) ($this->courierDetails['cash_collected'] ?? 0) > 0) {
                 $cashInHand = (float) $this->courierDetails['cash_collected'];
-                $b->text($this->justifyLine('(-) DINHEIRO RETIDO RUA:', $cashInHand, 48, true));
-                $diff = round($this->netAmount - $cashInHand, 2);
-                $diffLabel = $diff >= 0 ? 'SALDO A PAGAR AO MOTOBOY:' : 'TROCO A DEVOLVER AO CAIXA:';
-                $b->text($this->justifyLine($diffLabel, abs($diff)), bold: true);
+                $keepsCash = !empty($this->courierDetails['courier_keeps_cash']);
+
+                if ($keepsCash) {
+                    $b->text($this->justifyLine('(-) DINHEIRO RETIDO C/ MOTOBOY:', $cashInHand, 48, true));
+                    $rawNetBeforeCash = round($this->netAmount + $cashInHand, 2);
+                    if ($cashInHand > $rawNetBeforeCash) {
+                        $b->text($this->justifyLine('TROCO A DEVOLVER AO CAIXA:', round($cashInHand - $rawNetBeforeCash, 2)), bold: true);
+                    }
+                } else {
+                    $b->text($this->justifyLine('DINHEIRO A ENTREGAR AO CAIXA:', $cashInHand), bold: true);
+                }
             }
         } else {
             $b->text($this->justifyLine('TOTAL PAGO AGORA:', $this->netAmount), bold: true)
                 ->text($this->cleanText('FORMA DE PAGAMENTO: ' . $this->paymentMethod));
+
+            if ($hasCourierBlock && (float) ($this->courierDetails['cash_collected'] ?? 0) > 0) {
+                $cashInHand = (float) $this->courierDetails['cash_collected'];
+                $keepsCash = !empty($this->courierDetails['courier_keeps_cash']);
+                $cashLabel = $keepsCash
+                    ? '(-) DINHEIRO ABATIDO NA DIARIA:'
+                    : 'DINHEIRO ENTREGUE AO CAIXA:';
+                $b->text($this->justifyLine($cashLabel, $cashInHand, 48, $keepsCash));
+            }
         }
 
         if (abs($this->remainingBalance) > 0.01) {

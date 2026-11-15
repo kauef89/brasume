@@ -206,11 +206,17 @@
                                 <!-- CONFERÊNCIA DE NUMERÁRIO DA RUA -->
                                 <div v-if="courierData.cash_collected > 0" class="flex items-center justify-between p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
                                     <div class="flex flex-col">
-                                        <span class="text-xs font-black text-amber-700 dark:text-amber-400">Dinheiro Coletado na Rua</span>
-                                        <span class="text-[10px] text-surface-muted">Valor recebido em espécie dos clientes para prestar contas ao caixa</span>
+                                        <span class="text-xs font-black text-amber-700 dark:text-amber-400">
+                                            {{ courierData.courier_keeps_cash ? 'Dinheiro Retido com o Motoboy (Abatido)' : 'Dinheiro Recebido na Rua (Devolver ao Caixa)' }}
+                                        </span>
+                                        <span class="text-[10px] text-surface-muted">
+                                            {{ courierData.courier_keeps_cash
+                                                ? 'Abatido automaticamente do valor líquido a pagar da diária'
+                                                : 'Não abatido da diária — o motoboy deve entregar este valor integral ao caixa' }}
+                                        </span>
                                     </div>
                                     <span class="text-xs font-black text-amber-600 shrink-0">
-                                        {{ $formatCurrency(courierData.cash_collected) }}
+                                        {{ courierData.courier_keeps_cash ? '- ' : '' }}{{ $formatCurrency(courierData.cash_collected) }}
                                     </span>
                                 </div>
                             </div>
@@ -500,8 +506,12 @@ const calculatedNow = computed(() => {
         .filter(i => i.selected)
         .reduce((sum, i) => sum + (i.amount || 0), 0);
 
+    const cashDeducted = courierData.value?.courier_keeps_cash
+        ? (Number(courierData.value?.cash_collected) || 0)
+        : 0;
+
     const prev = payoutData.value.previous_balance || 0;
-    return Math.max(0, prev + gross - consAmt);
+    return Math.max(0, prev + gross - consAmt - cashDeducted);
 });
 
 const rolledBalance = computed(() => {

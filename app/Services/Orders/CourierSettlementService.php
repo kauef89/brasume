@@ -284,8 +284,12 @@ class CourierSettlementService
         $minimumApplied = $minimumGuaranteed > 0 && $minimumGuaranteed > $grossTotal;
         $minimumComplement = $minimumApplied ? round($minimumGuaranteed - $grossTotal, 2) : 0.0;
 
+        $courierKeepsCash = (bool) (\App\Models\CompanySetting::getCached()?->courier_keeps_cash ?? false);
+        $cashDeducted = $courierKeepsCash ? $cashCollected : 0.0;
+
         return [
             'courier'              => $courier,
+            'courier_keeps_cash'   => $courierKeepsCash,
             'payment_model'        => $modelEnum->value,
             'payment_model_label'  => $modelEnum->getLabel(),
             'default_delivery_fee' => round((float) ($courier->default_delivery_fee ?? 0), 2),
@@ -301,6 +305,7 @@ class CourierSettlementService
             'minimum_complement'   => $minimumComplement,
             'final_payable'        => $finalPayable,
             'cash_collected'       => $cashCollected,
+            'cash_deducted'        => $cashDeducted,
             'net_cash_balance'     => round($cashCollected - $finalPayable, 2),
         ];
     }
