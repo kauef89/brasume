@@ -109,6 +109,7 @@
                 <!-- ESCALA E PONTO: GERENCIA EQUIPA E LIQUIDAÇÃO DE FREELANCERS -->
                 <ShiftAttendance
                     v-else-if="leftView === 'attendance'"
+                    ref="shiftAttendanceRef"
                     class="w-full h-full"
                     :users="users"
                     :current-attendees="currentAttendees"
@@ -213,7 +214,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch } from 'vue';
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import DesktopLayout from '@/Layouts/DesktopLayout.vue';
 
@@ -281,6 +282,7 @@ const shiftFormData = ref({
 
 const shiftSidebarRef = ref(null);
 const shiftCashFormRef = ref(null);
+const shiftAttendanceRef = ref(null);
 
 const {
     showOrders, showTransactions, activeOrderTypes, selectedRows, unifiedHistory,
@@ -356,8 +358,15 @@ const openFreelancerPayment = (user, rate) => {
 };
 
 const handleFreelancerConfirm = (payload) => {
-    confirmFreelancerPayment(payload);
     rightView.value = 'dashboard';
+    confirmFreelancerPayment(payload, () => {
+        const isClosingFlow = shiftActionType.value === 'close' || isStagedAttendance.value;
+        if (isClosingFlow && leftView.value === 'attendance') {
+            nextTick(() => {
+                shiftAttendanceRef.value?.advanceIfAllSettled?.();
+            });
+        }
+    });
 };
 
 const handleFreelancerCancel = () => {

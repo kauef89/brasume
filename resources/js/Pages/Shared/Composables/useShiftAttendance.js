@@ -50,7 +50,7 @@ export function useShiftAttendance() {
         isFreelancerPaymentVisible.value = true;
     };
 
-    const confirmFreelancerPayment = (payload) => {
+    const confirmFreelancerPayment = (payload, onSuccessCallback = null) => {
         router.post(route('operations.attendance.pay'), {
             user_id: freelancerToPay.value.id,
             amount: payload.amount,
@@ -69,6 +69,9 @@ export function useShiftAttendance() {
                 isFreelancerPaymentVisible.value = false;
                 freelancerToPay.value = null;
                 freelancerPayoutDetails.value = {};
+                if (typeof onSuccessCallback === 'function') {
+                    onSuccessCallback();
+                }
             },
             onError: (err) => {
                 const msg = err && typeof err === 'object' ? Object.values(err)[0] : 'Erro ao processar pagamento.';

@@ -287,4 +287,26 @@ const handleConfirm = () => {
         emit('confirm', { attendees: payload });
     }
 };
+
+const pendingPresentFreelancers = computed(() => {
+    return presentUsers.value.filter(u => {
+        if (u.employment_type === 'clt') return false;
+        const row = attendanceData.value[u.id];
+        return row && !row.is_paid && !row.is_rolled;
+    });
+});
+
+const advanceIfAllSettled = () => {
+    if (effectiveMode.value !== 'close') return false;
+    if (roleWarnings.value.length > 0) return false;
+    if (pendingPresentFreelancers.value.length > 0) return false;
+
+    handleConfirm();
+    return true;
+};
+
+defineExpose({
+    advanceIfAllSettled,
+    pendingPresentFreelancers
+});
 </script>
