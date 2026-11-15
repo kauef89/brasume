@@ -362,17 +362,36 @@ class ShiftAttendanceService
             'is_paid'             => (bool) ($attendeePivot?->account_payable_id),
         ];
 
+        $shiftOperatorName = $shift->opened_by ? (User::find($shift->opened_by)?->name ?? 'Caixa') : 'Caixa';
+        $details['shift_operator_name'] = $shiftOperatorName;
+        $details['shift_opened_at'] = $shift->opened_at ? $shift->opened_at->format('d/m/Y H:i') : '';
+
+        $assignedRole = (string) ($attendeePivot?->assigned_role ?? '');
+        $isCourier = $employee && (
+            $employee->is_courier
+            || in_array($employee->job_title, ['driver', 'courier', 'motoboy'], true)
+            || in_array($assignedRole, ['driver', 'courier', 'motoboy'], true)
+            || $user->hasAnyRole(['driver', 'courier', 'motoboy'])
+        );
+
         // Injeção do extrato de logística para motoboys
-        if ($employee && ($employee->is_courier || $employee->job_title === 'driver' || $user->hasRole('driver'))) {
+        if ($isCourier) {
             $courierService = app(CourierSettlementService::class);
             $statement = $courierService->getCourierStatement($employee, $shift->opened_at, now());
 
             $details['courier_details'] = [
                 'is_courier'           => true,
+                'payment_model'        => $statement['payment_model'],
+                'payment_model_label'  => $statement['payment_model_label'],
+                'default_delivery_fee' => $statement['default_delivery_fee'],
+                'fee_per_km'           => $statement['fee_per_km'],
                 'deliveries_count'     => $statement['deliveries_count'],
+                'deliveries'           => $statement['deliveries_list'],
                 'total_deliveries_fee' => $statement['total_deliveries_fee'],
                 'daily_fee'            => $statement['daily_fee'],
                 'minimum_guaranteed'   => $statement['minimum_guaranteed'],
+                'minimum_applied'      => $statement['minimum_applied'],
+                'minimum_complement'   => $statement['minimum_complement'],
                 'final_payable'        => $statement['final_payable'],
                 'cash_collected'       => $statement['cash_collected'],
                 'net_cash_balance'     => $statement['net_cash_balance'],
@@ -385,6 +404,61 @@ class ShiftAttendanceService
         }
 
         return $details;
+    }
+
+    /**
+     * Imprime a conferência prévia (pré-conta) da diária/corridas antes da liquidação financeira
+     */
+    public function printFreelancerConference(array $data, User $operator): void
+    {
+        $user = User::with('employee')->findOrFail($data['user_id']);
+        $employee = $user->employee;
+
+        $shift = CashShift::where('status', 'open')->latest('id')->first();
+        if (!$shift) {
+            throw new \Exception('Não existe nenhum turno aberto para emitir a conferência.');
+        }
+
+        $payoutDetails = $this->getFreelancerPayoutDetails($user->id, $shift);
+        $shiftDateLabel = $data['shift_date_label'] ?? $payoutDetails['shift_date_label'];
+        $shiftOperatorName = $payoutDetails['shift_operator_name'] ?? ($operator->name ?? 'Caixa');
+
+        $grossRate = isset($data['gross_rate']) ? (float) $data['gross_rate'] : (float) $payoutDetails['gross_rate'];
+        $consumptionAmount = isset($data['consumption_deducted']) ? (float) $data['consumption_deducted'] : (float) $payoutDetails['consumption_amount'];
+        $netAmount = isset($data['amount']) ? (float) $data['amount'] : (float) ($payoutDetails['total_due'] ?? 0);
+
+        $settledItems = $data['settled_items'] ?? [$payoutDetails['service_item']];
+        $rolledItems = $data['rolled_items'] ?? [];
+        $remainingBalance = isset($data['remaining_balance'])
+            ? (float) $data['remaining_balance']
+            : (float) ($payoutDetails['previous_balance'] ?? 0);
+
+        $cashierPrinter = Printer::where('is_cashier', true)->where('is_active', true)->first()
+            ?? Printer::where('is_active', true)->first();
+
+        if (!$cashierPrinter) {
+            throw new \Exception('Nenhuma impressora de caixa ativa configurada.');
+        }
+
+        $receipt = new FreelancerReceipt(
+            freelancerName: $employee?->name ?? $user->name,
+            netAmount: $netAmount,
+            grossAmount: $grossRate,
+            consumptionAmount: $consumptionAmount,
+            paymentMethod: 'A Definir',
+            operatorName: $operator->name ?? 'Caixa',
+            pixKey: $employee?->pix_key,
+            shiftDateLabel: $shiftDateLabel,
+            settledItems: $settledItems,
+            rolledItems: $rolledItems,
+            remainingBalance: $remainingBalance,
+            isConference: true,
+            courierDetails: $payoutDetails['courier_details'] ?? null,
+            shiftOperatorName: $shiftOperatorName
+        );
+
+        $this->printDispatcher->dispatch($cashierPrinter, $receipt);
+        Log::info("🖨️ Conferência prévia de diária impressa para [{$user->name}].");
     }
 
     /**
@@ -480,7 +554,7 @@ class ShiftAttendanceService
             }
 
             // 4. Baixa as corridas do motoboy que estavam pendentes neste turno
-            if ($employee && ($employee->is_courier || $user->hasRole('driver'))) {
+            if ($employee && ($employee->is_courier || $user->hasAnyRole(['driver', 'courier', 'motoboy']))) {
                 Order::where('courier_id', $employee->id)
                     ->whereNull('courier_settled_at')
                     ->whereBetween('created_at', [$shift->opened_at, now()])
@@ -540,7 +614,10 @@ class ShiftAttendanceService
                     shiftDateLabel: $shiftDateLabel,
                     settledItems: $settledItems,
                     rolledItems: $rolledItems,
-                    remainingBalance: $remainingBalanceAfter
+                    remainingBalance: $remainingBalanceAfter,
+                    isConference: false,
+                    courierDetails: $payoutDetails['courier_details'] ?? null,
+                    shiftOperatorName: $payoutDetails['shift_operator_name'] ?? ($operator->name ?? 'Caixa')
                 );
 
                 $this->printDispatcher->dispatch($cashierPrinter, $receipt);

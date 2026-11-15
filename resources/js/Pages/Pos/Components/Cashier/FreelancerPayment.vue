@@ -1,12 +1,24 @@
 <template>
     <div class="flex flex-col w-full h-full bg-surface-2">
         <!-- HEADER DO PAINEL -->
-        <div class="h-14 px-6 border-b border-surface-border flex items-center justify-between shrink-0">
-            <h3 class="font-black text-sm uppercase tracking-widest text-surface-text flex items-center gap-2">
-                <i class="pi pi-wallet text-primary-500"></i> Acerto de Diária & Corridas
+        <div class="h-14 px-6 border-b border-surface-border flex items-center justify-between shrink-0 gap-2">
+            <h3 class="font-black text-sm uppercase tracking-widest text-surface-text flex items-center gap-2 truncate">
+                <i class="pi pi-wallet text-primary-500"></i>
+                <span class="truncate">{{ courierData ? 'Fechamento Motoboy & Diária' : 'Acerto de Diária' }}</span>
             </h3>
 
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 shrink-0">
+                <button
+                    type="button"
+                    @click="handlePrintConference"
+                    :disabled="isPrintingConference"
+                    class="h-8 px-3 rounded-full bg-surface-1 hover:bg-primary-500/10 border border-surface-border hover:border-primary-500/40 text-surface-text hover:text-primary-500 font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer outline-none transition-all active:scale-95 disabled:opacity-50"
+                    title="Imprimir pré-conta para conferência antes de pagar"
+                >
+                    <i class="pi" :class="isPrintingConference ? 'pi-spinner pi-spin text-xs' : 'pi-print text-xs'"></i>
+                    <span class="hidden sm:inline">{{ isPrintingConference ? 'Imprimindo...' : 'Conferência' }}</span>
+                </button>
+
                 <SegmentedControl
                     v-model="activeTab"
                     :options="tabOptions"
@@ -28,19 +40,22 @@
             <!-- ABA 1: LIQUIDAÇÃO EM BLOCOS -->
             <template v-if="activeTab === 'payment'">
                 <div class="bg-surface-3 p-4 rounded-2xl flex flex-col gap-3 shrink-0">
-                    <!-- DADOS DO COLABORADOR -->
-                    <div class="flex items-center justify-between">
-                        <div class="flex flex-col">
+                    <!-- DADOS DO COLABORADOR E TURNO -->
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex flex-col min-w-0">
                             <span class="micro-label text-[10px] uppercase font-bold text-surface-muted">Colaborador</span>
-                            <h3 class="text-lg font-black text-surface-text">{{ payoutData.user?.name || user?.name }}</h3>
-                            <span v-if="payoutData.user?.pix_key" class="text-[11px] text-surface-muted mt-0.5">
+                            <h3 class="text-lg font-black text-surface-text truncate">{{ payoutData.user?.name || user?.name }}</h3>
+                            <span v-if="payoutData.user?.pix_key" class="text-[11px] text-surface-muted mt-0.5 truncate">
                                 PIX ({{ payoutData.user.pix_key_type || 'Chave' }}): <strong>{{ payoutData.user.pix_key }}</strong>
+                            </span>
+                            <span v-if="payoutData.shift_operator_name" class="text-[10px] text-surface-muted mt-0.5">
+                                Operador Caixa: <strong>{{ payoutData.shift_operator_name }}</strong>
                             </span>
                         </div>
 
                         <!-- BADGE DE TURNO POR DATA -->
-                        <div class="flex flex-col items-end">
-                            <span class="text-[10px] font-black uppercase tracking-wider text-surface-muted">Turno</span>
+                        <div class="flex flex-col items-end shrink-0">
+                            <span class="text-[10px] font-black uppercase tracking-wider text-surface-muted">Data / Turno</span>
                             <span class="px-3 py-1 rounded-lg bg-surface-1 border border-surface-border font-black text-xs text-primary-500 shadow-xs">
                                 {{ shiftDateLabel }}
                             </span>
@@ -111,33 +126,93 @@
                             </div>
                         </div>
 
-                        <!-- 2. BLOCO EXCLUSIVO: PRODUÇÃO DE CORRIDAS (MOTOBOY) -->
-                        <div v-if="courierData?.deliveries_count > 0" class="bg-surface-1/80 border border-primary-500/30 rounded-xl p-3 flex flex-col gap-2 shadow-xs">
-                            <div class="flex items-center justify-between">
+                        <!-- 2. BLOCO EXCLUSIVO: FECHAMENTO LOGÍSTICO (MOTOBOY) -->
+                        <div v-if="courierData" class="bg-surface-1/80 border border-primary-500/30 rounded-xl p-3 flex flex-col gap-2.5 shadow-xs">
+                            <div class="flex items-center justify-between gap-2">
                                 <span class="text-[10px] font-black uppercase tracking-wider text-primary-500 flex items-center gap-1.5">
-                                    <i class="pi pi-truck text-xs"></i> 2. Produção de Entregas ({{ courierData.deliveries_count }} corridas)
+                                    <i class="pi pi-truck text-xs"></i> 2. Entregas & Repasse ({{ courierData.deliveries_count || 0 }} corridas)
                                 </span>
-                                <span v-if="courierData.minimum_guaranteed > 0" class="text-[9px] font-bold text-surface-muted">
-                                    Piso: {{ $formatCurrency(courierData.minimum_guaranteed) }}
-                                </span>
-                            </div>
-
-                            <div class="flex items-center justify-between p-2 rounded-lg bg-surface-2/60 border border-surface-border/50">
-                                <span class="text-xs font-bold text-surface-text">Total Repassado das Corridas</span>
-                                <span class="text-xs font-black text-success-500">
-                                    + {{ $formatCurrency(courierData.total_deliveries_fee) }}
+                                <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-500">
+                                    {{ courierData.payment_model_label || 'Taxa Fixa' }}
                                 </span>
                             </div>
 
-                            <!-- CONFERÊNCIA DE NUMERÁRIO DA RUA -->
-                            <div v-if="courierData.cash_collected > 0" class="flex items-center justify-between p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                                <div class="flex flex-col">
-                                    <span class="text-xs font-black text-amber-700 dark:text-amber-400">Numerário em Mãos (Rua)</span>
-                                    <span class="text-[10px] text-surface-muted">Recebido dos clientes para entregar ao caixa</span>
+                            <!-- PARÂMETROS DO CONTRATO DO MOTOBOY -->
+                            <div class="grid grid-cols-3 gap-2 text-center">
+                                <div class="p-2 rounded-lg bg-surface-2/70 border border-surface-border/40 flex flex-col">
+                                    <span class="text-[9px] font-bold uppercase text-surface-muted">
+                                        {{ courierData.payment_model === 'distance' ? 'Valor / Km' : (courierData.payment_model === 'neighborhood' ? 'Taxa Padrão' : 'Taxa / Entrega') }}
+                                    </span>
+                                    <span class="text-xs font-black text-surface-text mt-0.5">
+                                        {{ $formatCurrency(courierData.payment_model === 'distance' ? (courierData.fee_per_km || 0) : (courierData.default_delivery_fee || 0)) }}
+                                    </span>
                                 </div>
-                                <span class="text-xs font-black text-amber-600">
-                                    {{ $formatCurrency(courierData.cash_collected) }}
-                                </span>
+
+                                <div class="p-2 rounded-lg bg-surface-2/70 border border-surface-border/40 flex flex-col">
+                                    <span class="text-[9px] font-bold uppercase text-surface-muted">Diária Fixa</span>
+                                    <span class="text-xs font-black text-surface-text mt-0.5">
+                                        {{ $formatCurrency(courierData.daily_fee || 0) }}
+                                    </span>
+                                </div>
+
+                                <div class="p-2 rounded-lg bg-surface-2/70 border border-surface-border/40 flex flex-col">
+                                    <span class="text-[9px] font-bold uppercase text-surface-muted">Piso Mínimo</span>
+                                    <span class="text-xs font-black mt-0.5" :class="courierData.minimum_applied ? 'text-amber-500' : 'text-surface-text'">
+                                        {{ $formatCurrency(courierData.minimum_guaranteed || 0) }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- LISTA DETALHADA DAS ENTREGAS DO TURNO -->
+                            <div v-if="courierData.deliveries && courierData.deliveries.length > 0" class="flex flex-col gap-1 max-h-40 overflow-y-auto pr-1 hide-scrollbar border border-surface-border/40 rounded-lg bg-surface-2/40 p-1.5">
+                                <div
+                                    v-for="del in courierData.deliveries"
+                                    :key="del.id"
+                                    class="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-surface-1/90 text-xs"
+                                >
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="font-black text-[10px] text-primary-500 shrink-0">#{{ del.id }}</span>
+                                        <span class="text-[10px] font-bold text-surface-muted shrink-0">{{ del.time }}</span>
+                                        <span class="font-semibold text-surface-text truncate">{{ del.neighborhood }}</span>
+                                        <span v-if="del.is_cash" class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
+                                            Dinheiro {{ $formatCurrency(del.cash_amount) }}
+                                        </span>
+                                    </div>
+                                    <span class="font-black text-success-500 shrink-0">
+                                        + {{ $formatCurrency(del.courier_fee) }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div v-else class="p-2 rounded-lg bg-surface-2/40 text-center text-[11px] text-surface-muted">
+                                Nenhuma entrega registrada neste turno.
+                            </div>
+
+                            <!-- SUBTOTAL DAS CORRIDAS + COMPLEMENTO PISO MÍNIMO -->
+                            <div class="flex flex-col gap-1.5 pt-1">
+                                <div class="flex items-center justify-between p-2 rounded-lg bg-surface-2/60 border border-surface-border/50">
+                                    <span class="text-xs font-bold text-surface-text">Total Repassado das Corridas</span>
+                                    <span class="text-xs font-black text-success-500">
+                                        + {{ $formatCurrency(courierData.total_deliveries_fee || 0) }}
+                                    </span>
+                                </div>
+
+                                <div v-if="courierData.minimum_applied && courierData.minimum_complement > 0" class="flex items-center justify-between p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                    <span class="text-xs font-bold text-amber-700 dark:text-amber-400">Complemento Garantia Mínima</span>
+                                    <span class="text-xs font-black text-amber-600">
+                                        + {{ $formatCurrency(courierData.minimum_complement) }}
+                                    </span>
+                                </div>
+
+                                <!-- CONFERÊNCIA DE NUMERÁRIO DA RUA -->
+                                <div v-if="courierData.cash_collected > 0" class="flex items-center justify-between p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                    <div class="flex flex-col">
+                                        <span class="text-xs font-black text-amber-700 dark:text-amber-400">Dinheiro Coletado na Rua</span>
+                                        <span class="text-[10px] text-surface-muted">Valor recebido em espécie dos clientes para prestar contas ao caixa</span>
+                                    </div>
+                                    <span class="text-xs font-black text-amber-600 shrink-0">
+                                        {{ $formatCurrency(courierData.cash_collected) }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
@@ -182,11 +257,11 @@
                             </div>
                         </div>
 
-                        <!-- 4. BLOCO: CONSUMO BALCÃO / PESSOAL (SE HOUVER) -->
+                        <!-- 4. BLOCO: CONSUMO INTERNO / BALCÃO (SE HOUVER) -->
                         <div v-if="balcaoItems.length > 0" class="bg-surface-1/80 border border-surface-border/70 rounded-xl p-3 flex flex-col gap-2 shadow-xs">
                             <div class="flex items-center justify-between">
                                 <span class="text-[10px] font-black uppercase tracking-wider text-rose-500 flex items-center gap-1.5">
-                                    <i class="pi pi-shopping-bag text-xs"></i> 4. Consumo Balcão (Itens Pessoais)
+                                    <i class="pi pi-shopping-bag text-xs"></i> 4. Consumo Interno / Balcão
                                 </span>
                                 <span class="text-[9px] text-surface-muted font-bold">Compras avulsas / Saída</span>
                             </div>
@@ -243,7 +318,7 @@
 
                         <div class="flex items-center justify-between bg-primary-500/10 p-3 rounded-xl border border-primary-500/20">
                             <label class="text-[11px] font-black text-primary-700 dark:text-primary-400 uppercase tracking-wider">
-                                Valor a Liquidar Agora
+                                Valor Total da Diária (A Liquidar)
                             </label>
                             <div class="flex items-center gap-2">
                                 <div class="relative w-32">
@@ -321,6 +396,8 @@
 
 <script setup>
 import { ref, watch, onMounted, computed } from 'vue';
+import axios from 'axios';
+import { useToast } from 'primevue/usetoast';
 import SelectableCard from '@/Components/UI/SelectableCard.vue';
 import SegmentedControl from '@/Components/UI/SegmentedControl.vue';
 import { formatCurrency } from '@/Utils/formatters';
@@ -338,10 +415,12 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['cancel', 'confirm']);
+const toast = useToast();
 
 const activeTab = ref('payment');
 const step = ref('method');
 const activePreset = ref('all');
+const isPrintingConference = ref(false);
 
 const tabOptions = [
     { label: 'Liquidação', value: 'payment', icon: 'pi-money-bill' },
@@ -357,6 +436,7 @@ const payoutData = ref({
     net_amount: 0,
     ledger_history: [],
     courier_details: null,
+    shift_operator_name: '',
     user: {}
 });
 
@@ -483,6 +563,46 @@ onMounted(() => {
     activeTab.value = 'payment';
     activePreset.value = 'all';
 });
+
+const handlePrintConference = async () => {
+    const targetUserId = payoutData.value.user?.id || props.user?.id;
+    if (!targetUserId || isPrintingConference.value) return;
+
+    isPrintingConference.value = true;
+
+    const deductedConsumption = rawConsumptionItems.value
+        .filter(i => i.selected)
+        .reduce((sum, i) => sum + i.amount, 0);
+
+    try {
+        const resp = await axios.post(route('operations.attendance.print-conference'), {
+            user_id: targetUserId,
+            amount: localPaidAmount.value,
+            gross_rate: serviceItem.value.selected ? serviceItem.value.amount : 0,
+            consumption_deducted: deductedConsumption,
+            shift_date_label: shiftDateLabel.value,
+            settled_items: settledItems.value,
+            rolled_items: rolledItems.value,
+            remaining_balance: rolledBalance.value
+        });
+
+        toast.add({
+            severity: 'success',
+            summary: 'Conferência Impressa',
+            detail: resp.data?.message || 'Pré-conta enviada para a impressora do caixa.',
+            life: 3000
+        });
+    } catch (e) {
+        toast.add({
+            severity: 'error',
+            summary: 'Erro na Impressão',
+            detail: e.response?.data?.error || 'Não foi possível imprimir a conferência.',
+            life: 4000
+        });
+    } finally {
+        isPrintingConference.value = false;
+    }
+};
 
 const selectMethod = (method, bankAccountId = null) => {
     const deductedConsumption = rawConsumptionItems.value

@@ -7,19 +7,6 @@ use Illuminate\Support\Str;
 
 class FreelancerReceipt
 {
-    /**
-     * @param string $freelancerName
-     * @param float $netAmount
-     * @param float $grossAmount
-     * @param float $consumptionAmount
-     * @param string $paymentMethod
-     * @param string $operatorName
-     * @param string|null $pixKey
-     * @param string $shiftDateLabel Ex: "DOM - 01/11"
-     * @param array $settledItems Itens pagos/descontados neste fechamento
-     * @param array $rolledItems Itens adiados para o próximo turno
-     * @param float $remainingBalance Saldo restante em conta após o acerto
-     */
     public function __construct(
         public string $freelancerName,
         public float $netAmount,
@@ -31,12 +18,15 @@ class FreelancerReceipt
         public string $shiftDateLabel = '',
         public array $settledItems = [],
         public array $rolledItems = [],
-        public float $remainingBalance = 0.0
+        public float $remainingBalance = 0.0,
+        public bool $isConference = false,
+        public ?array $courierDetails = null,
+        public ?string $shiftOperatorName = null
     ) {}
 
     public function getJobType(): string
     {
-        return 'freelancer_receipt';
+        return $this->isConference ? 'freelancer_conference' : 'freelancer_receipt';
     }
 
     protected function cleanText(string $text): string
@@ -61,42 +51,136 @@ class FreelancerReceipt
         return $cleanLeft . str_repeat(' ', $spaceCount) . $right;
     }
 
+    protected function justifyText(string $leftText, string $rightText, int $width = 48): string
+    {
+        $cleanRight = $this->cleanText($rightText);
+        $maxLeftLength = max(10, $width - mb_strlen($cleanRight) - 1);
+        $cleanLeft = $this->cleanText($leftText);
+
+        if (mb_strlen($cleanLeft) > $maxLeftLength) {
+            $cleanLeft = mb_substr($cleanLeft, 0, $maxLeftLength - 1) . '.';
+        }
+
+        $spaceCount = max(1, $width - mb_strlen($cleanLeft) - mb_strlen($cleanRight));
+
+        return $cleanLeft . str_repeat(' ', $spaceCount) . $cleanRight;
+    }
+
     public function build(): array
     {
         $b = new BlueprintBuilder();
 
+        $title = $this->isConference ? 'CONFERENCIA DE DIARIA' : 'RECIBO DE DIARIA EVENTUAL';
+        $cashierOperator = $this->shiftOperatorName ?: $this->operatorName;
+
         $b->alignCenter()
-            ->text($this->cleanText('RECIBO DE DIARIA EVENTUAL'), bold: true, size: '2x')
-            ->text($this->cleanText('DATA: ' . now()->format('d/m/Y H:i')))
-            ->text($this->cleanText('OPERADOR: ' . $this->operatorName))
+            ->text($this->cleanText($title), bold: true, size: '2x');
+
+        if ($this->isConference) {
+            $b->text($this->cleanText('*** PRE-CONTA PARA CONFERENCIA ***'), bold: true);
+        }
+
+        $b->text($this->cleanText('EMISSAO: ' . now()->format('d/m/Y H:i')))
+            ->text($this->cleanText('OPERADOR CAIXA: ' . $cashierOperator))
             ->divider()
             ->alignLeft()
-            ->text($this->cleanText('COLABORADOR: ' . $this->freelancerName));
+            ->text($this->cleanText('COLABORADOR: ' . $this->freelancerName), bold: true);
 
-        if ($this->pixKey && str_contains(strtolower($this->paymentMethod), 'pix')) {
+        if ($this->pixKey && ($this->isConference || str_contains(strtolower($this->paymentMethod), 'pix'))) {
             $b->text($this->cleanText('CHAVE PIX: ' . $this->pixKey));
         }
 
         if (!empty($this->shiftDateLabel)) {
-            $b->text($this->cleanText('TURNO REFERENCIA: ' . $this->shiftDateLabel), bold: true);
+            $b->text($this->cleanText('DATA / TURNO: ' . $this->shiftDateLabel), bold: true);
         }
 
         // ==========================================
-        // 1. ITENS LIQUIDADOS NESTE ACERTO
+        // BLOCO ESPECIFICO: FECHAMENTO DO MOTOBOY
+        // ==========================================
+        $hasCourierBlock = !empty($this->courierDetails) && !empty($this->courierDetails['is_courier']);
+
+        if ($hasCourierBlock) {
+            $cd = $this->courierDetails;
+            $b->divider();
+            $b->text($this->cleanText('>>> FECHAMENTO DE ENTREGAS (MOTOBOY) <<<'), bold: true);
+
+            $modelLabel = $cd['payment_model_label'] ?? 'Taxa Fixa por Corrida';
+            $b->text($this->justifyText('MODELO REPASSE:', $modelLabel));
+
+            if (($cd['payment_model'] ?? 'fixed') === 'distance' && (float) ($cd['fee_per_km'] ?? 0) > 0) {
+                $b->text($this->justifyLine('VALOR POR KM RODADO:', (float) $cd['fee_per_km']));
+            } elseif ((float) ($cd['default_delivery_fee'] ?? 0) > 0) {
+                $rateLabel = ($cd['payment_model'] ?? 'fixed') === 'neighborhood'
+                    ? 'TAXA PADRAO (FALLBACK):'
+                    : 'TAXA FIXA POR ENTREGA:';
+                $b->text($this->justifyLine($rateLabel, (float) $cd['default_delivery_fee']));
+            }
+
+            $b->text($this->justifyLine('DIARIA FIXA DO TURNO:', (float) ($cd['daily_fee'] ?? 0)));
+
+            if ((float) ($cd['minimum_guaranteed'] ?? 0) > 0) {
+                $b->text($this->justifyLine('GARANTIA MINIMA TURNO:', (float) $cd['minimum_guaranteed']));
+            }
+
+            // Lista corrida por corrida
+            $deliveries = $cd['deliveries'] ?? [];
+            $b->text($this->cleanText('-- LISTA DE ENTREGAS (' . count($deliveries) . ') --'), bold: true);
+
+            if (!empty($deliveries)) {
+                foreach ($deliveries as $del) {
+                    $orderNum = '#' . ($del['id'] ?? '');
+                    $time = !empty($del['time']) ? "[{$del['time']}] " : '';
+                    $dest = $del['neighborhood'] ?? $del['customer'] ?? 'Entrega';
+                    $kmTag = (($cd['payment_model'] ?? '') === 'distance' && (float) ($del['distance_km'] ?? 0) > 0)
+                        ? ' (' . number_format((float) $del['distance_km'], 1, ',', '.') . 'km)'
+                        : '';
+
+                    $b->text($this->justifyLine("{$orderNum} {$time}{$dest}{$kmTag}", (float) ($del['courier_fee'] ?? 0)));
+
+                    if (!empty($del['is_cash']) && (float) ($del['cash_amount'] ?? 0) > 0) {
+                        $b->text($this->cleanText('   -> COBRADO EM DINHEIRO: R$ ' . number_format((float) $del['cash_amount'], 2, ',', '.')));
+                    }
+                }
+            } else {
+                $b->text($this->cleanText('(NENHUMA ENTREGA REGISTRADA NESTE TURNO)'));
+            }
+
+            $b->text($this->cleanText('-- RESUMO PRODUCAO MOTOBOY --'));
+            $b->text($this->justifyLine('TOTAL CORRIDAS (' . (int) ($cd['deliveries_count'] ?? count($deliveries)) . '):', (float) ($cd['total_deliveries_fee'] ?? 0)));
+
+            if (!empty($cd['minimum_applied']) && (float) ($cd['minimum_complement'] ?? 0) > 0) {
+                $b->text($this->justifyLine('COMPLEMENTO PISO MINIMO:', (float) $cd['minimum_complement']));
+            }
+
+            $b->text($this->justifyLine('TOTAL BRUTO DIARIA+ENTREGAS:', (float) ($cd['final_payable'] ?? 0)), bold: true);
+
+            if ((float) ($cd['cash_collected'] ?? 0) > 0) {
+                $b->text($this->justifyLine('DINHEIRO COLETADO NA RUA:', (float) $cd['cash_collected']), bold: true);
+            }
+        }
+
+        // ==========================================
+        // 1. ITENS LIQUIDADOS / CONFERIDOS
         // ==========================================
         $b->divider();
-        $b->text($this->cleanText('>>> ITENS LIQUIDADOS NESTE ACERTO <<<'), bold: true);
+        $sectionTitle = $this->isConference
+            ? '>>> RESUMO PARA CONFERENCIA <<<'
+            : '>>> ITENS LIQUIDADOS NESTE ACERTO <<<';
+        $b->text($this->cleanText($sectionTitle), bold: true);
 
         if (!empty($this->settledItems)) {
             $services = array_filter($this->settledItems, fn($i) => ($i['category'] ?? '') === 'services');
             $excedentes = array_filter($this->settledItems, fn($i) => ($i['category'] ?? '') === 'excedente');
             $balcao = array_filter($this->settledItems, fn($i) => ($i['category'] ?? '') === 'balcao');
 
-            if (!empty($services)) {
+            // Se não for motoboy (onde o bloco acima já detalhou diária + corridas), imprime serviços normalmente
+            if (!$hasCourierBlock && !empty($services)) {
                 $b->text($this->cleanText('-- SERVICOS / DIARIAS --'));
                 foreach ($services as $item) {
                     $b->text($this->justifyLine($item['title'], (float) $item['amount']));
                 }
+            } elseif ($hasCourierBlock) {
+                $b->text($this->justifyLine('PRODUCAO + DIARIA MOTOBOY', (float) ($this->courierDetails['final_payable'] ?? 0)));
             }
 
             if (!empty($excedentes)) {
@@ -108,14 +192,14 @@ class FreelancerReceipt
             }
 
             if (!empty($balcao)) {
-                $b->text($this->cleanText('-- CONSUMO BALCAO / PESSOAL --'));
+                $b->text($this->cleanText('-- CONSUMO INTERNO / BALCAO --'));
                 foreach ($balcao as $item) {
                     $time = !empty($item['time']) ? "[{$item['time']}] " : '';
                     $b->text($this->justifyLine($time . $item['title'], (float) $item['amount'], 48, true));
                 }
             }
         } else {
-            $b->text($this->cleanText('(NENHUM VALOR FINANCEIRO BAIXADO HOJE)'));
+            $b->text($this->cleanText('(NENHUM VALOR FINANCEIRO SELECIONADO)'));
         }
 
         // ==========================================
@@ -137,9 +221,22 @@ class FreelancerReceipt
         // 3. FECHAMENTO FINANCEIRO JUSTIFICADO
         // ==========================================
         $b->divider();
-        $b->alignLeft()
-            ->text($this->justifyLine('TOTAL PAGO AGORA:', $this->netAmount), bold: true)
-            ->text($this->cleanText('FORMA DE PAGAMENTO: ' . $this->paymentMethod));
+        $b->alignLeft();
+
+        if ($this->isConference) {
+            $b->text($this->justifyLine('VALOR TOTAL DA DIARIA (LIQ):', $this->netAmount), bold: true);
+
+            if ($hasCourierBlock && (float) ($this->courierDetails['cash_collected'] ?? 0) > 0) {
+                $cashInHand = (float) $this->courierDetails['cash_collected'];
+                $b->text($this->justifyLine('(-) DINHEIRO RETIDO RUA:', $cashInHand, 48, true));
+                $diff = round($this->netAmount - $cashInHand, 2);
+                $diffLabel = $diff >= 0 ? 'SALDO A PAGAR AO MOTOBOY:' : 'TROCO A DEVOLVER AO CAIXA:';
+                $b->text($this->justifyLine($diffLabel, abs($diff)), bold: true);
+            }
+        } else {
+            $b->text($this->justifyLine('TOTAL PAGO AGORA:', $this->netAmount), bold: true)
+                ->text($this->cleanText('FORMA DE PAGAMENTO: ' . $this->paymentMethod));
+        }
 
         if (abs($this->remainingBalance) > 0.01) {
             $balLabel = $this->remainingBalance > 0
@@ -151,14 +248,25 @@ class FreelancerReceipt
         }
 
         $b->divider()
-            ->space()
-            ->text($this->cleanText('DECLARO QUE CONFERI E RECEBI OS VALORES ESPECIFICADOS ACIMA, DANDO QUITACAO DOS ITENS LIQUIDADOS.'))
-            ->space()
-            ->space()
-            ->alignCenter()
-            ->text('____________________________________')
-            ->text($this->cleanText($this->freelancerName))
-            ->cut();
+            ->space();
+
+        if ($this->isConference) {
+            $b->text($this->cleanText('DOCUMENTO DE CONFERENCIA PREVIA. CONFIRA OS VALORES ANTES DA QUITACAO NO CAIXA.'))
+                ->space()
+                ->space()
+                ->alignCenter()
+                ->text('____________________________________')
+                ->text($this->cleanText('CONFERIDO POR: ' . $this->freelancerName));
+        } else {
+            $b->text($this->cleanText('DECLARO QUE CONFERI E RECEBI OS VALORES ESPECIFICADOS ACIMA, DANDO QUITACAO DOS ITENS LIQUIDADOS.'))
+                ->space()
+                ->space()
+                ->alignCenter()
+                ->text('____________________________________')
+                ->text($this->cleanText($this->freelancerName));
+        }
+
+        $b->cut();
 
         return $b->get();
     }

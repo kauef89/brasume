@@ -33,6 +33,30 @@ class ShiftAttendanceController extends Controller
         }
     }
 
+    public function printConference(Request $request, ShiftAttendanceService $service)
+    {
+        $data = $request->validate([
+            'user_id'              => 'required|integer|exists:users,id',
+            'amount'               => 'nullable|numeric|min:0',
+            'gross_rate'           => 'nullable|numeric|min:0',
+            'consumption_deducted' => 'nullable|numeric|min:0',
+            'shift_date_label'     => 'nullable|string',
+            'settled_items'        => 'nullable|array',
+            'rolled_items'         => 'nullable|array',
+            'remaining_balance'    => 'nullable|numeric',
+        ]);
+
+        try {
+            $service->printFreelancerConference($data, auth()->user());
+            return response()->json([
+                'success' => true,
+                'message' => 'Conferência enviada para a impressora do caixa!',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+    }
+
     public function payFreelancer(Request $request, ShiftAttendanceService $service)
     {
         $data = $request->validate([

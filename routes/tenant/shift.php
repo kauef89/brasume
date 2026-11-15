@@ -56,6 +56,9 @@ Route::prefix('operations')->group(function () {
     Route::post('/attendance/pay', [ShiftAttendanceController::class, 'payFreelancer'])
         ->name('operations.attendance.pay');
 
+    Route::post('/attendance/print-conference', [ShiftAttendanceController::class, 'printConference'])
+        ->name('operations.attendance.print-conference');
+
     // ==========================================
     // ↩️ 4. ESTORNOS E AUDITORIA
     // ==========================================

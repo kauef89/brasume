@@ -215,35 +215,92 @@ class CourierSettlementService
         $start = $startDate ?: now()->startOfDay();
         $end = $endDate ?: now()->endOfDay();
 
-        $deliveries = Order::with(['customer', 'neighborhood'])
+        $deliveries = Order::with(['customer', 'deliveryAddress.neighborhood', 'payments.paymentMethod'])
             ->where('courier_id', $courier->id)
             ->whereBetween('created_at', [$start, $end])
-            ->whereNotIn('status', ['cancelled'])
+            ->whereNotIn('status', ['cancelled', 'canceled'])
             ->orderBy('id', 'asc')
             ->get();
 
-        $totalDeliveriesFee = (float) $deliveries->sum('courier_fee');
-        $dailyFee = (float) $courier->daily_fee;
-        $minimumGuaranteed = (float) $courier->minimum_guaranteed;
+        $modelEnum = $courier->courier_payment_model instanceof CourierPaymentModel
+            ? $courier->courier_payment_model
+            : (CourierPaymentModel::tryFrom((string) $courier->courier_payment_model) ?? CourierPaymentModel::FIXED);
 
-        $grossTotal = $dailyFee + $totalDeliveriesFee;
+        $totalDeliveriesFee = 0.0;
+        $cashCollected = 0.0;
+        $deliveriesList = [];
+
+        foreach ($deliveries as $order) {
+            $fee = (float) ($order->courier_fee ?? 0);
+            if ($fee <= 0 && (float) $courier->default_delivery_fee > 0) {
+                $fee = $this->calculateFee($courier, $order);
+            }
+            $totalDeliveriesFee += $fee;
+
+            // Apura recebimento em espécie (dinheiro) na entrega
+            $orderCash = 0.0;
+            if ($order->payments && $order->payments->isNotEmpty()) {
+                foreach ($order->payments as $pay) {
+                    $engine = strtolower((string) ($pay->paymentMethod?->engine_type ?? $pay->payment_method_name ?? ''));
+                    if (in_array($engine, ['money', 'cash', 'dinheiro'], true) || str_contains($engine, 'dinheiro')) {
+                        $orderCash += (float) $pay->amount;
+                    }
+                }
+            } else {
+                $pmName = strtolower((string) ($order->payment_method_name ?? $order->payment_method ?? ''));
+                if (in_array($pmName, ['money', 'cash', 'dinheiro'], true) || str_contains($pmName, 'dinheiro')) {
+                    $orderCash = (float) ($order->total ?? 0);
+                }
+            }
+
+            $cashCollected += $orderCash;
+
+            $addr = is_array($order->address) ? $order->address : [];
+            $neighborhoodName = $order->deliveryAddress?->neighborhood?->name
+                ?? ($addr['neighborhood'] ?? null)
+                ?? 'Entrega Local';
+
+            $deliveriesList[] = [
+                'id'           => $order->id,
+                'time'         => $order->created_at ? $order->created_at->format('H:i') : '',
+                'customer'     => $order->customer_name ?: ($order->customer?->name ?? 'Cliente'),
+                'neighborhood' => $neighborhoodName,
+                'distance_km'  => (float) ($order->delivery_distance_km ?? 0),
+                'courier_fee'  => round($fee, 2),
+                'order_total'  => round((float) ($order->total ?? 0), 2),
+                'is_cash'      => $orderCash > 0.009,
+                'cash_amount'  => round($orderCash, 2),
+            ];
+        }
+
+        $totalDeliveriesFee = round($totalDeliveriesFee, 2);
+        $cashCollected = round($cashCollected, 2);
+        $dailyFee = round((float) ($courier->daily_fee ?? 0), 2);
+        $minimumGuaranteed = round((float) ($courier->minimum_guaranteed ?? 0), 2);
+
+        $grossTotal = round($dailyFee + $totalDeliveriesFee, 2);
         $finalPayable = max($grossTotal, $minimumGuaranteed);
-
-        $cashCollected = (float) $deliveries->filter(function ($order) {
-            return $order->payment_method === 'cash';
-        })->sum('total_amount');
+        $minimumApplied = $minimumGuaranteed > 0 && $minimumGuaranteed > $grossTotal;
+        $minimumComplement = $minimumApplied ? round($minimumGuaranteed - $grossTotal, 2) : 0.0;
 
         return [
             'courier'              => $courier,
+            'payment_model'        => $modelEnum->value,
+            'payment_model_label'  => $modelEnum->getLabel(),
+            'default_delivery_fee' => round((float) ($courier->default_delivery_fee ?? 0), 2),
+            'fee_per_km'           => round((float) ($courier->fee_per_km ?? 0), 2),
             'deliveries_count'     => $deliveries->count(),
             'deliveries'           => $deliveries,
+            'deliveries_list'      => $deliveriesList,
             'daily_fee'            => $dailyFee,
             'total_deliveries_fee' => $totalDeliveriesFee,
             'gross_total'          => $grossTotal,
             'minimum_guaranteed'   => $minimumGuaranteed,
+            'minimum_applied'      => $minimumApplied,
+            'minimum_complement'   => $minimumComplement,
             'final_payable'        => $finalPayable,
             'cash_collected'       => $cashCollected,
-            'net_cash_balance'     => $cashCollected - $finalPayable,
+            'net_cash_balance'     => round($cashCollected - $finalPayable, 2),
         ];
     }
 }
