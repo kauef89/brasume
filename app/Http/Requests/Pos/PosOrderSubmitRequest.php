@@ -121,6 +121,8 @@ class PosOrderSubmitRequest extends FormRequest
             'financials.serviceFee'                                 => ['required', 'numeric'],
             'financials.discount'                                   => ['required', 'numeric'],
             'financials.finalTotal'                                 => ['required', 'numeric', 'min:0'],
+            'financials.coupon_id'                                  => ['nullable', 'integer', 'exists:coupons,id'],
+            'financials.coupon_code'                                => ['nullable', 'string', 'max:50'],
         ];
     }
 

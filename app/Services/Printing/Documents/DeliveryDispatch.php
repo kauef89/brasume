@@ -228,20 +228,40 @@ class DeliveryDispatch
         // 🎯 8. Resumo Financeiro (Justificado)
         $b->divider()->alignLeft();
 
-        if ($order->subtotal > 0) {
-            $b->text($this->justifyRow('PRODUTOS:', 'R$ ' . $this->money($order->subtotal), $cols), true, '1x');
-        }
-        if ($order->delivery_fee > 0) {
-            $b->text($this->justifyRow('TAXA ENTREGA:', 'R$ ' . $this->money($order->delivery_fee), $cols), true, '1x');
-        }
-        if ($order->service_fee > 0) {
-            $b->text($this->justifyRow('TAXA SERVICO:', 'R$ ' . $this->money($order->service_fee), $cols), true, '1x');
-        }
-        if ($order->discount > 0) {
-            $b->text($this->justifyRow('DESCONTO:', '-R$ ' . $this->money($order->discount), $cols), true, '1x');
+        $subtotal = (float) $order->subtotal;
+        $deliveryFee = (float) $order->delivery_fee;
+        $serviceFee = (float) $order->service_fee;
+        $discount = (float) $order->discount;
+        $coupon = $order->coupon_id ? ($order->coupon ?? \App\Models\Coupon::find($order->coupon_id)) : null;
+
+        if ($discount <= 0 && $coupon) {
+            $discount = app(\App\Services\Marketing\CouponService::class)->calculateDiscountValue(
+                $coupon,
+                $subtotal,
+                $deliveryFee,
+                $serviceFee
+            );
         }
 
-        $b->text($this->justifyRow('TOTAL DO PEDIDO:', 'R$ ' . $this->money($order->total), $cols), true, '1x')
+        $effectiveTotal = max(0, round($subtotal + $deliveryFee + $serviceFee - $discount, 2));
+
+        if ($subtotal > 0) {
+            $b->text($this->justifyRow('PRODUTOS:', 'R$ ' . $this->money($subtotal), $cols), true, '1x');
+        }
+        if ($deliveryFee > 0) {
+            $b->text($this->justifyRow('TAXA ENTREGA:', 'R$ ' . $this->money($deliveryFee), $cols), true, '1x');
+        }
+        if ($serviceFee > 0) {
+            $b->text($this->justifyRow('TAXA SERVICO:', 'R$ ' . $this->money($serviceFee), $cols), true, '1x');
+        }
+        if ($discount > 0) {
+            $discountLabel = $coupon && !empty($coupon->code)
+                ? 'DESCONTO (' . $coupon->code . '):'
+                : 'DESCONTO:';
+            $b->text($this->justifyRow($discountLabel, '-R$ ' . $this->money($discount), $cols), true, '1x');
+        }
+
+        $b->text($this->justifyRow('TOTAL DO PEDIDO:', 'R$ ' . $this->money($effectiveTotal), $cols), true, '1x')
           ->space();
 
         // 🎯 9. Apuração Financeira e Banners de Cobrança
@@ -250,7 +270,7 @@ class DeliveryDispatch
             : collect();
 
         $paidAmount = $validPayments->sum('amount');
-        $toCollect = max(0, (float)$order->total - (float)$paidAmount);
+        $toCollect = max(0, $effectiveTotal - (float)$paidAmount);
         $isPaidStatus = in_array($order->status, ['closed', 'completed']) || $order->payment_status === 'paid';
 
         $b->alignCenter();

@@ -663,9 +663,12 @@ const processCheckout = () => {
 
     if (activeCoupon.value) {
         finalTotals.coupon_code = activeCoupon.value.code;
+        finalTotals.coupon_id = activeCoupon.value.coupon_id || activeCoupon.value.id || null;
     }
 
     const appendId = targetOrderId.value;
+
+    removeCoupon();
 
     emit('checkout', {
         order_id: appendId,

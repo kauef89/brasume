@@ -74,6 +74,45 @@ class OrderCreationService
                 $orderData = $this->deliveryHandler->buildOrderData($payload, $operatorId, $source);
             }
 
+            $financials = $payload['financials'] ?? [];
+            $couponId = $financials['coupon_id'] ?? ($orderData['coupon_id'] ?? null);
+            $couponCode = $financials['coupon_code'] ?? null;
+
+            if ($couponId || !empty($couponCode)) {
+                $coupon = $couponId
+                    ? \App\Models\Coupon::find((int) $couponId)
+                    : \App\Models\Coupon::where('code', strtoupper(trim((string) $couponCode)))->first();
+
+                if ($coupon) {
+                    $orderData['coupon_id'] = $coupon->id;
+                    $currentDiscount = (float) ($orderData['discount'] ?? 0);
+
+                    if ($currentDiscount <= 0) {
+                        $couponService = app(\App\Services\Marketing\CouponService::class);
+                        $calculatedDiscount = $couponService->calculateDiscountValue(
+                            $coupon,
+                            (float) ($orderData['subtotal'] ?? 0),
+                            (float) ($orderData['delivery_fee'] ?? 0),
+                            (float) ($orderData['service_fee'] ?? 0)
+                        );
+                        $orderData['discount'] = round($calculatedDiscount, 2);
+                        $orderData['total'] = max(0, round(
+                            (float) ($orderData['subtotal'] ?? 0)
+                            + (float) ($orderData['delivery_fee'] ?? 0)
+                            + (float) ($orderData['service_fee'] ?? 0)
+                            - $orderData['discount'],
+                            2
+                        ));
+                    }
+
+                    if (!empty($orderData['payment_intent_methods']) && is_array($orderData['payment_intent_methods']) && count($orderData['payment_intent_methods']) === 1) {
+                        $orderData['payment_intent_methods'][0]['amount'] = (float) $orderData['total'];
+                    }
+
+                    $coupon->increment('usage_count');
+                }
+            }
+
             $orderData['cash_shift_id'] = $shift->id;
             $order = Order::create($orderData);
 
