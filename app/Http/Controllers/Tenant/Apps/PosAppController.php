@@ -62,6 +62,15 @@ class PosAppController extends Controller
             'users' => $attendanceService->getShiftUsersData(),
             'currentAttendees' => $attendanceService->getCurrentAttendees($shift),
             'todayScheduledAttendees' => $scheduleService->getTodayScheduledAttendees(),
+            'employeesList' => fn () => \App\Models\Employee::where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'employment_type', 'role']),
+            'suppliersList' => fn () => \App\Models\Supplier::where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name']),
+            'pendingPayables' => fn () => \App\Models\AccountPayable::where('status', 'pending')
+                ->orderBy('due_date', 'asc')
+                ->get(['id', 'description', 'amount', 'due_date', 'employee_id', 'supplier_id', 'supplier_name', 'accounting_category']),
             'ordersHistory' => function () use ($shift) {
                 if (!$shift || !$shift->opened_at) return [];
 

@@ -306,9 +306,24 @@ export function useCashier(props, { onShiftStaged } = {}) {
     const processTransaction = (payload) => {
         const data = { ...payload, pin: authorizedPin.value };
         router.post(route('operations.cashier.transaction'), data, {
-            preserveState: true, preserveScroll: true,
-            onSuccess: () => { isTransactionModalVisible.value = false; authorizedPin.value = null; },
-            onError: (e) => { toast.add({ severity: 'error', summary: 'Erro', detail: e.pin || 'Erro ao processar transação.', life: 4000 }); authorizedPin.value = null; }
+            preserveState: true,
+            preserveScroll: true,
+            only: ['cashierData', 'currentShift', 'managerData', 'transactionsHistory', 'pendingPayables'],
+            onSuccess: () => {
+                isTransactionModalVisible.value = false;
+                authorizedPin.value = null;
+                toast.add({
+                    severity: 'success',
+                    summary: payload.type === 'in' ? 'Suprimento Registrado' : 'Sangria Registrada',
+                    detail: 'Movimentação lançada e conciliada com sucesso!',
+                    life: 3500
+                });
+            },
+            onError: (e) => {
+                const firstErr = e && typeof e === 'object' ? Object.values(e)[0] : null;
+                toast.add({ severity: 'error', summary: 'Erro', detail: firstErr || e.pin || 'Erro ao processar transação.', life: 5000 });
+                authorizedPin.value = null;
+            }
         });
     };
 

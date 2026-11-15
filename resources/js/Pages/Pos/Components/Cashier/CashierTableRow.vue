@@ -33,8 +33,12 @@
         <div class="w-14 text-xs font-medium text-surface-muted shrink-0 tabular-nums">
             <span v-if="item._type === 'order'">#{{ $formatNumber(item.id) }}</span>
             <span v-else class="text-[10px] uppercase font-bold tracking-wider"
-                  :class="item.type === 'in' ? (item.order_id ? 'text-emerald-500' : 'text-blue-500') : 'text-amber-500'">
-                {{ item.type === 'in' ? (item.order_id ? 'VENDA' : 'SUPRI') : 'SANGR' }}
+                  :class="item.type === 'in'
+                    ? (item.order_id ? 'text-emerald-500' : 'text-blue-500')
+                    : (item.category === 'employee_advance' ? 'text-purple-500' : (item.category === 'payable_settlement' || item.category === 'supplier_cash_out' ? 'text-emerald-500' : 'text-amber-500'))">
+                {{ item.type === 'in'
+                    ? (item.order_id ? 'VENDA' : 'SUPRI')
+                    : (item.category === 'employee_advance' ? 'VALE' : (item.category === 'payable_settlement' ? 'ABAT' : (item.category === 'supplier_cash_out' ? 'FORN' : 'SANGR'))) }}
             </span>
         </div>
 

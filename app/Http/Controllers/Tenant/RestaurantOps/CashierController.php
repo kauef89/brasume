@@ -183,10 +183,15 @@ class CashierController extends Controller
     public function transaction(Request $request)
     {
         $data = $request->validate([
-            'type'        => 'required|in:in,out',
-            'amount'      => 'required|numeric|min:0.01',
-            'description' => 'nullable|string|max:255',
-            'pin'         => 'nullable|string',
+            'type'                => 'required|in:in,out',
+            'out_purpose'         => 'nullable|string|in:general,employee,supplier',
+            'amount'              => 'required|numeric|min:0.01',
+            'description'         => 'nullable|string|max:255',
+            'employee_id'         => 'nullable|integer|exists:employees,id',
+            'supplier_id'         => 'nullable|integer|exists:suppliers,id',
+            'account_payable_id'  => 'nullable|integer|exists:account_payables,id',
+            'accounting_category' => 'nullable|string|max:50',
+            'pin'                 => 'nullable|string',
         ]);
 
         $operator = $this->getOperator();

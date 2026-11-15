@@ -100,6 +100,69 @@ class AccountPayablesTable
                         ]);
                     }),
 
+                Action::make('partial_settle')
+                    ->label('Abater Parcial')
+                    ->icon('heroicon-m-scissors')
+                    ->color('warning')
+                    ->visible(fn ($record) => $record->status === 'pending' && (float) $record->amount > 0.01)
+                    ->modalHeading(fn ($record) => 'Abatimento Parcial: ' . $record->description)
+                    ->modalDescription(fn ($record) => 'Saldo atual em aberto: R$ ' . number_format((float) $record->amount, 2, ',', '.'))
+                    ->form([
+                        \Filament\Forms\Components\TextInput::make('paid_amount')
+                            ->label('Valor do Abatimento (R$)')
+                            ->numeric()
+                            ->prefix('R$')
+                            ->required()
+                            ->minValue(0.01)
+                            ->maxValue(fn ($record) => round((float) $record->amount - 0.01, 2)),
+                        \Filament\Forms\Components\Select::make('bank_account_id')
+                            ->label('Conta Bancária / Cofre (Saída)')
+                            ->options(\App\Models\BankAccount::where('is_active', true)->pluck('name', 'id'))
+                            ->required()
+                            ->searchable()
+                            ->preload(),
+                        DatePicker::make('payment_date')
+                            ->label('Data do Pagamento')
+                            ->default(now())
+                            ->required(),
+                        \Filament\Forms\Components\TextInput::make('note')
+                            ->label('Observação / Motivo')
+                            ->placeholder('Ex: Vale adiantado via PIX'),
+                    ])
+                    ->action(function ($record, array $data) {
+                        $paid = (float) $data['paid_amount'];
+                        $service = app(\App\Services\Financial\AccountPayableSettlementService::class);
+
+                        $res = $service->settle(
+                            payable: $record,
+                            paidAmount: $paid,
+                            bankAccountId: (int) $data['bank_account_id'],
+                            transactionId: null,
+                            paymentDate: $data['payment_date'],
+                            customNote: !empty($data['note'])
+                                ? "[" . \Carbon\Carbon::parse($data['payment_date'])->format('d/m/Y') . "] Abatimento parcial de R$ " . number_format($paid, 2, ',', '.') . " ({$data['note']})."
+                                : null
+                        );
+
+                        \App\Models\Transaction::create([
+                            'bank_account_id'  => $data['bank_account_id'],
+                            'employee_id'      => $record->employee_id,
+                            'supplier_id'      => $record->supplier_id,
+                            'type'             => 'out',
+                            'category'         => 'payable_settlement',
+                            'amount'           => $paid,
+                            'description'      => $res['settled_payable']->description,
+                            'transaction_date' => $data['payment_date'],
+                            'operator_name'    => auth()->user()?->name ?? 'Sistema',
+                        ]);
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('Abatimento registrado!')
+                            ->body('Novo saldo pendente no título #' . $record->id . ': R$ ' . number_format($res['remaining_amount'], 2, ',', '.'))
+                            ->success()
+                            ->send();
+                    }),
+
                 // 🚀 A MÁGICA DRY: Uma única linha resolve todo o modal!
                 ReverseConciliationAction::configure(Action::make('conciliar_reverso')),
 

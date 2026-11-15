@@ -180,6 +180,9 @@
                     v-else-if="rightView === 'transaction'"
                     class="w-full h-full"
                     :type="transactionType"
+                    :employees-list="employeesList"
+                    :suppliers-list="suppliersList"
+                    :pending-payables="pendingPayables"
                     @cancel="resetViews"
                     @confirm="handleTransactionConfirm"
                 />
@@ -247,6 +250,9 @@ const props = defineProps({
     currentAttendees: Array,
     companySettings: Object,
     devices: Array,
+    employeesList: Array,
+    suppliersList: Array,
+    pendingPayables: Array,
     isActive: {
         type: Boolean,
         default: false
