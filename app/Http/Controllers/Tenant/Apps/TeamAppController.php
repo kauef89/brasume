@@ -30,14 +30,30 @@ class TeamAppController extends Controller
     ): Response {
         $user = auth('team')->user() ?? auth()->user();
 
-        $isDriver = false;
+        $userRoles = [];
         if ($user) {
-            $userRoles = method_exists($user, 'getRoleNames') ? $user->getRoleNames()->toArray() : [$user->role ?? ''];
-            $isDriver = in_array(EmployeeRole::COURIER->value, $userRoles, true);
+            $rawRoles = method_exists($user, 'getRoleNames') ? $user->getRoleNames()->toArray() : [$user->role ?? ''];
+            $userRoles = array_map(fn ($r) => strtolower((string) $r), $rawRoles);
         }
 
-        $defaultTabFallback = $isDriver ? 'driver' : 'menu';
-        $activeTab = $request->route('tab', $defaultTabFallback);
+        $hasManagementRole = !empty(array_intersect($userRoles, [EmployeeRole::ADMIN->value, EmployeeRole::MANAGER->value]));
+        $hasFloorRole = !empty(array_intersect($userRoles, [EmployeeRole::WAITER->value, EmployeeRole::CASHIER->value]));
+
+        $isDriver = !empty(array_intersect($userRoles, [EmployeeRole::COURIER->value, 'driver', 'motoboy']))
+            && !$hasManagementRole
+            && !$hasFloorRole;
+
+        $isInvestorOnly = in_array(EmployeeRole::INVESTOR->value, $userRoles, true)
+            && !$hasManagementRole;
+
+        $requestedTab = $request->route('tab');
+        if ($isInvestorOnly) {
+            $activeTab = in_array($requestedTab, ['manager', 'wallet'], true) ? $requestedTab : 'manager';
+        } elseif ($isDriver) {
+            $activeTab = in_array($requestedTab, ['driver', 'wallet', 'home', 'checklists'], true) ? $requestedTab : 'driver';
+        } else {
+            $activeTab = $requestedTab ?: 'menu';
+        }
 
         $activeShift = CashShift::where('status', 'open')->latest('opened_at')->first();
 
@@ -79,12 +95,30 @@ class TeamAppController extends Controller
             $canManageDevices = $isManager || $isShiftCashier || $isScheduledCashier;
         }
 
-        $data = $menuService->getOrderEntryData($request);
+        $data = ($isDriver || $isInvestorOnly)
+            ? [
+                'operatorName'      => $user?->name ?? 'Equipe',
+                'initialCategories' => [],
+                'categoryTree'      => [],
+                'initialProducts'   => [],
+                'initialTableAreas' => [],
+                'initialCustomers'  => [],
+                'initialStreets'    => [],
+                'streets'           => [],
+                'editOrderData'     => null,
+            ]
+            : $menuService->getOrderEntryData($request);
+
         $data['defaultTab'] = $activeTab;
         $data['isDriver'] = $isDriver;
+        $data['isInvestor'] = $isInvestorOnly;
         $data['canManageDevices'] = fn () => $canManageDevices;
-        $data['isOnDuty'] = fn () => $user ? $attendanceService->checkIsOnDuty($user) : false;
-        $data['initialOrders'] = fn () => $opsService->getActiveOrdersDashboard()['initialOrders'];
+        $data['isOnDuty'] = fn () => $isInvestorOnly
+            ? true
+            : ($user ? $attendanceService->checkIsOnDuty($user) : false);
+        $data['initialOrders'] = fn () => $isInvestorOnly
+            ? []
+            : $opsService->getActiveOrdersDashboard()['initialOrders'];
         $data['managerData'] = fn () => $opsService->getManagerShiftSummary($user);
 
         // Turno e colaboradores ativos
@@ -96,8 +130,10 @@ class TeamAppController extends Controller
             ? $walletService->getWalletDashboardData($user->employee_id)
             : ['balance' => 0];
 
-        // Catálogo de produtos com preço resolvido
-        $data['catalog'] = fn () => Product::with(['category', 'storageLocations', 'modifiers.options'])
+        // Catálogo de produtos com preço resolvido (omitido para motoboys puros e sócios investidores)
+        $data['catalog'] = fn () => ($isDriver || $isInvestorOnly)
+            ? []
+            : Product::with(['category', 'storageLocations', 'modifiers.options'])
             ->where('status', '!=', 'archived')
             ->orderBy('name')
             ->get()

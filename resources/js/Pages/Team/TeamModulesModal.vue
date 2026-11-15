@@ -99,6 +99,7 @@
 
             <!-- 8. MOTOBOY -->
             <button
+                v-if="!isInvestorOnly"
                 type="button"
                 @click="handleSelect('driver')"
                 class="flex flex-col items-center justify-center gap-1.5 p-2.5 rounded-2xl bg-surface-1/50 hover:bg-surface-2 text-surface-text outline-none transition-all active:scale-95 cursor-pointer border border-surface-border/40"
