@@ -20,13 +20,17 @@ class OrderStatusController extends Controller
             'stamp_intermediates' => 'nullable|boolean',
         ]);
 
-        $operationsService->updateOrderStatus(
-            $order,
-            $validated['status'],
-            $request->boolean('stamp_intermediates')
-        );
+        try {
+            $operationsService->updateOrderStatus(
+                $order,
+                $validated['status'],
+                $request->boolean('stamp_intermediates')
+            );
 
-        return redirect()->back()->with('success', 'Status do pedido atualizado!');
+            return redirect()->back()->with('success', 'Status do pedido atualizado!');
+        } catch (\DomainException $e) {
+            return redirect()->back()->withErrors(['status' => $e->getMessage()]);
+        }
     }
 
     public function cancel(Order $order, Request $request, OrderCancellationService $cancellationService): RedirectResponse

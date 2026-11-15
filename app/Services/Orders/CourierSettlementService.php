@@ -30,9 +30,14 @@ class CourierSettlementService
         }
 
         if ($subject instanceof User) {
+            if ($subject->employee_id) {
+                $emp = Employee::find($subject->employee_id);
+                if ($emp) return $emp;
+            }
             return $subject->employee
-                ?? Employee::where('user_id', $subject->id)->first()
-                ?? Employee::find($subject->id);
+                ?? (\Illuminate\Support\Facades\Schema::hasColumn('employees', 'user_id')
+                    ? Employee::where('user_id', $subject->id)->first()
+                    : null);
         }
 
         $id = (int) $subject;
@@ -74,6 +79,37 @@ class CourierSettlementService
                 if ($employee && !$courierEmployees->contains('id', $employee->id)) {
                     $employee->setRelation('user', $user);
                     $courierEmployees->push($employee);
+                }
+            }
+        }
+
+        // Fallback: se não há motoboy marcado em shift_attendances, verifica quem foi escalado hoje (ex: adicionado após abertura do turno)
+        if ($courierEmployees->isEmpty() && \Illuminate\Support\Facades\Schema::hasTable('employee_schedules')) {
+            $todaySchedules = \App\Models\EmployeeSchedule::with(['employee.user'])
+                ->whereDate('date', now()->toDateString())
+                ->where('is_day_off', false)
+                ->where('status', '!=', 'cancelled')
+                ->get();
+
+            foreach ($todaySchedules as $sched) {
+                $emp = $sched->employee;
+                if (!$emp || !$emp->is_active) continue;
+
+                $empRole = $emp->role instanceof \BackedEnum ? $emp->role->value : (string) $emp->role;
+                $secRoles = is_array($emp->secondary_roles) ? $emp->secondary_roles : [];
+                $schedRole = (string) ($sched->assigned_role ?? '');
+
+                $isCourier = (bool) $emp->is_courier
+                    || in_array($empRole, $roles, true)
+                    || in_array($schedRole, $roles, true)
+                    || !empty(array_intersect($secRoles, $roles));
+
+                if ($isCourier && !$courierEmployees->contains('id', $emp->id)) {
+                    $u = $emp->user ?? User::where('employee_id', $emp->id)->first();
+                    if ($u) {
+                        $emp->setRelation('user', $u);
+                    }
+                    $courierEmployees->push($emp);
                 }
             }
         }

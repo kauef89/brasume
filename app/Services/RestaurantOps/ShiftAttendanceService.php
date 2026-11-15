@@ -237,6 +237,16 @@ class ShiftAttendanceService
                 ]);
             }
         }
+
+        // 🚀 Se após a sincronização houver exatamente 1 motoboy presente no turno aberto,
+        // assume automaticamente todos os pedidos de delivery em andamento sem entregador
+        if (($shift->status instanceof \BackedEnum ? $shift->status->value : $shift->status) === 'open') {
+            $courierService = app(CourierSettlementService::class);
+            $activeCouriers = $courierService->getActiveCouriersOnShift($shift);
+            if ($activeCouriers->count() === 1) {
+                $courierService->autoAssignPendingOrdersToSoleCourier($activeCouriers->first(), $shift);
+            }
+        }
     }
 
     /**
@@ -603,6 +613,13 @@ class ShiftAttendanceService
                 'assigned_role'     => $primaryRole
             ]
         ]);
+
+        // 🚀 Se o colaborador que iniciou o turno for o único motoboy ativo, carimba os deliveries pendentes
+        $courierService = app(CourierSettlementService::class);
+        $activeCouriers = $courierService->getActiveCouriersOnShift($activeShift);
+        if ($activeCouriers->count() === 1) {
+            $courierService->autoAssignPendingOrdersToSoleCourier($activeCouriers->first(), $activeShift);
+        }
     }
 
     public static function getActiveShiftStaffByRoles(array $roles): Collection
