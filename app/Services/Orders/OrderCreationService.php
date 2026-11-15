@@ -113,11 +113,47 @@ class OrderCreationService
                 }
             }
 
+            // Processa promessa de Cashback Fidelidade (internal_loyalty) vinda do PDV
+            $posCashbackUsed = 0.0;
+            if (!empty($orderData['payment_intent_methods']) && is_array($orderData['payment_intent_methods'])) {
+                $loyaltyService = app(\App\Services\Marketing\LoyaltyService::class);
+                $customerForLoyalty = !empty($orderData['customer_id']) ? \App\Models\Customer::find((int) $orderData['customer_id']) : null;
+
+                foreach ($orderData['payment_intent_methods'] as $idx => $promise) {
+                    $pMethod = !empty($promise['method_id']) ? \App\Models\PaymentMethod::find((int) $promise['method_id']) : null;
+                    $pEngine = is_object($pMethod?->engine_type) ? $pMethod->engine_type->value : ($pMethod?->engine_type ?? ($promise['engine_type'] ?? null));
+
+                    if ($pEngine === \App\Enums\PaymentEngineType::INTERNAL_LOYALTY->value) {
+                        $requestedCb = (float) ($promise['amount'] ?? 0);
+                        if ($requestedCb > 0) {
+                            if (!$customerForLoyalty) {
+                                throw new Exception("Identifique o cliente antes de utilizar Cashback Fidelidade como forma de pagamento.");
+                            }
+                            $validatedCb = $loyaltyService->validateCashback($customerForLoyalty, (float) ($orderData['subtotal'] ?? 0), $requestedCb);
+                            if ($validatedCb <= 0) {
+                                throw new Exception("O cliente não possui saldo de cashback disponível para este pedido.");
+                            }
+                            $orderData['payment_intent_methods'][$idx]['amount'] = round($validatedCb, 2);
+                            $orderData['payment_intent_methods'][$idx]['engine_type'] = \App\Enums\PaymentEngineType::INTERNAL_LOYALTY->value;
+                            $posCashbackUsed = round($posCashbackUsed + $validatedCb, 2);
+                        }
+                    }
+                }
+            }
+
+            if ($posCashbackUsed > 0) {
+                $orderData['cashback_used'] = $posCashbackUsed;
+            }
+
             $orderData['cash_shift_id'] = $shift->id;
             $order = Order::create($orderData);
 
             foreach ($payload["items"] as $item) {
                 $this->itemProcessor->process($order, $item);
+            }
+
+            if ($posCashbackUsed > 0 && $order->customer) {
+                app(\App\Services\Marketing\LoyaltyService::class)->consumeCashback($order, $order->customer, $posCashbackUsed);
             }
 
             return $order;

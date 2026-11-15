@@ -79,8 +79,11 @@ class LoyaltyService
 
             $order->payments()->create([
                 'payment_method_id' => $paymentMethod?->id,
+                'cash_shift_id'     => $order->cash_shift_id,
                 'amount'            => $cashbackUsed,
-                'method'            => 'Cashback',
+                'method'            => $paymentMethod?->name ?? 'Cashback',
+                'status'            => 'paid',
+                'is_paid'           => true,
             ]);
         }
     }
@@ -190,9 +193,8 @@ class LoyaltyService
                 })->orWhere('method', 'like', '%Cashback%');
             })->first();
 
-        if (!$loyaltyPayment || $loyaltyPayment->amount <= 0) return;
-
-        $amountRefunded = (float) $loyaltyPayment->amount;
+        $amountRefunded = max((float) ($loyaltyPayment?->amount ?? 0), (float) ($order->cashback_used ?? 0));
+        if ($amountRefunded <= 0) return;
         $settings = CompanySetting::getCached();
         $conversionRate = max(0.01, (float) ($settings->loyalty_cashback_conversion_rate ?? 5));
 

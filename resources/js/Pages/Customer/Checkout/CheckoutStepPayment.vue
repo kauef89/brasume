@@ -51,7 +51,7 @@
                 <span class="text-[10px] font-black text-white/50 uppercase tracking-widest ml-1 mb-1">Escolha a Forma</span>
                 <div class="grid grid-cols-3 gap-2">
                     <button
-                        v-for="method in availableMethods"
+                        v-for="method in (availableMethods || []).filter(m => m.engine_type !== 'internal_loyalty')"
                         :key="method.id"
                         @click="handleMethodClick(method)"
                         type="button"

@@ -187,15 +187,29 @@ class CustomerCheckoutService
 
                 $deliveryPaymentMethods = $routing['payment_intent_methods'] ?? null;
 
-                if (empty($deliveryPaymentMethods) && !empty($paymentMethodId)) {
+                if (empty($deliveryPaymentMethods) && !empty($paymentMethodId) && $remainingBalance > 0) {
                     $deliveryPaymentMethods = [
                         [
                             'method_id'     => (int) $paymentMethodId,
                             'method_name'   => $routing['payment_method_name'] ?? ($paymentMethod->name ?? 'Não identificado'),
+                            'engine_type'   => is_object($paymentMethod->engine_type) ? $paymentMethod->engine_type->value : ($paymentMethod->engine_type ?? 'manual'),
                             'amount'        => (float) $remainingBalance,
                             'change_target' => !empty($changeTarget) ? (float) $changeTarget : null,
                         ]
                     ];
+                }
+
+                if ($cashbackUsed > 0) {
+                    $loyaltyMethod = PaymentMethod::where('engine_type', PaymentEngineType::INTERNAL_LOYALTY->value)->first();
+                    $deliveryPaymentMethods = array_merge([
+                        [
+                            'method_id'     => $loyaltyMethod?->id,
+                            'method_name'   => $loyaltyMethod?->name ?? 'Cashback Fidelidade',
+                            'engine_type'   => PaymentEngineType::INTERNAL_LOYALTY->value,
+                            'amount'        => (float) $cashbackUsed,
+                            'change_target' => null,
+                        ]
+                    ], is_array($deliveryPaymentMethods) ? $deliveryPaymentMethods : []);
                 }
 
                 $isFullyCoveredByCashback = ($remainingBalance <= 0);

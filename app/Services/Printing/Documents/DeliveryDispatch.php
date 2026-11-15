@@ -261,6 +261,11 @@ class DeliveryDispatch
             $b->text($this->justifyRow($discountLabel, '-R$ ' . $this->money($discount), $cols), true, '1x');
         }
 
+        $cashbackUsed = (float) ($order->cashback_used ?? 0);
+        if ($cashbackUsed > 0) {
+            $b->text($this->justifyRow('CASHBACK USADO:', '-R$ ' . $this->money($cashbackUsed), $cols), true, '1x');
+        }
+
         $b->text($this->justifyRow('TOTAL DO PEDIDO:', 'R$ ' . $this->money($effectiveTotal), $cols), true, '1x')
           ->space();
 
@@ -269,8 +274,8 @@ class DeliveryDispatch
             ? $order->payments->filter(fn($p) => ($p->is_paid || in_array($p->status, ['paid', 'completed'])) && !in_array($p->status ?? 'paid', ['cancelled', 'failed', 'refunded']))
             : collect();
 
-        $paidAmount = $validPayments->sum('amount');
-        $toCollect = max(0, $effectiveTotal - (float)$paidAmount);
+        $paidAmount = max((float) $validPayments->sum('amount'), $cashbackUsed);
+        $toCollect = max(0, $effectiveTotal - $paidAmount);
         $isPaidStatus = in_array($order->status, ['closed', 'completed']) || $order->payment_status === 'paid';
 
         $b->alignCenter();
@@ -296,9 +301,10 @@ class DeliveryDispatch
             $b->text('VALOR R$: ' . $this->money($toCollect), true, '2x')
               ->space();
 
-            $methods = $order->payment_intent_methods
-                ?? $order->payment_intent_methods
-                ?? [];
+            $rawMethods = $order->payment_intent_methods ?? [];
+            $methods = is_array($rawMethods)
+                ? array_values(array_filter($rawMethods, fn($m) => ($m['engine_type'] ?? null) !== 'internal_loyalty'))
+                : [];
 
             $hasPromises = (!empty($methods) && is_array($methods))
                 || in_array($order->payment_intent_status, ['pay_on_delivery', 'pay_on_pickup', 'pending_choice']);
