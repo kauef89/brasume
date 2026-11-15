@@ -20,7 +20,7 @@
 
         <!-- 📖 ABA: CARDÁPIO (Oculto para Motoboys Puros e Investidores) -->
         <TeamMenuTab
-            v-show="activeTab === 'menu' && !isStrictlyCourier && !isInvestorOnly"
+            v-if="!isStrictlyCourier && !isInvestorOnly" v-show="activeTab === 'menu'"
             :is-active="activeTab === 'menu'"
             :search-query="searchQuery"
             @update:search-query="$emit('update:searchQuery', $event)"
@@ -149,7 +149,7 @@
 </template>
 
 <script setup>
-import { ref, defineAsyncComponent } from 'vue';
+import { ref, computed, defineAsyncComponent } from 'vue';
 import TeamCart from "@/Pages/Team/TeamCart.vue";
 import AppearanceSettings from "@/Pages/Settings/Components/AppearanceSettings.vue";
 import OpenTabs from "@/Pages/Operations/Components/Dashboard/OpenTabs.vue";

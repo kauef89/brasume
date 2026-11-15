@@ -39,8 +39,12 @@ class User extends Authenticatable implements HasTenants, FilamentUser
         ];
     }
 
-    public function canAccessPanel(Panel $panel): bool
+    public function canAccessPanel(\Filament\Panel $panel): bool
     {
+        if ($panel->getId() === 'admin' && $this->hasRole('investor') && !$this->hasAnyRole(['admin', 'manager'])) {
+            return false;
+        }
+
         return true;
     }
 

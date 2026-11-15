@@ -141,8 +141,29 @@
                 v-else
                 class="flex items-center shrink-0"
             >
+                <!-- 📊 MODO SÓCIO INVESTIDOR (APENAS GESTOR & CARTEIRA) -->
+                <template v-if="resolvedIsInvestor">
+                    <button
+                        @click.prevent="handleTabClick('manager')"
+                        class="c-island-btn"
+                        :class="activeTab === 'manager' ? 'c-island-btn-active' : 'c-island-btn-inactive'"
+                        title="Resumo do Turno"
+                    >
+                        <i class="pi pi-chart-line"></i>
+                    </button>
+
+                    <button
+                        @click.prevent="handleTabClick('wallet')"
+                        class="c-island-btn"
+                        :class="activeTab === 'wallet' ? 'c-island-btn-active' : 'c-island-btn-inactive'"
+                        title="Minha Carteira"
+                    >
+                        <i class="pi pi-wallet"></i>
+                    </button>
+                </template>
+
                 <!-- 🛵 MODO MOTOBOY EXCLUSIVO -->
-                <template v-if="resolvedIsDriver">
+                <template v-else-if="resolvedIsDriver">
                     <button
                         @click.prevent="handleTabClick('home')"
                         class="c-island-btn"
@@ -162,12 +183,12 @@
                     </button>
 
                     <button
-                        @click.prevent="handleTabClick('checklists')"
+                        @click.prevent="handleTabClick('wallet')"
                         class="c-island-btn"
-                        :class="activeTab === 'checklists' ? 'c-island-btn-active' : 'c-island-btn-inactive'"
-                        title="Minhas Tarefas"
+                        :class="activeTab === 'wallet' ? 'c-island-btn-active' : 'c-island-btn-inactive'"
+                        title="Minha Carteira"
                     >
-                        <i class="pi pi-list-check"></i>
+                        <i class="pi pi-wallet"></i>
                     </button>
                 </template>
 
@@ -316,6 +337,22 @@ const emit = defineEmits([
 
 const page = usePage();
 
+const resolvedIsInvestor = computed(() => {
+    const user = page.props.auth?.user;
+    if (!user) return false;
+
+    const role = (user.role || '').toLowerCase();
+    const roles = Array.isArray(user.roles)
+        ? user.roles.map(r => (typeof r === 'string' ? r : r.name || '').toLowerCase())
+        : [];
+
+    const hasInvestor = role === 'investor' || roles.includes('investor');
+    const hasManagement = ['admin', 'manager', 'gerente'].includes(role) ||
+        roles.some(r => ['admin', 'manager', 'gerente'].includes(r));
+
+    return hasInvestor && !hasManagement;
+});
+
 // 🚀 Avaliação do perfil: detecta se a visualização atual deve ser a visão limpa de entregas
 const resolvedIsDriver = computed(() => {
     if (props.isDriver || page.props.isDriver) return true;
@@ -328,11 +365,13 @@ const resolvedIsDriver = computed(() => {
         ? user.roles.map(r => (typeof r === 'string' ? r : r.name || '').toLowerCase())
         : [];
 
-    // Se o usuário for estritamente motorista (não acumula funções de gestão/garçom)
-    const isExclusivelyDriver = (role === 'driver' || role === 'motoboy') &&
-        !roles.some(r => ['admin', 'manager', 'gerente', 'waiter', 'garcom'].includes(r));
+    const hasDriverRole = ['courier', 'driver', 'motoboy'].includes(role) ||
+        roles.some(r => ['courier', 'driver', 'motoboy'].includes(r));
 
-    return isExclusivelyDriver;
+    const hasOperationalRole = ['admin', 'manager', 'gerente', 'waiter', 'garcom', 'cashier', 'caixa'].includes(role) ||
+        roles.some(r => ['admin', 'manager', 'gerente', 'waiter', 'garcom', 'cashier', 'caixa'].includes(r));
+
+    return hasDriverRole && !hasOperationalRole;
 });
 
 const {
