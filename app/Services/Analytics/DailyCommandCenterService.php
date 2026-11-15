@@ -222,6 +222,9 @@ class DailyCommandCenterService
 
         $openShift = CashShift::where('status', 'open')->latest()->first();
 
+        // 5B. ÚLTIMO TURNO FECHADO (AUDITORIA & CONCILIAÇÃO IMEDIATA)
+        $lastClosedShiftData = $this->buildLastClosedShiftSummary($dreMonth, $effectiveCmRatio);
+
         // 6. PRODUÇÕES AGENDADAS (WIP)
         $productionOrders = collect();
         if (Schema::hasTable('production_orders')) {
@@ -366,6 +369,7 @@ class DailyCommandCenterService
                 'freelancer_cost'  => round($freelancerCostsToday, 2),
                 'members'          => $teamList,
             ],
+            'last_closed_shift' => $lastClosedShiftData,
             'treasury' => [
                 'bank_balance'          => $totalBankBalance,
                 'open_shift'            => $openShift,
@@ -403,6 +407,168 @@ class DailyCommandCenterService
                 'pending_receipts'  => $pendingReceiptsCount,
                 'expiring_permits'  => $expiringPermits,
             ],
+        ];
+    }
+
+    protected function buildLastClosedShiftSummary(array $currentDreMonth, float $fallbackCmRatio): ?array
+    {
+        $shift = CashShift::with(['bankAccount'])
+            ->where('status', '!=', 'open')
+            ->orderByDesc('closed_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$shift) {
+            return null;
+        }
+
+        $openedAt = $shift->opened_at ? Carbon::parse($shift->opened_at) : Carbon::parse($shift->created_at);
+        $closedAt = $shift->closed_at ? Carbon::parse($shift->closed_at) : $openedAt->copy()->endOfDay();
+        $shiftDate = $openedAt->copy()->startOfDay();
+        $shiftDateStr = $shiftDate->toDateString();
+
+        // 1. Faturamento do turno (pedidos pagos no turno ou criados na janela do turno)
+        $shiftOrdersQuery = Order::query()
+            ->whereNotIn('status', ['cancelled', 'canceled', 'rejected', 'draft'])
+            ->where(function ($q) use ($shift, $openedAt, $closedAt) {
+                $q->whereHas('payments', fn ($pq) => $pq->where('cash_shift_id', $shift->id))
+                  ->orWhereBetween('created_at', [$openedAt, $closedAt]);
+            });
+
+        $shiftRevenue = (float) (clone $shiftOrdersQuery)->sum('total');
+        $shiftOrdersCount = (int) (clone $shiftOrdersQuery)->count();
+
+        // 2. Meta de Break-Even referente ao dia daquele turno
+        if ($shiftDate->isSameMonth(Carbon::today())) {
+            $dreRef = $currentDreMonth;
+        } else {
+            $dreRef = (new DreService($shiftDate->copy()->startOfMonth(), $shiftDate->copy()->endOfMonth(), 'competencia'))->calculate();
+        }
+
+        $mStart = $shiftDate->copy()->startOfMonth();
+        $mEnd = $shiftDate->copy()->endOfMonth();
+        $daysInShiftMonth = max(1, $mStart->diffInDays($mEnd) + 1);
+
+        $monthlyStructure = (float) ($dreRef['expenses']['utilities'] ?? 0)
+            + (float) ($dreRef['expenses']['admin'] ?? 0)
+            + (float) ($dreRef['expenses']['maintenance'] ?? 0)
+            + (float) ($dreRef['expenses']['marketing'] ?? 0);
+
+        $payrollDetails = $dreRef['comparative']['expenses']['payroll']['details'] ?? [];
+        $monthlyFixedPayroll = (float) ($payrollDetails['clt_base'] ?? 0)
+            + (float) ($payrollDetails['provisions'] ?? 0)
+            + (float) ($payrollDetails['other_operational'] ?? 0);
+
+        $shiftDailyFixed = ($monthlyStructure + $monthlyFixedPayroll) / $daysInShiftMonth;
+
+        $shiftFreelancerCost = 0.0;
+        if (Schema::hasTable('employee_schedules')) {
+            $freelancerScheds = EmployeeSchedule::with('employee')
+                ->whereDate('date', $shiftDateStr)
+                ->where('is_day_off', false)
+                ->where('status', '!=', 'cancelled')
+                ->get();
+
+            foreach ($freelancerScheds as $sc) {
+                $emp = $sc->employee;
+                if (!$emp) {
+                    continue;
+                }
+                $empType = $emp->employment_type instanceof EmploymentType
+                    ? $emp->employment_type
+                    : EmploymentType::tryFrom((string) $emp->employment_type);
+
+                if ($empType?->isFreelancer()) {
+                    $base = (float) $emp->base_remuneration;
+                    $shiftFreelancerCost += ($base > 0 ? $base : 100.00);
+                }
+            }
+        }
+
+        $cmPct = (float) ($dreRef['contribution_margin']['ratio'] ?? 0);
+        $cmRatio = $cmPct > 5 ? ($cmPct / 100) : $fallbackCmRatio;
+        $shiftBreakEvenTarget = $cmRatio > 0
+            ? round(($shiftDailyFixed + $shiftFreelancerCost) / $cmRatio, 2)
+            : 0.0;
+
+        $beReached = $shiftBreakEvenTarget > 0 && $shiftRevenue >= $shiftBreakEvenTarget;
+        $beDiff = round($shiftRevenue - $shiftBreakEvenTarget, 2);
+        $beProgress = $shiftBreakEvenTarget > 0
+            ? min(100, round(($shiftRevenue / $shiftBreakEvenTarget) * 100, 1))
+            : 0.0;
+
+        // 3. Status de Conciliação (PDV/Gaveta + OFX Banco + CSV Maquininhas)
+        $cashBreakage = round((float) ($shift->cash_breakage_amount ?? 0), 2);
+        $aposBreakage = round((float) ($shift->apos_breakage_amount ?? 0), 2);
+        $hasBreakage = (bool) $shift->has_breakage || abs($cashBreakage) >= 0.05 || abs($aposBreakage) >= 0.05;
+
+        // Cobertura OFX
+        $hasOfxForDate = false;
+        $pendingOfxInWindow = 0;
+        $latestOfxDate = null;
+        if (Schema::hasTable('bank_statements')) {
+            $latestOfxRaw = BankStatement::max('bank_date');
+            $latestOfxDate = $latestOfxRaw ? Carbon::parse($latestOfxRaw)->format('d/m') : null;
+
+            $windowEndStr = $closedAt->copy()->addDay()->toDateString();
+            $hasOfxForDate = BankStatement::whereDate('bank_date', '>=', $shiftDateStr)->exists();
+            $pendingOfxInWindow = BankStatement::where('status', 'pending')
+                ->whereBetween('bank_date', [$shiftDateStr, $windowEndStr])
+                ->count();
+        }
+
+        // Cobertura Adquirente / Maquininhas
+        $hasAcquirerForDate = false;
+        $pendingAcquirerInWindow = 0;
+        $latestAcquirerDate = null;
+        if (Schema::hasTable('acquirer_transactions')) {
+            $acqDateCol = Schema::hasColumn('acquirer_transactions', 'transaction_date')
+                ? 'transaction_date'
+                : (Schema::hasColumn('acquirer_transactions', 'sale_date') ? 'sale_date' : 'created_at');
+
+            $latestAcqRaw = AcquirerTransaction::max($acqDateCol);
+            $latestAcquirerDate = $latestAcqRaw ? Carbon::parse($latestAcqRaw)->format('d/m') : null;
+
+            $hasAcquirerForDate = AcquirerTransaction::whereDate($acqDateCol, '>=', $shiftDateStr)->exists();
+            $pendingAcquirerInWindow = AcquirerTransaction::whereDate($acqDateCol, $shiftDateStr)
+                ->whereIn('status', [
+                    AcquirerMatchStatus::ORPHAN->value,
+                    AcquirerMatchStatus::AMBIGUOUS->value,
+                ])
+                ->count();
+        }
+
+        // Avaliação consolidada do status
+        $isFullyReconciled = !$hasBreakage
+            && $hasOfxForDate
+            && $hasAcquirerForDate
+            && $pendingOfxInWindow === 0
+            && $pendingAcquirerInWindow === 0;
+
+        $needsAttention = $hasBreakage || $pendingOfxInWindow > 0 || $pendingAcquirerInWindow > 0;
+
+        return [
+            'id'                        => $shift->id,
+            'date_label'                => ucfirst($openedAt->locale('pt_BR')->translatedFormat('D, d/m')),
+            'period_label'              => $openedAt->format('H:i') . ' às ' . $closedAt->format('H:i'),
+            'is_today_shift'            => $shiftDate->isToday(),
+            'revenue'                   => $shiftRevenue,
+            'orders_count'              => $shiftOrdersCount,
+            'break_even_target'         => $shiftBreakEvenTarget,
+            'break_even_reached'        => $beReached,
+            'break_even_diff'           => $beDiff,
+            'break_even_progress'       => $beProgress,
+            'has_breakage'              => $hasBreakage,
+            'cash_breakage'             => $cashBreakage,
+            'apos_breakage'             => $aposBreakage,
+            'has_ofx_for_date'          => $hasOfxForDate,
+            'pending_ofx_count'         => $pendingOfxInWindow,
+            'latest_ofx_date'           => $latestOfxDate,
+            'has_acquirer_for_date'     => $hasAcquirerForDate,
+            'pending_acquirer_count'    => $pendingAcquirerInWindow,
+            'latest_acquirer_date'      => $latestAcquirerDate,
+            'is_fully_reconciled'       => $isFullyReconciled,
+            'needs_attention'           => $needsAttention,
         ];
     }
 }

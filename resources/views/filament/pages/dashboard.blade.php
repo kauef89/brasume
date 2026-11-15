@@ -76,11 +76,159 @@
             </div>
         </div>
 
-        {{-- 2. PAINEL DE BREAK-EVEN DINÂMICO DO DIA (COM FREELANCERS ESCALADOS) --}}
-        <div class="rounded-xl bg-white dark:bg-gray-900 p-5 ring-1 ring-gray-950/5 dark:ring-white/10 shadow-sm">
-            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+        {{-- 2. PAINEL DUPLO: AUDITORIA DO ÚLTIMO TURNO FECHADO (ESQ) + BREAK-EVEN DO DIA (DIR) --}}
+        @php
+            $lcs = $b['last_closed_shift'] ?? null;
+        @endphp
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+            {{-- COLUNA ESQUERDA: ÚLTIMO TURNO FECHADO & CONCILIAÇÃO --}}
+            <div class="rounded-xl bg-white dark:bg-gray-900 p-5 ring-1 ring-gray-950/5 dark:ring-white/10 shadow-sm flex flex-col justify-between gap-4">
+                @if($lcs)
+                    <div>
+                        {{-- Cabeçalho do Último Turno --}}
+                        <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300">
+                                        Último Turno Fechado • #{{ $lcs['id'] }}
+                                    </span>
+                                    @if($lcs['is_fully_reconciled'])
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-success-100 text-success-800 dark:bg-success-500/20 dark:text-success-300">
+                                            <x-heroicon-m-shield-check class="w-3.5 h-3.5" />
+                                            Conciliado
+                                        </span>
+                                    @elseif($lcs['needs_attention'])
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-danger-100 text-danger-800 dark:bg-danger-500/20 dark:text-danger-300">
+                                            <x-heroicon-m-exclamation-triangle class="w-3.5 h-3.5" />
+                                            Divergência / Pendência
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-warning-100 text-warning-800 dark:bg-warning-500/20 dark:text-warning-300">
+                                            <x-heroicon-m-clock class="w-3.5 h-3.5" />
+                                            Aguardando Extratos
+                                        </span>
+                                    @endif
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                    {{ $lcs['date_label'] }} ({{ $lcs['period_label'] }}) • {{ $lcs['orders_count'] }} pedido(s)
+                                </p>
+                            </div>
+
+                            <a
+                                href="{{ \App\Filament\Resources\CashShifts\CashShiftResource::getUrl('audit', ['record' => $lcs['id']]) }}"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 shadow-xs transition"
+                            >
+                                <x-heroicon-m-magnifying-glass-circle class="w-4 h-4" />
+                                Auditar Turno
+                            </a>
+                        </div>
+
+                        {{-- Métricas do Turno: Faturamento x Break-Even --}}
+                        <div class="grid grid-cols-2 gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-950/60 ring-1 ring-gray-950/5 dark:ring-white/5 mb-3">
+                            <div>
+                                <span class="block text-[11px] font-medium text-gray-500 dark:text-gray-400">Faturamento do Turno</span>
+                                <span class="text-xl font-black text-gray-950 dark:text-white">{{ $fmt($lcs['revenue']) }}</span>
+                            </div>
+
+                            <div>
+                                <span class="block text-[11px] font-medium text-gray-500 dark:text-gray-400">Break-Even do Dia</span>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    @if($lcs['break_even_reached'])
+                                        <span class="inline-flex items-center gap-1 text-xs font-bold text-success-600 dark:text-success-400">
+                                            <x-heroicon-m-check-circle class="w-4 h-4" />
+                                            Atingido (+{{ $fmt($lcs['break_even_diff']) }})
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center gap-1 text-xs font-bold text-warning-600 dark:text-warning-400">
+                                            <x-heroicon-m-minus-circle class="w-4 h-4" />
+                                            Faltou {{ $fmt(abs($lcs['break_even_diff'])) }}
+                                        </span>
+                                    @endif
+                                </div>
+                                <span class="block text-[10px] text-gray-400">Meta era {{ $fmt($lcs['break_even_target']) }}</span>
+                            </div>
+                        </div>
+
+                        {{-- Pílulas de Status Documental (PDV, OFX, Maquininhas) --}}
+                        <div class="flex flex-wrap items-center gap-2 text-[11px]">
+                            {{-- 1. Conferência PDV --}}
+                            @if($lcs['has_breakage'])
+                                <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md font-semibold bg-danger-50 text-danger-700 dark:bg-danger-500/10 dark:text-danger-300 ring-1 ring-inset ring-danger-600/20">
+                                    Quebra PDV: {{ $fmt($lcs['cash_breakage'] + $lcs['apos_breakage']) }}
+                                </span>
+                            @else
+                                <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md font-semibold bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300 ring-1 ring-inset ring-success-600/20">
+                                    Caixa & APOS OK
+                                </span>
+                            @endif
+
+                            {{-- 2. Status OFX --}}
+                            @if($lcs['has_ofx_for_date'])
+                                <a href="{{ \App\Filament\Resources\BankStatements\BankStatementResource::getUrl('index') }}" class="inline-flex items-center gap-1 px-2 py-1 rounded-md font-semibold {{ $lcs['pending_ofx_count'] > 0 ? 'bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300 ring-warning-600/20' : 'bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300 ring-success-600/20' }} ring-1 ring-inset hover:opacity-80">
+                                    OFX: {{ $lcs['pending_ofx_count'] > 0 ? $lcs['pending_ofx_count'] . ' pendente(s)' : 'Coberto' }}
+                                </a>
+                            @else
+                                <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                    OFX: {{ $lcs['latest_ofx_date'] ? 'até ' . $lcs['latest_ofx_date'] : 'Pendente' }}
+                                </span>
+                            @endif
+
+                            {{-- 3. Status Maquininhas --}}
+                            @if($lcs['has_acquirer_for_date'])
+                                <a href="{{ \App\Filament\Resources\AcquirerTransactions\AcquirerTransactionResource::getUrl('index') }}" class="inline-flex items-center gap-1 px-2 py-1 rounded-md font-semibold {{ $lcs['pending_acquirer_count'] > 0 ? 'bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300 ring-warning-600/20' : 'bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300 ring-success-600/20' }} ring-1 ring-inset hover:opacity-80">
+                                    Maquininhas: {{ $lcs['pending_acquirer_count'] > 0 ? $lcs['pending_acquirer_count'] . ' divergente(s)' : 'Coberto' }}
+                                </a>
+                            @else
+                                <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                    Maquininhas: {{ $lcs['latest_acquirer_date'] ? 'até ' . $lcs['latest_acquirer_date'] : 'Pendente' }}
+                                </span>
+                            @endif
+                        </div>
+                    </div>
+
+                    {{-- Botões de Upload Rápido (Modais Nativos) --}}
+                    <div class="grid grid-cols-2 gap-2.5 pt-3 border-t border-gray-100 dark:border-gray-800">
+                        <button
+                            type="button"
+                            wire:click="mountAction('importOfx')"
+                            class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-primary-50 hover:bg-primary-100 text-primary-700 dark:bg-primary-500/10 dark:hover:bg-primary-500/20 dark:text-primary-300 ring-1 ring-inset ring-primary-500/20 transition cursor-pointer"
+                        >
+                            <x-heroicon-m-arrow-up-tray class="w-4 h-4" />
+                            Subir OFX Banco
+                        </button>
+
+                        <button
+                            type="button"
+                            wire:click="mountAction('importAcquirerReport')"
+                            class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-success-50 hover:bg-success-100 text-success-700 dark:bg-success-500/10 dark:hover:bg-success-500/20 dark:text-success-300 ring-1 ring-inset ring-success-500/20 transition cursor-pointer"
+                        >
+                            <x-heroicon-m-credit-card class="w-4 h-4" />
+                            Extrato Maquininhas
+                        </button>
+                    </div>
+                @else
+                    <div class="h-full flex flex-col items-center justify-center text-center py-6">
+                        <x-heroicon-o-inbox-stack class="w-8 h-8 text-gray-400 mb-2" />
+                        <p class="text-sm font-bold text-gray-700 dark:text-gray-300">Nenhum turno fechado registrado</p>
+                        <p class="text-xs text-gray-500 mt-1 mb-4">Assim que o primeiro turno for encerrado no PDV, o resumo e os atalhos de conciliação aparecerão aqui.</p>
+                        <div class="flex items-center gap-2">
+                            <button type="button" wire:click="mountAction('importOfx')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300 ring-1 ring-inset ring-primary-500/20">
+                                <x-heroicon-m-arrow-up-tray class="w-4 h-4" /> Subir OFX
+                            </button>
+                            <button type="button" wire:click="mountAction('importAcquirerReport')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300 ring-1 ring-inset ring-success-500/20">
+                                <x-heroicon-m-credit-card class="w-4 h-4" /> Maquininhas
+                            </button>
+                        </div>
+                    </div>
+                @endif
+            </div>
+
+            {{-- COLUNA DIREITA: META DE BREAK-EVEN OPERACIONAL DO DIA --}}
+            <div class="rounded-xl bg-white dark:bg-gray-900 p-5 ring-1 ring-gray-950/5 dark:ring-white/10 shadow-sm flex flex-col justify-between gap-4">
                 <div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
                         <span class="text-xs font-bold uppercase tracking-wider text-primary-600 dark:text-primary-400">
                             Meta de Break-Even Operacional do Dia
                         </span>
@@ -91,60 +239,60 @@
                             </span>
                         @endif
                     </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        Custo fixo diário ({{ $fmt($be['daily_fixed']) }}) + Freelancers escalados hoje ({{ $fmt($be['freelancers_cost']) }}) ÷ Margem de Contribuição ({{ $be['cm_ratio_pct'] }}%{{ $be['is_cm_fallback'] ? ' est.' : '' }})
+
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                        Fixo diário ({{ $fmt($be['daily_fixed']) }}) + Freelancers hoje ({{ $fmt($be['freelancers_cost']) }}) ÷ MC ({{ $be['cm_ratio_pct'] }}%{{ $be['is_cm_fallback'] ? ' est.' : '' }})
                     </p>
-                </div>
 
-                <div class="flex flex-wrap items-center gap-6">
-                    <div>
-                        <span class="block text-[11px] font-medium text-gray-500 dark:text-gray-400">Faturado no Dia</span>
-                        <span class="text-xl font-black text-gray-950 dark:text-white">{{ $fmt($sales['gross']) }}</span>
-                        <span class="block text-[11px] text-gray-500">{{ $sales['count'] }} pedido(s) • Ticket {{ $fmt($sales['avg_ticket']) }}</span>
-                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <span class="block text-[11px] font-medium text-gray-500 dark:text-gray-400">Faturado no Dia</span>
+                            <span class="text-lg sm:text-xl font-black text-gray-950 dark:text-white">{{ $fmt($sales['gross']) }}</span>
+                            <span class="block text-[11px] text-gray-500">{{ $sales['count'] }} ped. • Ticket {{ $fmt($sales['avg_ticket']) }}</span>
+                        </div>
 
-                    <div class="h-8 w-px bg-gray-200 dark:bg-gray-800 hidden sm:block"></div>
+                        <div>
+                            <span class="block text-[11px] font-medium text-gray-500 dark:text-gray-400">Meta Break-Even</span>
+                            <span class="text-lg sm:text-xl font-black text-primary-600 dark:text-primary-400">{{ $fmt($be['target']) }}</span>
+                            <span class="block text-[11px] {{ $be['reached'] ? 'text-success-600 dark:text-success-400 font-semibold' : 'text-warning-600 dark:text-warning-400' }}">
+                                @if($be['reached'])
+                                    +{{ $fmt($be['surplus']) }} acima
+                                @else
+                                    Faltam {{ $fmt($be['remaining']) }}
+                                @endif
+                            </span>
+                        </div>
 
-                    <div>
-                        <span class="block text-[11px] font-medium text-gray-500 dark:text-gray-400">Meta Break-Even</span>
-                        <span class="text-xl font-black text-primary-600 dark:text-primary-400">{{ $fmt($be['target']) }}</span>
-                        <span class="block text-[11px] {{ $be['reached'] ? 'text-success-600 dark:text-success-400 font-semibold' : 'text-warning-600 dark:text-warning-400' }}">
-                            @if($be['reached'])
-                                +{{ $fmt($be['surplus']) }} acima da meta
+                        <div>
+                            <span class="block text-[11px] font-medium text-gray-500 dark:text-gray-400">Resultado Est.</span>
+                            <span class="text-lg sm:text-xl font-black {{ $be['estimated_net_profit'] >= 0 ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400' }}">
+                                {{ $be['estimated_net_profit'] >= 0 ? '+' : '' }}{{ $fmt($be['estimated_net_profit']) }}
+                            </span>
+                            @if($b['date']['is_today'] && $sales['projected'] > $sales['gross'])
+                                <span class="block text-[11px] text-gray-500">Projeta {{ $fmt($sales['projected']) }}</span>
                             @else
-                                Faltam {{ $fmt($be['remaining']) }}
+                                <span class="block text-[11px] text-gray-500">Após CMV e fixo</span>
                             @endif
-                        </span>
+                        </div>
                     </div>
+                </div>
 
-                    <div class="h-8 w-px bg-gray-200 dark:bg-gray-800 hidden sm:block"></div>
-
-                    <div>
-                        <span class="block text-[11px] font-medium text-gray-500 dark:text-gray-400">Resultado Líquido Est.</span>
-                        <span class="text-xl font-black {{ $be['estimated_net_profit'] >= 0 ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400' }}">
-                            {{ $be['estimated_net_profit'] >= 0 ? '+' : '' }}{{ $fmt($be['estimated_net_profit']) }}
-                        </span>
-                        @if($b['date']['is_today'] && $sales['projected'] > $sales['gross'])
-                            <span class="block text-[11px] text-gray-500">Ritmo projeta {{ $fmt($sales['projected']) }}</span>
-                        @else
-                            <span class="block text-[11px] text-gray-500">Após CMV, taxas, fixo e diárias</span>
-                        @endif
+                {{-- Barra de Progresso --}}
+                <div>
+                    <div class="w-full h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden p-0.5 ring-1 ring-inset ring-gray-950/5 dark:ring-white/5">
+                        <div
+                            class="h-full rounded-full transition-all duration-500 {{ $be['reached'] ? 'bg-success-500' : ($be['progress'] >= 70 ? 'bg-primary-500' : 'bg-warning-500') }}"
+                            style="width: {{ $be['progress'] }}%"
+                        ></div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                        <span>0%</span>
+                        <span class="font-semibold text-gray-700 dark:text-gray-300">{{ $be['progress'] }}% da meta alcançada</span>
+                        <span>100% ({{ $fmt($be['target']) }})</span>
                     </div>
                 </div>
             </div>
 
-            {{-- Barra de Progresso --}}
-            <div class="w-full h-3 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden p-0.5 ring-1 ring-inset ring-gray-950/5 dark:ring-white/5">
-                <div
-                    class="h-full rounded-full transition-all duration-500 {{ $be['reached'] ? 'bg-success-500' : ($be['progress'] >= 70 ? 'bg-primary-500' : 'bg-warning-500') }}"
-                    style="width: {{ $be['progress'] }}%"
-                ></div>
-            </div>
-            <div class="flex justify-between items-center mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-                <span>0%</span>
-                <span class="font-semibold text-gray-700 dark:text-gray-300">{{ $be['progress'] }}% da meta de equilíbrio alcançada</span>
-                <span>100% ({{ $fmt($be['target']) }})</span>
-            </div>
         </div>
 
         {{-- 3. KPIs FINANCEIROS & CONCILIAÇÕES DO DIA (4 CARDS) --}}

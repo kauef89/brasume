@@ -2,9 +2,12 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Resources\AccountReceivables\Actions\ImportAcquirerReportAction;
+use App\Filament\Resources\BankStatements\Actions\ImportOfxAction;
 use App\Services\Analytics\DailyCommandCenterService;
 use BackedEnum;
 use Carbon\Carbon;
+use Filament\Actions\Action;
 use Filament\Pages\Dashboard as BaseDashboard;
 
 class Dashboard extends BaseDashboard
@@ -33,6 +36,18 @@ class Dashboard extends BaseDashboard
             'tomorrow'  => Carbon::tomorrow()->toDateString(),
             default     => Carbon::today()->toDateString(),
         };
+    }
+
+    public function importOfxAction(): Action
+    {
+        return ImportOfxAction::make('importOfx')
+            ->label('Subir OFX');
+    }
+
+    public function importAcquirerReportAction(): Action
+    {
+        return ImportAcquirerReportAction::make('importAcquirerReport')
+            ->label('Maquininhas');
     }
 
     protected function getViewData(): array
