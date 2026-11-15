@@ -18,10 +18,11 @@ export function useFiscalBatchEmitter(props, unifiedHistory) {
             const isNotAuthorized = order.fiscal_status !== 'authorized';
             const isNotSkipped = order.fiscal_status !== 'skipped';
             const hasPayment = order.payment_status === 'paid' || (Array.isArray(order.payments) && order.payments.length > 0);
+            const hasFinancialValue = Number(order.total || 0) > 0 || Number(order.subtotal || 0) > 0;
             const isSettled = ['closed', 'completed'].includes(order.status) || order.payment_status === 'paid';
             const isNotOpenTable = !(order.type === 'table' && order.status !== 'closed' && order.payment_status !== 'paid');
 
-            return isNotCancelled && isNotAuthorized && isNotSkipped && hasPayment && isSettled && isNotOpenTable;
+            return isNotCancelled && isNotAuthorized && isNotSkipped && hasPayment && hasFinancialValue && isSettled && isNotOpenTable;
         });
     });
 

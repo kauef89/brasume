@@ -70,9 +70,10 @@ export function useCashier(props, { onShiftStaged } = {}) {
                 if (!activeOrderTypes.value.includes(o.type)) return;
 
                 const hasPayments = Array.isArray(o.payments) && o.payments.length > 0;
+                const hasFinancialValue = Number(o.total || 0) > 0 || Number(o.subtotal || 0) > 0;
                 const isPaidOrSettled = o.payment_status === 'paid' || o.payment_status === 'partial' || ['closed', 'completed'].includes(o.status);
 
-                if (!hasPayments && !isPaidOrSettled) {
+                if (!hasPayments && (!isPaidOrSettled || !hasFinancialValue)) {
                     return;
                 }
 

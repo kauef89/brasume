@@ -75,7 +75,14 @@ class PosAppController extends Controller
                                ->when($shift->closed_at, fn ($sq) => $sq->where('created_at', '<=', $shift->closed_at))
                                ->where(function ($sub) {
                                    $sub->whereIn('payment_status', ['paid', 'partial'])
-                                       ->orWhereIn('status', ['closed', 'completed']);
+                                       ->orWhere(function ($closed) {
+                                           $closed->whereIn('status', ['closed', 'completed'])
+                                               ->where(function ($fin) {
+                                                   $fin->where('total', '>', 0)
+                                                       ->orWhere('subtotal', '>', 0)
+                                                       ->orWhereHas('payments');
+                                               });
+                                       });
                                });
                         });
                     })
