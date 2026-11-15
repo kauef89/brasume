@@ -64,7 +64,7 @@ export function useShiftAttendance() {
         }, {
             preserveState: true,
             preserveScroll: true,
-            only: ['currentShift', 'currentAttendees', 'managerData', 'transactionsHistory'],
+            only: ['cashierData', 'currentShift', 'currentAttendees', 'managerData', 'transactionsHistory'],
             onSuccess: () => {
                 isFreelancerPaymentVisible.value = false;
                 freelancerToPay.value = null;
