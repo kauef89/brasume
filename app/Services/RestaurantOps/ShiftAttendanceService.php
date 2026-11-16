@@ -432,8 +432,16 @@ class ShiftAttendanceService
         $consumptionAmount = isset($data['consumption_deducted']) ? (float) $data['consumption_deducted'] : (float) $payoutDetails['consumption_amount'];
         $netAmount = isset($data['amount']) ? (float) $data['amount'] : (float) ($payoutDetails['total_due'] ?? 0);
 
-        $settledItems = $data['settled_items'] ?? [$payoutDetails['service_item']];
-        $rolledItems = $data['rolled_items'] ?? [];
+        // Se vieram itens do frontend, usá-los, senão monta a partir dos detalhes calculados
+        $settledItems = !empty($data['settled_items']) ? $data['settled_items'] : [$payoutDetails['service_item']];
+        
+        if (empty($data['settled_items']) && !empty($payoutDetails['consumption_details']['items'])) {
+            foreach ($payoutDetails['consumption_details']['items'] as $cons) {
+                $settledItems[] = $cons;
+            }
+        }
+        
+        $rolledItems = !empty($data['rolled_items']) ? $data['rolled_items'] : [];
         $remainingBalance = isset($data['remaining_balance'])
             ? (float) $data['remaining_balance']
             : (float) ($payoutDetails['previous_balance'] ?? 0);
