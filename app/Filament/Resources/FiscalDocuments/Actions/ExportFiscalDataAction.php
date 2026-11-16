@@ -88,9 +88,19 @@ class ExportFiscalDataAction extends Action
             ->action(function (array $data, FiscalExportService $exportService) {
                 try {
                     $filesToDownload = [];
+                    $xmlSkipped = false;
 
                     if ($data['export_xml']) {
-                        $filesToDownload[] = $exportService->generateXmlZip($data['start_date'], $data['end_date'], (bool) ($data['distribute_freight_in_products'] ?? false));
+                        $xmlZip = $exportService->generateXmlZip(
+                            $data['start_date'],
+                            $data['end_date'],
+                            (bool) ($data['distribute_freight_in_products'] ?? false)
+                        );
+                        if ($xmlZip) {
+                            $filesToDownload[] = $xmlZip;
+                        } else {
+                            $xmlSkipped = true;
+                        }
                     }
                     if ($data['export_general']) {
                         $filesToDownload[] = $exportService->generateGeneralReportPdf($data['start_date'], $data['end_date']);
@@ -100,7 +110,18 @@ class ExportFiscalDataAction extends Action
                     }
 
                     if (empty($filesToDownload)) {
+                        if ($xmlSkipped) {
+                            throw new \Exception("Nenhum XML completo disponível no período. Desmarque 'XMLs (ZIP)' para baixar os PDFs.");
+                        }
                         throw new \Exception("Selecione pelo menos um tipo de relatório para exportar.");
+                    }
+
+                    if ($xmlSkipped) {
+                        Notification::make()
+                            ->title('Exportação concluída sem XMLs')
+                            ->body('As notas deste período não possuem XML completo armazenado; apenas os PDFs foram gerados.')
+                            ->warning()
+                            ->send();
                     }
 
                     if (count($filesToDownload) === 1) {

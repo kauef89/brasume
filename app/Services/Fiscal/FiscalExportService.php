@@ -12,15 +12,19 @@ use Exception;
 
 class FiscalExportService
 {
-    public function generateXmlZip(string $startDate, string $endDate, bool $distributeFreight = false): string
+    public function generateXmlZip(string $startDate, string $endDate, bool $distributeFreight = false): ?string
     {
-        $documents = FiscalDocument::whereBetween('issue_date', [$startDate, $endDate])
+        $start = Carbon::parse($startDate)->startOfDay();
+        $end   = Carbon::parse($endDate)->endOfDay();
+
+        $documents = FiscalDocument::whereBetween('issue_date', [$start, $end])
             ->where('status', 'authorized')
             ->whereNotNull('xml_content')
+            ->where('xml_content', '!=', '')
             ->get();
 
         if ($documents->isEmpty()) {
-            throw new Exception("Nenhum documento fiscal autorizado encontrado no período especificado.");
+            return null;
         }
 
         $tempDir = storage_path('app/temp_fiscal_exports');
@@ -65,7 +69,7 @@ class FiscalExportService
 
         // FILTRO: Apenas autorizadas
         $documents = FiscalDocument::with(['order.payments.paymentMethod'])
-            ->whereBetween('issue_date', [$startDate, $endDate])
+            ->whereBetween('issue_date', [Carbon::parse($startDate)->startOfDay(), Carbon::parse($endDate)->endOfDay()])
             ->where('status', 'authorized')
             ->orderBy('issue_date')
             ->get();
@@ -98,7 +102,7 @@ class FiscalExportService
         $settings = CompanySetting::first();
 
         $monophasicItems = \App\Models\OrderItem::whereHas('order.fiscalDocument', function ($q) use ($startDate, $endDate) {
-                $q->whereBetween('issue_date', [$startDate, $endDate])
+                $q->whereBetween('issue_date', [Carbon::parse($startDate)->startOfDay(), Carbon::parse($endDate)->endOfDay()])
                   ->where('status', 'authorized');
             })
             ->whereHas('product', function ($q) {

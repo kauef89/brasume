@@ -2,16 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * @mixin Builder
  * @property-read \App\Models\Order|null $order
- * @method static Builder<static>|FiscalDocument newModelQuery()
- * @method static Builder<static>|FiscalDocument newQuery()
- * @method static Builder<static>|FiscalDocument query()
- * @mixin \Illuminate\Database\Eloquent\Builder
  */
 class FiscalDocument extends Model
 {
@@ -19,14 +15,28 @@ class FiscalDocument extends Model
 
     protected $hidden = ['xml_content'];
 
-
     protected $casts = [
-        'issue_date' => 'datetime', // ou 'date', dependendo se você quer hora também
+        'issue_date' => 'datetime',
         'total_value' => 'decimal:2',
     ];
 
     public function order()
     {
         return $this->belongsTo(Order::class);
+    }
+
+    public function getProtocolAttribute(?string $value): ?string
+    {
+        if (!empty($value)) {
+            return $value;
+        }
+
+        if (!empty($this->xml_content)
+            && preg_match('/<nProt>([^<]+)<\/nProt>/', $this->xml_content, $m)
+        ) {
+            return trim($m[1]);
+        }
+
+        return !empty($this->import_tag) ? 'Importado DFE' : null;
     }
 }
