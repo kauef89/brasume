@@ -47,18 +47,11 @@
             @scroll="handleScroll"
         >
 
-            <!-- MOTOR DE SWIPE -->
-            <div
-                class="flex w-full items-start touch-pan-y will-change-transform"
-                :class="{ 'transition-transform duration-300 ease-out': !isDragging }"
-                :style="{ transform: `translateX(calc(-${activeIndex * 100}% + ${dragOffset}px))` }"
-                @touchstart="handleTouchStart"
-                @touchmove="handleTouchMove"
-                @touchend="handleTouchEnd"
-            >
-
-                <!-- 🍔 VISTA 1: CARDÁPIO COMPLETO (Busca removida daqui para não consumir altura) -->
-                <div class="w-full shrink-0 px-4 pb-6 pt-2">
+            <!-- CONTEÚDO ATIVO SEGURO (SEM SWIPE) -->
+            <div class="flex w-full items-start pb-6 pt-2 px-4 transition-all duration-300">
+                
+                <!-- 🍔 VISTA 1: CARDÁPIO COMPLETO -->
+                <div v-if="menuView === 'catalog'" class="w-full animate-in fade-in">
                     <EmptyState
                         v-if="groupedMenu.length === 0"
                         icon="pi-search"
@@ -94,7 +87,7 @@
                 </div>
 
                 <!-- 🔥 VISTA 2: MAIS VENDIDOS -->
-                <div v-if="customer && !isGuest" class="w-full shrink-0 px-4 pb-6 pt-2">
+                <div v-else-if="menuView === 'bestsellers' && customer && !isGuest" class="w-full animate-in fade-in slide-in-from-right-2">
                     <div class="flex items-center gap-3 mb-4 px-1">
                         <h2 class="c-title !text-lg md:!text-xl whitespace-nowrap">Top 10: Mais Pedidos</h2>
                         <div class="h-px bg-white/10 flex-1"></div>
@@ -108,7 +101,7 @@
                 </div>
 
                 <!-- ⭐ VISTA 3: FAVORITOS -->
-                <div v-if="customer && !isGuest" class="w-full shrink-0 px-4 pb-6 pt-2">
+                <div v-else-if="menuView === 'favorites' && customer && !isGuest" class="w-full animate-in fade-in slide-in-from-right-2">
                     <div class="flex items-center gap-3 mb-4 px-1">
                         <h2 class="c-title !text-lg md:!text-xl whitespace-nowrap">Meus Favoritos</h2>
                         <div class="h-px bg-white/10 flex-1"></div>
@@ -341,78 +334,9 @@ const handleCategoryClick = (categoryId) => {
     }
 };
 
-const views = computed(() => {
-    if (props.customer && !props.isGuest) return ['catalog', 'bestsellers', 'favorites'];
-    return ['catalog'];
-});
-
-const activeIndex = computed(() => {
-    const idx = views.value.indexOf(props.menuView);
-    return idx !== -1 ? idx : 0;
-});
-
-watch(activeIndex, () => {
+watch(() => props.menuView, () => {
     if (scrollArea.value) scrollArea.value.scrollTo({ top: 0, behavior: 'smooth' });
 });
-
-const isDragging = ref(false);
-const dragOffset = ref(0);
-const touchStartX = ref(0);
-const touchStartY = ref(0);
-let isHorizontalSwiping = null;
-
-const handleTouchStart = (e) => {
-    touchStartX.value = e.touches[0].clientX;
-    touchStartY.value = e.touches[0].clientY;
-    isDragging.value = true;
-    dragOffset.value = 0;
-    isHorizontalSwiping = null;
-};
-
-const handleTouchMove = (e) => {
-    if (!isDragging.value) return;
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
-    const diffX = currentX - touchStartX.value;
-    const diffY = Math.abs(currentY - touchStartY.value);
-
-    if (isHorizontalSwiping === null) {
-        if (diffY > 10 && diffY > Math.abs(diffX)) {
-            isHorizontalSwiping = false;
-        } else if (Math.abs(diffX) > 10) {
-            isHorizontalSwiping = true;
-        }
-    }
-
-    if (isHorizontalSwiping) {
-        if (
-            (activeIndex.value === 0 && diffX > 0) ||
-            (activeIndex.value === views.value.length - 1 && diffX < 0)
-        ) {
-            dragOffset.value = diffX * 0.3;
-        } else {
-            dragOffset.value = diffX;
-        }
-    }
-};
-
-const handleTouchEnd = () => {
-    if (!isDragging.value) return;
-    isDragging.value = false;
-
-    if (isHorizontalSwiping) {
-        const threshold = window.innerWidth * 0.25;
-
-        if (dragOffset.value < -threshold && activeIndex.value < views.value.length - 1) {
-            emit('update:menuView', views.value[activeIndex.value + 1]);
-        } else if (dragOffset.value > threshold && activeIndex.value > 0) {
-            emit('update:menuView', views.value[activeIndex.value - 1]);
-        }
-    }
-
-    dragOffset.value = 0;
-    isHorizontalSwiping = null;
-};
 
 const handleGlobalCategoryClick = (e) => {
     if (props.menuView !== 'catalog') emit('update:menuView', 'catalog');
