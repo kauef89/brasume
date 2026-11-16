@@ -325,7 +325,8 @@ class ShiftAttendanceService
         $consumptionData = $this->getFreelancerShiftConsumption($user, $shift);
         $consumptionAmount = (float) $consumptionData['total'];
 
-        $netAmount = max(0, round($grossRate - $consumptionAmount, 2));
+        // O backend envia o BRUTO e o frontend (Vue) desconta na tela as checkboxes selecionadas.
+        $netAmount = max(0, round($grossRate, 2));
 
         $latestLedger = $employee?->ledgers()->latest('id')->first();
         $previousBalance = $latestLedger ? (float) $latestLedger->balance : 0.00;
@@ -403,8 +404,8 @@ class ShiftAttendanceService
 
             $details['gross_rate'] = $statement['final_payable'];
             $details['service_item']['amount'] = $statement['daily_fee'];
-            $details['net_amount'] = max(0, $previousBalance + $statement['final_payable'] - $consumptionAmount - $cashDeducted);
-            $details['total_due'] = max(0, $previousBalance + $statement['final_payable'] - $consumptionAmount - $cashDeducted);
+            $details['net_amount'] = max(0, $previousBalance + $statement['final_payable'] - $cashDeducted);
+            $details['total_due'] = max(0, $previousBalance + $statement['final_payable'] - $cashDeducted);
         }
 
         return $details;
