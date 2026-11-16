@@ -295,6 +295,12 @@ class OrderPaymentService
 
             if (method_exists($order, 'recalculatePaymentStatus')) {
                 $order->recalculatePaymentStatus();
+
+        // 🚀 FECHAMENTO AUTOMÁTICO (Balcão)
+        if ($order->type === 'counter' && $order->payment_status === 'paid') {
+            $order->status = 'closed';
+        }
+
             }
         });
 
