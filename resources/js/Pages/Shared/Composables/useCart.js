@@ -1,6 +1,7 @@
 import { useAnalytics } from '@/Composables/useAnalytics';
+import { useCoupons } from '@/Pages/Shared/Composables/useCoupons';
 import { useStorage } from "@vueuse/core";
-import { computed, watch } from "vue";
+import { computed, nextTick, watch } from "vue";
 
 export const createDefaultRouting = (type = 'table') => ({
     order_id: null,
@@ -220,42 +221,55 @@ export function useCart() {
     };
 
     const resetDraftState = (type = 'table') => {
-        // 1. Desvincula o array ativo de qualquer reatividade
+        // 1. Esvazia array reativo e reatribui instância limpa
         if (Array.isArray(cart.value)) {
             cart.value.splice(0, cart.value.length);
         }
         cart.value = [];
 
-        // Força a reinicialização profunda do routing
+        // 2. Limpa cupom ativo junto com o rascunho para nunca vazar para o próximo pedido
+        try {
+            const { removeCoupon } = useCoupons();
+            removeCoupon();
+        } catch (e) {}
+
+        // 3. Reinicializa o roteamento com o tipo padrão solicitado
         globalOrderType.value = type;
         const freshRouting = createDefaultRouting(type);
         globalDraftRouting.value = freshRouting;
 
-        // 2. Purga nuclear do LocalStorage e SessionStorage ignorando o debounce do VueUse
-        try {
-            localStorage.removeItem('pos_draft_cart');
-            localStorage.removeItem('pos_draft_routing');
-            localStorage.removeItem('pos_draft_type');
-            localStorage.removeItem('pos_swap_context');
-            localStorage.removeItem('pos_return_url');
-            localStorage.removeItem('pos_return_order_id');
-            sessionStorage.removeItem('customer_append_order_id');
-            sessionStorage.removeItem('customer_active_pix_order_id');
-            sessionStorage.removeItem('customer_active_pix_data');
+        // 4. Purga imediata e assentamento pós-flush do VueUse (useStorage)
+        const flushStorage = () => {
+            try {
+                localStorage.removeItem('pos_cart');
+                localStorage.removeItem('pos_draft_cart');
+                localStorage.removeItem('pos_draft_routing');
+                localStorage.removeItem('pos_draft_type');
+                localStorage.removeItem('pos_swap_context');
+                localStorage.removeItem('pos_return_url');
+                localStorage.removeItem('pos_return_order_id');
+                localStorage.removeItem('pos_magic_coupon');
+                sessionStorage.removeItem('pending_coupon_code');
+                sessionStorage.removeItem('customer_append_order_id');
+                sessionStorage.removeItem('customer_active_pix_order_id');
+                sessionStorage.removeItem('customer_active_pix_data');
 
-            // 3. Assentamento secundário para domar a reatividade cruzada
-            localStorage.setItem('pos_draft_cart', '[]');
-            localStorage.setItem('pos_draft_routing', JSON.stringify(freshRouting));
-            localStorage.setItem('pos_draft_type', type);
-        } catch (e) {}
+                localStorage.setItem('pos_draft_cart', '[]');
+                localStorage.setItem('pos_draft_routing', JSON.stringify(freshRouting));
+                localStorage.setItem('pos_draft_type', type);
+            } catch (e) {}
+        };
+
+        flushStorage();
+        nextTick(flushStorage);
 
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('cart-cleared'));
         }
     };
 
-    const clearCart = () => {
-        resetDraftState('table');
+    const clearCart = (type = 'table') => {
+        resetDraftState(type);
     };
 
     const cartSubtotal = computed(() => cart.value.reduce((total, item) => total + item.price * item.qty, 0));

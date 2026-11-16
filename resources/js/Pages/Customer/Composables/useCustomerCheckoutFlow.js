@@ -83,8 +83,17 @@ export function useCustomerCheckoutFlow(props, cartContext, activeTab) {
                             const returnedPixData = pageResp.props.flash?.pix_data || pageResp.props.pix_data || pageResp.props.order?.pix_data;
                             const methodType = checkoutState.selectedMethod?.engine_type || (returnedPixData ? 'bank_api' : 'local');
 
-                            // 🚀 Como o pedido já foi gravado no banco, limpa o carrinho imediatamente.
-                            // Isso evita que itens persistam se o cliente fechar a aba ou pagar direto no app bancário.
+                            const defaultCustomerType = isTableMode.value ? 'table' : 'delivery';
+
+                            // 🚀 Pedido gravado no banco: limpa carrinho, cupom e flags imediatamente (inclusive no PIX)
+                            clearCart(defaultCustomerType);
+                            removeCoupon();
+                            checkoutState.useCashbackToggle = false;
+                            checkoutState.cashChangeTarget = '';
+                            checkoutState.isTypingCoupon = false;
+                            sessionStorage.removeItem('customer_pending_checkout');
+                            sessionStorage.removeItem('customer_checkout_saved_state');
+
                             if (methodType === 'bank_api' || returnedPixData) {
                                 if (returnedPixData) {
                                     activeOrderId.value = returnedOrderId;
@@ -93,16 +102,11 @@ export function useCustomerCheckoutFlow(props, cartContext, activeTab) {
 
                                     sessionStorage.setItem('customer_active_pix_order_id', String(returnedOrderId));
                                     sessionStorage.setItem('customer_active_pix_data', JSON.stringify(returnedPixData));
-
-                                    sessionStorage.removeItem('customer_pending_checkout');
-                                    sessionStorage.removeItem('customer_checkout_saved_state');
                                 } else {
                                     isCheckoutModalVisible.value = false;
                                     toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Não foi possível carregar o QR Code. Tente novamente.', life: 5000 });
                                 }
                             } else {
-                                clearCart();
-                                removeCoupon();
                                 isCheckoutModalVisible.value = false;
                                 activeTab.value = isTableMode.value ? 'orders' : 'home';
                             }
@@ -117,7 +121,7 @@ export function useCustomerCheckoutFlow(props, cartContext, activeTab) {
     };
 
     const handlePixSuccess = () => {
-        clearCart();
+        clearCart(isTableMode.value ? 'table' : 'delivery');
         removeCoupon();
         isCheckoutModalVisible.value = false;
         activePixData.value = null;

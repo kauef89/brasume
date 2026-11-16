@@ -106,9 +106,14 @@ export function useCoupons() {
         }
     };
 
-    // Remove o cupom ativo
+    // Remove o cupom ativo e limpa qualquer cupom mágico/pendente no storage
     const removeCoupon = () => {
         activeCoupon.value = null;
+        isApplyingCoupon.value = false;
+        try {
+            localStorage.removeItem('pos_magic_coupon');
+            sessionStorage.removeItem('pending_coupon_code');
+        } catch (e) {}
     };
 
     return {

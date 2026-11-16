@@ -620,6 +620,7 @@ const handleClearCartAction = () => {
         orderMetadata.value.existing_order_id = null;
         orderMetadata.value.order_id = null;
     }
+    removeCoupon();
     emit('clear-cart');
 };
 
@@ -667,8 +668,6 @@ const processCheckout = () => {
     }
 
     const appendId = targetOrderId.value;
-
-    removeCoupon();
 
     emit('checkout', {
         order_id: appendId,

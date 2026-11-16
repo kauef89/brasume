@@ -287,20 +287,13 @@ export function useTeamSubmit(state) {
                     state.cart.value.splice(0, state.cart.value.length);
                     state.cart.value = [];
                 }
-                if (typeof state.clearCart === 'function') state.clearCart();
 
-                // 2. Limpeza do singleton useCart e expurgo do localStorage
-                clearCart();
-                resetDraftState();
+                // 2. Limpeza do singleton useCart, cupom e expurgo do storage
+                resetDraftState('table');
 
                 state.cartRoutingValid.value = false;
                 state.cartRoutingMeta.value = null;
-                if (draftRouting) draftRouting.value = null;
-
-                try {
-                    localStorage.removeItem('pos_draft_routing');
-                    localStorage.setItem('pos_draft_cart', '[]');
-                } catch (e) {}
+                if (state.orderType) state.orderType.value = 'table';
 
                 state.cartComponentKey.value++;
 

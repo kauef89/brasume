@@ -257,11 +257,14 @@ const handleDeliveryPaymentConfirm = async (payload) => {
 
 const onCartCheckout = async (checkoutPayload) => {
     try {
+        isPendingCheckoutSubmission.value = true;
         const result = await handleCheckoutWrapper(checkoutPayload);
 
-        if (activeCartSidebarView.value === 'payment') return;
+        if (activeCartSidebarView.value === 'payment') {
+            isPendingCheckoutSubmission.value = false;
+            return;
+        }
 
-        isPendingCheckoutSubmission.value = true;
         const createdId = result?.id || result?.order?.id;
         const isCounter = checkoutPayload?.meta?.type === 'counter' || orderType.value === 'counter';
 
@@ -275,6 +278,7 @@ const onCartCheckout = async (checkoutPayload) => {
             emit('order-created');
         }
     } catch (error) {
+        isPendingCheckoutSubmission.value = false;
         console.error('Erro ao processar checkout do carrinho:', error);
     }
 };

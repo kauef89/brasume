@@ -45,8 +45,8 @@ export function useCustomerCheckoutNavigation(props, cartContext, activeTab, isC
             }
 
             
-    watch(() => cart.value, () => {
-        if (checkoutState.step === 'pix') {
+    watch(() => cart.value, (newCart) => {
+        if (checkoutState.step === 'pix' && Array.isArray(newCart) && newCart.length > 0) {
             checkoutState.step = 'payment';
             activePixData.value = null;
         }
@@ -78,8 +78,8 @@ export function useCustomerCheckoutNavigation(props, cartContext, activeTab, isC
         }
 
         
-    watch(() => cart.value, () => {
-        if (checkoutState.step === 'pix') {
+    watch(() => cart.value, (newCart) => {
+        if (checkoutState.step === 'pix' && Array.isArray(newCart) && newCart.length > 0) {
             checkoutState.step = 'payment';
             activePixData.value = null;
         }
@@ -267,8 +267,8 @@ export function useCustomerCheckoutNavigation(props, cartContext, activeTab, isC
     });
 
     
-    watch(() => cart.value, () => {
-        if (checkoutState.step === 'pix') {
+    watch(() => cart.value, (newCart) => {
+        if (checkoutState.step === 'pix' && Array.isArray(newCart) && newCart.length > 0) {
             checkoutState.step = 'payment';
             activePixData.value = null;
         }

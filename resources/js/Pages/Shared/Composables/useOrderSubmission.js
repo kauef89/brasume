@@ -44,11 +44,15 @@ export function useOrderSubmission(cartRef, editOrderId, source = 'pos_app') {
                         cartRef.value = [];
                     }
 
-                    // 🚀 Limpa o storage global e o localStorage
-                    resetDraftState();
+                    // 🚀 Limpa o storage global, o localStorage e o cupom ativo
+                    resetDraftState('table');
 
                     // 🧹 PURGA IMEDIATA DA URL E EMISSÃO DE CONCLUSÃO
                     if (typeof window !== 'undefined') {
+                        sessionStorage.removeItem('pos_append_order_id');
+                        localStorage.removeItem('pos_return_url');
+                        localStorage.removeItem('pos_return_order_id');
+
                         const url = new URL(window.location.href);
                         url.searchParams.delete('append_to_order');
                         url.searchParams.delete('order_id');
