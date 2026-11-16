@@ -112,7 +112,7 @@
                 :edit-order-data="currentOrderContext"
                 @update-qty="updateQty"
                 @clear-cart="resetAppendState"
-                @park-order="typeof parkOrder === 'function' ? parkOrder() : autoParkCurrent()"
+                @park-order="parkCurrentOrder()"
                 @edit-item="openEditModifiers"
                 @toggle-gift-filter="handleGiftFilterTrigger"
                 @checkout="onCartCheckout"
@@ -170,7 +170,7 @@ const { categoryLayout, productCardLayout, categoryHierarchy } = settings;
 
 const cartContext = useCart();
 const favoritesContext = useCustomerFavorites();
-const { cart, cartSubtotal, updateQty, autoParkCurrent, draftRouting, orderType, clearCart, parkOrder, resetDraftState, addToCart } = cartContext;
+const { cart, cartSubtotal, updateQty, draftRouting, orderType, clearCart, parkCurrentOrder, resetDraftState, addToCart } = cartContext;
 const { favorites } = favoritesContext;
 
 const isMounted = ref(false);
@@ -462,26 +462,11 @@ watch(() => props.isActive, (active) => {
         isPendingCheckoutSubmission.value = false;
         applyOrderContext(currentOrderContext.value || props.editOrderData);
     } else {
-        if (!isPendingCheckoutSubmission.value) {
-            const items = cart.value?.items || cart.value || [];
-            const hasItems = Array.isArray(items) ? items.length > 0 : Object.keys(items).length > 0;
-
-            if (hasItems) {
-                if (typeof autoParkCurrent === 'function') autoParkCurrent();
-                else if (typeof parkOrder === 'function') parkOrder();
-            }
-        }
-
+        // Troca de aba fecha apenas overlays visuais e preserva o carrinho ativo sem auto-parking
         closeConfigurators();
         isCategoryManagerActive.value = false;
         isFavoritesViewActive.value = false;
         activeCartSidebarView.value = 'cart';
-
-        if (!currentOrderContext.value && !isPendingCheckoutSubmission.value) {
-            resetAppendState();
-            orderType.value = 'table';
-            if (draftRouting.value) draftRouting.value.type = 'table';
-        }
     }
 });
 
@@ -508,8 +493,7 @@ const handleTabReset = (event) => {
         rejectProps: { label: 'Descartar e Limpar', severity: 'danger', outlined: true, icon: 'pi pi-trash' },
         acceptProps: { label: 'Estacionar Rascunho', severity: 'warn', icon: 'pi pi-pause-circle' },
         accept: () => {
-            if (typeof parkOrder === 'function') parkOrder();
-            else autoParkCurrent();
+            parkCurrentOrder();
             resetAppendState();
             orderType.value = 'table';
         },
@@ -606,9 +590,7 @@ onBeforeUnmount(() => {
     window.removeEventListener('pos-close-order-details', closeOrderDetails);
     window.removeEventListener('pos-order-completed', handleOrderCompleted);
 
-    if (!isPendingCheckoutSubmission.value) {
-        autoParkCurrent();
-    }
+    // Sem auto-parking ao desmontar o componente
 
     const tenantId = page.props.tenantId || page.props.tenant?.id || window.Laravel?.tenant_id || 'central';
     window.Echo.leaveChannel(`tenant.${tenantId}.catalog`);

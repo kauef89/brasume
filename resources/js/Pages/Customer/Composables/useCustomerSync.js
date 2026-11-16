@@ -12,7 +12,7 @@ export function useCustomerSync(props, activeTab, couponContext, flowContext) {
     const { listenChannel } = useTenantEcho();
 
     const { fetchWallet, applyCoupon } = couponContext;
-    const { initializeFlow, autoParkCurrent } = flowContext;
+    const { initializeFlow } = flowContext;
 
     const handlePopState = (event) => {
         if (event.state && event.state.tab) activeTab.value = event.state.tab;
@@ -190,7 +190,6 @@ export function useCustomerSync(props, activeTab, couponContext, flowContext) {
     });
 
     onBeforeUnmount(() => {
-        if (typeof autoParkCurrent === 'function') autoParkCurrent();
         window.removeEventListener('popstate', handlePopState);
     });
 }

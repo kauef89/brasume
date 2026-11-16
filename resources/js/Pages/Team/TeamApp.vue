@@ -305,7 +305,7 @@ const {
 activeTab.value = props.defaultTab;
 
 const cartContext = useCart();
-const { cart, cartSubtotal, updateQty, clearCart, autoParkCurrent } = cartContext;
+const { cart, cartSubtotal, updateQty, clearCart } = cartContext;
 const orderType = cartContext.orderType = ref('table');
 
 const { headerContext } = useTeamHeaderContext({
@@ -502,7 +502,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-    autoParkCurrent();
     window.removeEventListener('team-tab-changed', handleTabChange);
 });
 

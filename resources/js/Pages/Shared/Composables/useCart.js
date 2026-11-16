@@ -274,33 +274,31 @@ export function useCart() {
 
     const cartSubtotal = computed(() => cart.value.reduce((total, item) => total + item.price * item.qty, 0));
 
-    const parkCurrentOrder = (orderMetadata, orderType) => {
-        if (cart.value.length === 0) return;
+    const parkCurrentOrder = (orderMetadata = null, orderType = null) => {
+        if (!Array.isArray(cart.value) || cart.value.length === 0) return;
+        const resolvedMeta = orderMetadata || globalDraftRouting.value || {};
+        const resolvedType = orderType || globalOrderType.value || 'table';
+
         parkedOrders.value.push({
             id: Date.now(),
             date: new Date().toISOString(),
             cart: JSON.parse(JSON.stringify(cart.value)),
-            type: orderType,
-            meta: JSON.parse(JSON.stringify(orderMetadata || {})),
+            type: resolvedType,
+            meta: JSON.parse(JSON.stringify(resolvedMeta)),
             total: cartSubtotal.value
         });
-        clearCart();
+        clearCart('table');
     };
 
-    const autoParkCurrent = (incomingOrderId = null) => {
-        if (cart.value.length === 0) return;
-        const meta = globalDraftRouting.value || {};
-        const type = globalOrderType.value || "table";
-        if (incomingOrderId && meta.order_id === incomingOrderId) return;
-        parkCurrentOrder(meta, type);
-    };
+    // Parking automático desativado: estacionamento ocorre apenas por solicitação explícita do operador no PosApp
+    const autoParkCurrent = () => {};
 
     const resumeOrder = (parkedId) => {
         const targetOrder = parkedOrders.value.find(p => p.id === parkedId);
         if (!targetOrder) return;
 
         if (cart.value && cart.value.length > 0) {
-            autoParkCurrent();
+            parkCurrentOrder();
         }
 
         const index = parkedOrders.value.findIndex(p => p.id === parkedId);
@@ -318,14 +316,12 @@ export function useCart() {
         if (index > -1) parkedOrders.value.splice(index, 1);
     };
 
-    const loadEditOrder = (orderData) => {
-        autoParkCurrent(orderData.id);
-        clearCart();
+    const loadEditOrder = () => {
+        clearCart('table');
     };
 
     const startNewOrder = () => {
-        autoParkCurrent();
-        clearCart();
+        clearCart('table');
     };
 
     return {
@@ -340,7 +336,7 @@ export function useCart() {
         cartSubtotal,
         parkedOrders,
         parkCurrentOrder,
-        parkOrder: autoParkCurrent,
+        parkOrder: parkCurrentOrder,
         resumeOrder,
         discardParkedOrder,
         loadEditOrder,

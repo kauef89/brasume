@@ -225,7 +225,7 @@ useAppLifecycleSync({
 });
 
 const cartContext = useCart();
-const { cart, cartSubtotal, updateQty, clearCart, autoParkCurrent } = cartContext;
+const { cart, cartSubtotal, updateQty, clearCart } = cartContext;
 const orderType = cartContext.orderType = ref('delivery');
 
 const hasActiveOrder = computed(() => props.myActiveOrders && props.myActiveOrders.length > 0);
@@ -443,7 +443,7 @@ const {
     openCheckout, finalizeOrder, handlePixSuccess, handleCheckoutLogin
 } = useCustomerCheckoutFlow(props, cartContext, activeTab);
 
-useCustomerSync(props, activeTab, couponsContext, { initializeFlow, autoParkCurrent });
+useCustomerSync(props, activeTab, couponsContext, { initializeFlow });
 
 const { headerContext } = useCustomerHeaderContext({
     activeTab,
