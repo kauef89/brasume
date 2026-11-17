@@ -65,9 +65,15 @@ class OrderCreationController extends Controller
                         'order'            => $updatedOrder,
                     ]);
 
-                } catch (\Exception $e) {
-                    if ($request->wantsJson()) return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
-                    return back()->withErrors(['append' => $e->getMessage()]);
+                } catch (\Throwable $e) {
+                    $friendly = $e instanceof \Exception
+                        ? $e->getMessage()
+                        : 'Não foi possível adicionar os itens à comanda. Verifique se o turno de caixa está aberto ou tente novamente.';
+                    if (!($e instanceof \Exception)) {
+                        Log::error("🚨 [OrderCreation Append] {$e->getMessage()}", ['trace' => $e->getTraceAsString()]);
+                    }
+                    if ($request->wantsJson()) return response()->json(['success' => false, 'message' => $friendly], 400);
+                    return back()->withErrors(['append' => $friendly]);
                 }
             }
         }
@@ -92,11 +98,17 @@ class OrderCreationController extends Controller
                 'order'            => $order,
             ]);
 
-        } catch (\Exception $e) {
-            if ($request->wantsJson()) {
-                return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
+        } catch (\Throwable $e) {
+            $friendly = $e instanceof \Exception
+                ? $e->getMessage()
+                : 'Não foi possível registrar o pedido no momento. Verifique se o turno de caixa está aberto ou tente novamente.';
+            if (!($e instanceof \Exception)) {
+                Log::error("🚨 [OrderCreation Store] {$e->getMessage()}", ['trace' => $e->getTraceAsString()]);
             }
-            return back()->withErrors(['checkout' => $e->getMessage()]);
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $friendly], 400);
+            }
+            return back()->withErrors(['checkout' => $friendly]);
         }
     }
 }

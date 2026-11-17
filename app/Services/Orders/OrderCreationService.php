@@ -49,7 +49,7 @@ class OrderCreationService
 
             // Só lança exceção se o tenant configurou obrigatoriedade para a equipe interna
             if ($enforceTeam && !$shift) {
-                throw new Exception("Nenhum turno de caixa aberto. Abra o caixa antes de registrar pedidos no PDV.");
+                throw new Exception("O caixa está fechado no momento. Peça ao caixa ou gerente para abrir o turno antes de lançar novos pedidos.");
             }
             $orderType = $routing["type"] ?? "table";
             $source    = $this->resolveSource($payload);
@@ -145,7 +145,7 @@ class OrderCreationService
                 $orderData['cashback_used'] = $posCashbackUsed;
             }
 
-            $orderData['cash_shift_id'] = $shift->id;
+            $orderData['cash_shift_id'] = $shift?->id;
             $order = Order::create($orderData);
 
             foreach ($payload["items"] as $item) {

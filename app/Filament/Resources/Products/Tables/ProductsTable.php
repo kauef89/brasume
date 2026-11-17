@@ -10,7 +10,6 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Services\Catalog\AvailabilityService;
 use App\Services\Catalog\ProductCostingService;
-use Filament\Actions;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -20,7 +19,6 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\DB;
 
 class ProductsTable
 {
@@ -90,7 +88,7 @@ class ProductsTable
                         $data = ProductCostingService::getMarginData($record);
                         return $data['margin_percentage'] ?? 0;
                     })
-                    ->formatStateUsing(fn ($state) => $state !== null ? number_format((float)$state, 2, ',', '.') . '%' : '-')
+                    ->formatStateUsing(fn ($state) => $state !== null ? number_format((float) $state, 2, ',', '.') . '%' : '-')
                     ->badge()
                     ->color(function ($state) {
                         if ($state === null) return 'gray';
@@ -99,6 +97,59 @@ class ProductsTable
                         if ($pct >= 15) return 'warning';
                         return 'danger';
                     })
+                    ->grow(false),
+
+                Tables\Columns\TextColumn::make('current_stock')
+                    ->label('Estoque')
+                    ->state(fn (Product $record): ?float => $record->track_inventory ? (float) $record->current_stock : null)
+                    ->formatStateUsing(function ($state, Product $record): string {
+                        if ($state === null) {
+                            return '-';
+                        }
+
+                        $qty = (float) $state;
+                        $formatted = fmod($qty, 1.0) === 0.0
+                            ? number_format($qty, 0, ',', '.')
+                            : rtrim(rtrim(number_format($qty, 3, ',', '.'), '0'), ',');
+
+                        $unitRaw = $record->unit ?? null;
+                        $unit = $unitRaw instanceof \BackedEnum
+                            ? $unitRaw->value
+                            : (is_string($unitRaw) ? trim($unitRaw) : '');
+
+                        return $unit !== '' ? "{$formatted} {$unit}" : $formatted;
+                    })
+                    ->badge()
+                    ->color(function ($state, Product $record): string {
+                        if ($state === null) {
+                            return 'gray';
+                        }
+
+                        $qty = (float) $state;
+                        if ($qty <= 0) {
+                            return 'danger';
+                        }
+
+                        $minStock = $record->min_stock ?? $record->minimum_stock ?? null;
+                        if ($minStock !== null && (float) $minStock > 0 && $qty <= (float) $minStock) {
+                            return 'warning';
+                        }
+
+                        return 'success';
+                    })
+                    ->tooltip(function (Product $record): string {
+                        if (!$record->track_inventory) {
+                            return 'Controle de estoque direto desativado (produção sob demanda ou combo).';
+                        }
+
+                        $minStock = $record->min_stock ?? $record->minimum_stock ?? null;
+                        if ($minStock !== null && (float) $minStock > 0) {
+                            return 'Estoque mínimo configurado: ' . number_format((float) $minStock, 2, ',', '.');
+                        }
+
+                        return 'Saldo atual controlado pelo Kardex.';
+                    })
+                    ->sortable()
                     ->grow(false),
 
                 Tables\Columns\SelectColumn::make('status')
@@ -172,15 +223,95 @@ class ProductsTable
             ->filters([
                 Tables\Filters\SelectFilter::make('category_id')
                     ->label('Categorias')
-                    ->relationship('category', 'name')
                     ->multiple()
                     ->searchable()
-                    ->preload(),
+                    ->preload()
+                    ->options(function (): array {
+                        $categories = Category::query()
+                            ->get(['id', 'name', 'parent_id'])
+                            ->keyBy('id');
+
+                        $buildPath = function (Category $cat) use ($categories): string {
+                            $names = [$cat->name];
+                            $visited = [$cat->id => true];
+                            $curr = $cat;
+
+                            while ($curr->parent_id && isset($categories[$curr->parent_id]) && !isset($visited[$curr->parent_id])) {
+                                $curr = $categories[$curr->parent_id];
+                                $visited[$curr->id] = true;
+                                array_unshift($names, $curr->name);
+                            }
+
+                            return count($names) > 1
+                                ? implode(' ➔ ', $names)
+                                : "📁 {$cat->name}";
+                        };
+
+                        return $categories
+                            ->mapWithKeys(fn (Category $cat) => [$cat->id => $buildPath($cat)])
+                            ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+                            ->toArray();
+                    })
+                    ->query(function (Builder $query, array $data): Builder {
+                        $selectedIds = array_filter(
+                            array_map('intval', $data['values'] ?? (!empty($data['value']) ? [$data['value']] : [])),
+                            fn (int $id) => $id > 0
+                        );
+
+                        if (empty($selectedIds)) {
+                            return $query;
+                        }
+
+                        $childrenByParent = [];
+                        foreach (Category::query()->get(['id', 'parent_id']) as $cat) {
+                            if ($cat->parent_id) {
+                                $childrenByParent[(int) $cat->parent_id][] = (int) $cat->id;
+                            }
+                        }
+
+                        $resolvedIds = [];
+                        $stack = $selectedIds;
+
+                        while (!empty($stack)) {
+                            $currentId = array_pop($stack);
+                            if (isset($resolvedIds[$currentId])) {
+                                continue;
+                            }
+
+                            $resolvedIds[$currentId] = true;
+
+                            foreach ($childrenByParent[$currentId] ?? [] as $childId) {
+                                if (!isset($resolvedIds[$childId])) {
+                                    $stack[] = $childId;
+                                }
+                            }
+                        }
+
+                        return $query->whereIn('products.category_id', array_keys($resolvedIds));
+                    }),
 
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Status')
                     ->multiple()
                     ->options(ProductStatus::class),
+
+                Tables\Filters\SelectFilter::make('stock_filter')
+                    ->label('Estoque')
+                    ->options([
+                        'zero'      => 'Sem Saldo (<= 0)',
+                        'positive'  => 'Com Saldo (> 0)',
+                        'tracked'   => 'Com Controle de Estoque',
+                        'untracked' => 'Sem Controle (Sob Demanda)',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return match ($data['value'] ?? null) {
+                            'zero'      => $query->where('track_inventory', true)->where('current_stock', '<=', 0),
+                            'positive'  => $query->where('track_inventory', true)->where('current_stock', '>', 0),
+                            'tracked'   => $query->where('track_inventory', true),
+                            'untracked' => $query->where('track_inventory', false),
+                            default     => $query,
+                        };
+                    }),
 
                 // 🚀 FILTRO: Status da Cadeia de Custos
                 Tables\Filters\SelectFilter::make('cost_chain_status')

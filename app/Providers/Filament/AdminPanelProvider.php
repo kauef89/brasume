@@ -255,5 +255,9 @@ class AdminPanelProvider extends PanelProvider
         \Filament\Actions\Action::configureUsing(function ($action) {
             $action->modalFooterActionsAlignment(\Filament\Support\Enums\Alignment::End);
         });
+
+        \Filament\Tables\Columns\Column::configureUsing(function (\Filament\Tables\Columns\Column $column): void {
+            $column->toggleable();
+        });
     }
 }
