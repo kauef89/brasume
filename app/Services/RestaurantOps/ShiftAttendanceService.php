@@ -329,7 +329,13 @@ class ShiftAttendanceService
         $netAmount = max(0, round($grossRate, 2));
 
         $latestLedger = $employee?->ledgers()->latest('id')->first();
+        // 🛡️ CORREÇÃO DE DUPLA CONTAGEM: O saldo real anterior não pode embutir os consumos já abatidos visualmente na tela
         $previousBalance = $latestLedger ? (float) $latestLedger->balance : 0.00;
+        if ($consumptionAmount > 0) {
+            // Se houve consumo debitado no ledger DURANTE este turno, o saldo anterior precisa ser compensado para trás
+            // pois o consumo será exibido e subtraído na linha 'Consumo Interno' da UI.
+            $previousBalance += $consumptionAmount;
+        }
         $totalDue = round($previousBalance + $netAmount, 2);
 
         $serviceItem = [

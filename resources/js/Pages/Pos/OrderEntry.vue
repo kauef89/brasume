@@ -225,6 +225,7 @@ const resetAppendState = () => {
 
     if (typeof resetDraftState === 'function') resetDraftState('table');
     else if (typeof clearCart === 'function') clearCart();
+        if (typeof removeCoupon === 'function') removeCoupon(); // 🧹 Limpa resíduos de cupom/desconto da memória
 
     if (typeof handleClearWorkspace === 'function') handleClearWorkspace();
 };
