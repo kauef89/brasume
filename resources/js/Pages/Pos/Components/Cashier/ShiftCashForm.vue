@@ -308,6 +308,7 @@ const handleKeydown = (event, index) => {
         if (index < allKeys.length - 1) {
             focusInput(index + 1);
         } else {
+            event.target?.blur?.();
             emit('submit');
         }
     } else if (event.key === 'Backspace') {
