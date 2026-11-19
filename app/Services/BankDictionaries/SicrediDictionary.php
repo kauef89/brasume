@@ -47,11 +47,35 @@ class SicrediDictionary implements BankDictionaryInterface
             return $result;
         }
 
-        // 3. Empréstimos, Capital de Giro e Tarifas de Crédito
+        // 3. Empréstimos, Capital de Giro e Amortização / Liquidação de Parcelas (Contraparte = Próprio Banco)
         if (str_contains($upperMemo, "LIBERACAO CREDITO") || str_contains($upperMemo, "PRONAMPE") || str_contains($upperMemo, "GIRO")) {
             $result["name"] = "Banco Sicredi (Giro / Crédito)";
             $result["clean_description"] = "Liberação de Capital de Giro / Empréstimo";
             $result["movement_type"] = BankMovementType::LOAN_IN->value;
+            return $result;
+        }
+
+        if (
+            (
+                str_contains($upperMemo, "LIQUIDACAO DE PARCELA") ||
+                str_contains($upperMemo, "LIQUIDACAO PARCELA") ||
+                str_contains($upperMemo, "LIQ. PARCELA") ||
+                str_contains($upperMemo, "AMORTIZACAO EMPRESTIMO") ||
+                str_contains($upperMemo, "PARCELA CREDITO")
+            ) &&
+            !preg_match('/\b[0-9]{11,14}\b/', $upperMemo) // Garante que não há CPF/CNPJ de terceiros (contraparte é o próprio banco)
+        ) {
+            $contractCode = null;
+            if (preg_match('/(?:PARCELA|EMPRESTIMO|CREDITO)[-\s]+([A-Z0-9]{4,20})/i', $memo, $mContract)) {
+                $contractCode = strtoupper(trim($mContract[1]));
+            }
+
+            $result["name"] = "Banco Sicredi (Empréstimo / Capital de Giro)";
+            $result["statement_identifier"] = $contractCode;
+            $result["clean_description"] = $contractCode
+                ? "Liquidação de Parcela (Empréstimo / Giro - {$contractCode})"
+                : "Liquidação de Parcela (Empréstimo / Giro)";
+            $result["movement_type"] = BankMovementType::LOAN_OUT->value;
             return $result;
         }
 

@@ -217,7 +217,7 @@ class DailyCommandCenterService
             : 0.0;
 
         $totalBankBalance = Schema::hasTable('bank_accounts')
-            ? (float) BankAccount::where('is_active', true)->sum('current_balance')
+            ? (float) BankAccount::liquidTreasury()->sum('current_balance')
             : 0.0;
 
         $openShift = CashShift::where('status', 'open')->latest()->first();

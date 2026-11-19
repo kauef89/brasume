@@ -131,9 +131,10 @@ class BankReconciliationService
                 ]);
             } elseif ($conciliable instanceof AccountPayable) {
                 $conciliable->update([
-                    "status"         => "paid",
-                    "payment_date"   => $lockedStatement->bank_date,
-                    "transaction_id" => $transaction->id,
+                    "status"          => "paid",
+                    "payment_date"    => $lockedStatement->bank_date,
+                    "bank_account_id" => $lockedStatement->bank_account_id,
+                    "transaction_id"  => $transaction->id,
                 ]);
             }
             // 4. Atualiza Lote Bancário (Contas a Pagar + Lote CNAB 240 de Folha)
@@ -253,9 +254,10 @@ class BankReconciliationService
                 ]);
             } elseif ($conciliable instanceof AccountPayable) {
                 $conciliable->update([
-                    'status'         => 'pending',
-                    'payment_date'   => null,
-                    'transaction_id' => null,
+                    'status'          => 'pending',
+                    'payment_date'    => null,
+                    'bank_account_id' => null,
+                    'transaction_id'  => null,
                 ]);
             } elseif ($conciliable instanceof PaymentBatch) {
                 $hasPayrolls = Payroll::where('payment_batch_id', $conciliable->id)->exists();

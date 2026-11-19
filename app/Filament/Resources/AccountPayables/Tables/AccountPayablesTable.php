@@ -86,7 +86,7 @@ class AccountPayablesTable
                     ->form([
                         \Filament\Forms\Components\Select::make('bank_account_id')
                             ->label('Conta Bancária / Cofre (Saída)')
-                            ->options(\App\Models\BankAccount::where('is_active', true)->pluck('name', 'id'))
+                            ->options(fn () => \App\Models\BankAccount::liquidTreasury()->orderBy('name')->pluck('name', 'id'))
                             ->required()
                             ->searchable()
                             ->preload(),
@@ -130,7 +130,7 @@ class AccountPayablesTable
                             ->maxValue(fn ($record) => round((float) $record->amount - 0.01, 2)),
                         \Filament\Forms\Components\Select::make('bank_account_id')
                             ->label('Conta Bancária / Cofre (Saída)')
-                            ->options(\App\Models\BankAccount::where('is_active', true)->pluck('name', 'id'))
+                            ->options(fn () => \App\Models\BankAccount::liquidTreasury()->orderBy('name')->pluck('name', 'id'))
                             ->required()
                             ->searchable()
                             ->preload(),

@@ -123,7 +123,7 @@ class GoodsReceiptForm
 
                         Select::make('bank_account_id')
                             ->label('Conta Bancária Origem')
-                            ->options(fn () => \App\Models\BankAccount::where('is_active', true)->pluck('name', 'id'))
+                            ->options(fn () => \App\Models\BankAccount::liquidTreasury()->orderBy('name')->pluck('name', 'id'))
                             ->visible(fn (Get $get) => !$get('is_retroactive') && $get('payment_origin') === 'bank_account')
                             ->required(fn (Get $get) => !$get('is_retroactive') && $get('payment_origin') === 'bank_account')
                             ->searchable()

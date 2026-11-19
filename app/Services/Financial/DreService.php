@@ -327,7 +327,7 @@ class DreService
                 }
             } else {
                 $freelancerAmount = (float) AccountPayable::query()
-                    ->where('is_personal', false)
+                    ->where(fn ($q) => $q->where('is_personal', false)->orWhereNull('is_personal'))
                     ->where('accounting_category', AccountingCategory::PAYROLL->value)
                     ->where('accounting_subcategory', 'freelancers')
                     ->whereBetween('due_date', [$this->startDate->toDateString(), $this->endDate->toDateString()])
@@ -356,7 +356,7 @@ class DreService
         $partnerEmployeeIds = Employee::where('employment_type', EmploymentType::PARTNER->value)->pluck('id')->toArray();
 
         $query = AccountPayable::query()
-            ->where('is_personal', false)
+            ->where(fn ($q) => $q->where('is_personal', false)->orWhereNull('is_personal'))
             ->where('accounting_category', AccountingCategory::PAYROLL->value)
             ->where(function ($q) use ($partnerEmployeeIds) {
                 $q->whereNull('employee_id')
@@ -388,7 +388,7 @@ class DreService
         $recurringTotal = (float) RecurringExpense::query()
             ->where('accounting_category', $category)
             ->where('is_active', true)
-            ->where('is_personal', false)
+            ->where(fn ($q) => $q->where('is_personal', false)->orWhereNull('is_personal'))
             ->sum('default_amount');
 
         if ($category === AccountingCategory::UTILITIES->value && $realizedAmount < 500.00) {
@@ -400,7 +400,7 @@ class DreService
 
     protected function getPayablesSum(array $categories = [], array $subcategories = [], array $excludedSubcategories = []): float
     {
-        $query = $this->getBasePayablesQuery()->where('is_personal', false);
+        $query = $this->getBasePayablesQuery()->where(fn ($q) => $q->where('is_personal', false)->orWhereNull('is_personal'));
 
         if (!empty($categories)) {
             $query->whereIn('accounting_category', $categories);
@@ -420,7 +420,7 @@ class DreService
     protected function getUncategorizedPayablesSum(): float
     {
         return (float) $this->getBasePayablesQuery()
-            ->where('is_personal', false)
+            ->where(fn ($q) => $q->where('is_personal', false)->orWhereNull('is_personal'))
             ->where(function ($q) {
                 $q->whereNull('accounting_category')
                   ->orWhere('accounting_category', '')
@@ -459,7 +459,7 @@ class DreService
     {
         $query = $this->getBasePayablesQuery()
             ->with(['supplier', 'employee', 'recurringExpense'])
-            ->where('is_personal', false);
+            ->where(fn ($q) => $q->where('is_personal', false)->orWhereNull('is_personal'));
 
         if (!empty($categories)) {
             $query->whereIn('accounting_category', $categories);
@@ -477,7 +477,7 @@ class DreService
         $activeRecurring = RecurringExpense::with('supplier')
             ->whereIn('accounting_category', $categories)
             ->where('is_active', true)
-            ->where('is_personal', false)
+            ->where(fn ($q) => $q->where('is_personal', false)->orWhereNull('is_personal'))
             ->orderBy('due_day', 'asc')
             ->get();
 
@@ -609,7 +609,7 @@ class DreService
     {
         $query = AccountPayable::query()
             ->with(['employee', 'supplier'])
-            ->where('is_personal', false)
+            ->where(fn ($q) => $q->where('is_personal', false)->orWhereNull('is_personal'))
             ->where('accounting_category', AccountingCategory::PAYROLL->value);
 
         if ($this->regime === 'caixa') {
@@ -647,7 +647,7 @@ class DreService
     {
         $payables = $this->getBasePayablesQuery()
             ->with('supplier')
-            ->where('is_personal', false)
+            ->where(fn ($q) => $q->where('is_personal', false)->orWhereNull('is_personal'))
             ->where(function ($q) {
                 $q->whereNull('accounting_category')
                   ->orWhere('accounting_category', '')

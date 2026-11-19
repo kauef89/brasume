@@ -273,8 +273,8 @@ class AcquirerReconciliationEngine
             $deviceName = $device?->name ?? 'Maquininha';
             $desc = "Repasse " . strtoupper($acquirerTx->acquirer_name) . " - " . strtoupper($acquirerTx->modality) . " (NSU {$acquirerTx->nsu} | {$deviceName})";
 
-            $fallbackBankId = BankAccount::where('bank_name', 'like', '%sicredi%')->first()?->id 
-                ?? BankAccount::first()?->id;
+            $fallbackBankId = BankAccount::bankInstitutions()->where('bank_name', 'like', '%sicredi%')->first()?->id
+                ?? BankAccount::bankInstitutions()->first()?->id;
 
             $netAmount = (float) $acquirerTx->net_amount > 0
                 ? (float) $acquirerTx->net_amount
@@ -330,8 +330,8 @@ class AcquirerReconciliationEngine
             $orderIdsStr = $payments->pluck('order_id')->filter()->unique()->map(fn($id) => "#{$id}")->implode(', ');
             $desc = "Repasse " . strtoupper($acquirerTx->acquirer_name) . " - " . strtoupper($acquirerTx->modality) . " (NSU {$acquirerTx->nsu} | Agrupamento {$orderIdsStr})";
 
-            $fallbackBankId = BankAccount::where('bank_name', 'like', '%sicredi%')->first()?->id 
-                ?? BankAccount::first()?->id;
+            $fallbackBankId = BankAccount::bankInstitutions()->where('bank_name', 'like', '%sicredi%')->first()?->id
+                ?? BankAccount::bankInstitutions()->first()?->id;
 
             $receivable = AccountReceivable::create([
                 'order_id'        => $leadOrder?->id,
@@ -764,8 +764,8 @@ class AcquirerReconciliationEngine
     public function linkMultiSwipe(\Illuminate\Support\Collection $acquirerTxs, ?Order $order, Payment $payment): void
     {
         DB::transaction(function () use ($acquirerTxs, $order, $payment) {
-            $fallbackBankId = BankAccount::where('bank_name', 'like', '%sicredi%')->first()?->id
-                ?? BankAccount::first()?->id;
+            $fallbackBankId = BankAccount::bankInstitutions()->where('bank_name', 'like', '%sicredi%')->first()?->id
+                ?? BankAccount::bankInstitutions()->first()?->id;
 
             foreach ($acquirerTxs as $tx) {
                 $deviceName = $tx->device?->name ?? 'Maquininha';

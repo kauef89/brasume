@@ -30,7 +30,7 @@ class PaymentMethodForm
 
                         Select::make("destination_account_id")
                             ->label("Conta de Liquidação / Destino")
-                            ->options(fn() => BankAccount::pluck("name", "id"))
+                            ->options(fn () => BankAccount::active()->orderBy("name")->pluck("name", "id"))
                             ->searchable()
                             ->preload()
                             ->required()

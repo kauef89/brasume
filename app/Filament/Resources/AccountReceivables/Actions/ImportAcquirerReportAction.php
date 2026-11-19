@@ -128,8 +128,9 @@ class ImportAcquirerReportAction extends Action
                                     $orphanSlice = array_slice($sim['orphan_preview'], 0, 20);
                                     $html .= "<div class='rounded-xl border border-rose-200 dark:border-rose-800 overflow-hidden'>";
                                     $html .= "<div class='px-3 py-2 bg-rose-50 dark:bg-rose-950/50 text-xs font-bold uppercase tracking-wider text-rose-800 dark:text-rose-300'>🔴 Vendas Órfãs Detectadas ({$sim['will_orphan']}) — Passadas na Maquininha sem Pagamento Correspondente no PDV</div>";
+                                    $html .= "<div class='max-h-[320px] overflow-y-auto overflow-x-auto'>";
                                     $html .= "<table class='w-full text-xs text-left divide-y divide-gray-200 dark:divide-gray-700'>";
-                                    $html .= "<thead class='bg-gray-50/50 dark:bg-gray-800/50 text-gray-500'><tr><th class='px-3 py-2'>Data/Hora</th><th class='px-3 py-2'>Terminal</th><th class='px-3 py-2'>NSU</th><th class='px-3 py-2'>Modalidade / Bandeira</th><th class='px-3 py-2 text-right'>Valor Bruto</th></tr></thead><tbody class='divide-y divide-gray-200 dark:divide-gray-700'>";
+                                    $html .= "<thead class='bg-gray-50 dark:bg-gray-800 text-gray-500 sticky top-0 z-10'><tr><th class='px-3 py-2'>Data/Hora</th><th class='px-3 py-2'>Terminal</th><th class='px-3 py-2'>NSU</th><th class='px-3 py-2'>Modalidade / Bandeira</th><th class='px-3 py-2 text-right'>Valor Bruto</th></tr></thead><tbody class='divide-y divide-gray-200 dark:divide-gray-700'>";
                                     foreach ($orphanSlice as $o) {
                                         $val = number_format($o['gross_amount'], 2, ',', '.');
                                         $html .= "<tr>
@@ -140,7 +141,7 @@ class ImportAcquirerReportAction extends Action
                                             <td class='px-3 py-1.5 text-right font-bold text-rose-600'>R$ {$val}</td>
                                         </tr>";
                                     }
-                                    $html .= "</tbody></table></div>";
+                                    $html .= "</tbody></table></div></div>";
                                 }
 
                                 // 4. Linhas ignoradas por status (Canceladas / Negadas)
@@ -189,16 +190,33 @@ class ImportAcquirerReportAction extends Action
                     $engine = new AcquirerReconciliationEngine();
                     $results = $engine->reconcile($transactions);
 
+                    // Dispara proativamente a conciliação de repasses bancários pendentes no extrato OFX
+                    $earliestSettlement = collect($transactions)
+                        ->map(fn ($dto) => $dto->expectedSettlementDate ?? $dto->transactionDate)
+                        ->filter()
+                        ->min();
+
+                    $settledBatches = 0;
+                    $settledReceivables = 0;
+                    if ($earliestSettlement) {
+                        $sinceDate = \Carbon\Carbon::parse($earliestSettlement)->subDays(2)->toDateString();
+                        $settlementRes = app(\App\Services\Accounting\CardSettlementReconciliationService::class)
+                            ->reconcilePendingCardSettlementsSince($sinceDate);
+                        $settledBatches = (int) ($settlementRes['batches'] ?? 0);
+                        $settledReceivables = (int) ($settlementRes['receivables'] ?? 0);
+                    }
+
                     $matched   = $results['matched'];
                     $ambiguous = $results['ambiguous'];
                     $orphan    = $results['orphan'];
                     $already   = $results['already_reconciled'];
 
                     $msgParts = [];
-                    if ($matched > 0)   $msgParts[] = "✅ {$matched} venda(s) conciliada(s) automaticamente.";
-                    if ($ambiguous > 0) $msgParts[] = "🟡 {$ambiguous} com dúvida (valores duplicados).";
-                    if ($orphan > 0)    $msgParts[] = "🔴 {$orphan} órfã(s) (não lançadas no PDV).";
-                    if ($already > 0)   $msgParts[] = "ℹ️ {$already} já processada(s) anteriormente.";
+                    if ($matched > 0)        $msgParts[] = "✅ {$matched} venda(s) conciliada(s) com o PDV.";
+                    if ($settledBatches > 0) $msgParts[] = "🏦 {$settledBatches} repasse(s) bancário(s) no extrato conciliado(s) proativamente ({$settledReceivables} vendas).";
+                    if ($ambiguous > 0)      $msgParts[] = "🟡 {$ambiguous} com dúvida (valores duplicados).";
+                    if ($orphan > 0)         $msgParts[] = "🔴 {$orphan} órfã(s) (não lançadas no PDV).";
+                    if ($already > 0)        $msgParts[] = "ℹ️ {$already} já processada(s) anteriormente.";
 
                     $notification = Notification::make()
                         ->title('Relatório Processado!')

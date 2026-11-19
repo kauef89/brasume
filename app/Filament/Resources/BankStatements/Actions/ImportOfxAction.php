@@ -39,10 +39,17 @@ class ImportOfxAction extends Action
                     ->schema([
                         Select::make('bank_account_id')
                             ->label('Conta Bancária de Destino')
-                            ->options(BankAccount::pluck('name', 'id'))
+                            ->options(fn () => BankAccount::bankInstitutions()
+                                ->orderBy('name')
+                                ->get()
+                                ->mapWithKeys(fn (BankAccount $acc) => [
+                                    $acc->id => "{$acc->name} (" . ($acc->type?->getLabel() ?? 'Banco') . ")"
+                                ])
+                            )
                             ->required()
                             ->searchable()
-                            ->preload(),
+                            ->preload()
+                            ->helperText('Exibe apenas contas bancárias reais (Corrente, Poupança e Investimento) ativas.'),
 
                         FileUpload::make('ofx_file')
                             ->label('Arquivo(s) OFX')
@@ -60,7 +67,7 @@ class ImportOfxAction extends Action
                             ->hiddenLabel()
                             ->content(function (Get $get, OfxImportService $service) {
                                 $accountId = $get('bank_account_id');
-                                $account = $accountId ? BankAccount::find($accountId) : null;
+                                $account = $accountId ? BankAccount::bankInstitutions()->find($accountId) : null;
                                 $files = array_values((array) ($get('ofx_file') ?? []));
 
                                 if (!$account || empty($files)) {
@@ -103,38 +110,50 @@ class ImportOfxAction extends Action
 
                                 // Tabela de Novas Transações (limitada visualmente às primeiras 40 para manter o modal leve)
                                 if ($newCount > 0) {
-                                    $previewSlice = array_slice($report['new_transactions'], 0, 40);
+                                    $previewSlice = array_slice($report['new_transactions'], 0, 150);
                                     $extraRows = $newCount - count($previewSlice);
 
                                     $html .= "<div class='rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden'>";
-                                    $html .= "<div class='px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200'>Prévia das Novas Transações ({$newCount})</div>";
+                                    $html .= "<div class='px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200 flex items-center justify-between'><span>Prévia das Novas Transações ({$newCount})</span><span class='text-[10px] font-normal text-gray-400 normal-case'>Role a tabela para conferir todos os lançamentos</span></div>";
+                                    $html .= "<div class='max-h-[340px] overflow-y-auto overflow-x-auto'>";
                                     $html .= "<table class='w-full text-xs text-left divide-y divide-gray-200 dark:divide-gray-700'>";
-                                    $html .= "<thead class='bg-gray-50/50 dark:bg-gray-800/50 text-gray-500'><tr><th class='px-3 py-2'>Data</th><th class='px-3 py-2'>Descrição / Dicionário</th><th class='px-3 py-2'>Tipo</th><th class='px-3 py-2'>Ação Automática</th><th class='px-3 py-2 text-right'>Valor</th></tr></thead><tbody class='divide-y divide-gray-200 dark:divide-gray-700'>";
+                                    $html .= "<thead class='bg-gray-50 dark:bg-gray-800 text-gray-500 sticky top-0 z-10 shadow-xs'><tr><th class='px-3 py-2'>Data</th><th class='px-3 py-2'>Descrição / Dicionário</th><th class='px-3 py-2'>Tipo</th><th class='px-3 py-2'>Ação Automática</th><th class='px-3 py-2 text-right'>Valor</th></tr></thead><tbody class='divide-y divide-gray-200 dark:divide-gray-700'>";
 
                                     foreach ($previewSlice as $tx) {
                                         $d = Carbon::parse($tx['bank_date'])->format('d/m/Y');
                                         $desc = e($tx['clean_description']);
                                         $rawMemo = e($tx['raw_memo']);
-                                        $mType = e($tx['movement_type']);
+                                        $mEnum = \App\Enums\BankMovementType::tryFrom((string) $tx['movement_type']);
+                                        $mLabel = e($mEnum?->getLabel() ?? (string) $tx['movement_type']);
+                                        $mBadgeColor = match ($mEnum?->getColor()) {
+                                            'success' => 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+                                            'info'    => 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300',
+                                            'warning' => 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+                                            'danger'  => 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+                                            default   => 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+                                        };
                                         $synthBadge = $tx['synthetic_fitid']
                                             ? "<span class='ml-1 px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-800'>FITID Sintético</span>"
                                             : '';
-                                        $auto = $tx['auto_action']
-                                            ? "<span class='text-emerald-600 dark:text-emerald-400 font-semibold'>⚡ " . e($tx['auto_action']) . "</span>"
-                                            : "<span class='text-gray-400'>Fila de Conciliação</span>";
+                                        $autoStatus = $tx['auto_action_status'] ?? ($tx['auto_action'] ? 'auto' : 'queue');
+                                        $auto = match ($autoStatus) {
+                                            'auto'             => "<span class='text-emerald-600 dark:text-emerald-400 font-semibold'>⚡ " . e($tx['auto_action']) . "</span>",
+                                            'pending_external' => "<span class='text-amber-600 dark:text-amber-400 font-medium'>⏳ " . e($tx['auto_action']) . "</span>",
+                                            default            => "<span class='text-gray-400'>Fila de Conciliação</span>",
+                                        };
                                         $amtClass = $tx['amount'] >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
                                         $amtFmt = ($tx['amount'] >= 0 ? '+' : '-') . ' R$ ' . number_format(abs($tx['amount']), 2, ',', '.');
 
                                         $html .= "<tr>
                                             <td class='px-3 py-2 font-medium whitespace-nowrap'>{$d}</td>
                                             <td class='px-3 py-2'><div class='font-semibold text-gray-900 dark:text-gray-100'>{$desc}{$synthBadge}</div><div class='text-[10px] text-gray-400 font-mono truncate max-w-md'>{$rawMemo}</div></td>
-                                            <td class='px-3 py-2'><span class='px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-800'>{$mType}</span></td>
+                                            <td class='px-3 py-2 whitespace-nowrap'><span class='px-2 py-0.5 rounded-full text-[10px] font-semibold {$mBadgeColor}'>{$mLabel}</span></td>
                                             <td class='px-3 py-2 text-[11px]'>{$auto}</td>
                                             <td class='px-3 py-2 text-right font-bold whitespace-nowrap {$amtClass}'>{$amtFmt}</td>
                                         </tr>";
                                     }
 
-                                    $html .= "</tbody></table>";
+                                    $html .= "</tbody></table></div>";
                                     if ($extraRows > 0) {
                                         $html .= "<div class='px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 text-center'>... e mais {$extraRows} transação(ões) prontas para importação.</div>";
                                     }
@@ -161,7 +180,7 @@ class ImportOfxAction extends Action
                     ]),
             ])
             ->action(function (array $data, OfxImportService $service) {
-                $account = BankAccount::find($data['bank_account_id'] ?? null);
+                $account = BankAccount::bankInstitutions()->find($data['bank_account_id'] ?? null);
                 $uploadedFiles = array_values((array) ($data['ofx_file'] ?? []));
 
                 if (!$account || empty($uploadedFiles)) {

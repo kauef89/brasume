@@ -120,6 +120,132 @@ class CardSettlementReconciliationService
         })->values();
     }
 
+    /**
+     * Avalia em memória (sem gravar) se um lançamento de repasse de cartão possui lote correspondente
+     * nas transações da adquirente (AcquirerTransaction).
+     */
+    public function matchSettlementGroupForStatement(BankStatement $stmt, array $excludeAcquirerTxIds = []): ?array
+    {
+        $parsed = $this->parseBankCardSettlement($stmt);
+        if (!$parsed || empty($parsed['brand'])) {
+            return null;
+        }
+
+        $targetAmount = round(abs((float) $stmt->amount), 2);
+        $brand = $parsed['brand'];
+        $modality = $parsed['modality'];
+        $isAnticipation = $parsed['is_anticipation'];
+
+        $candidateTxs = $this->findCandidateTransactions($stmt, false)
+            ->when(!empty($excludeAcquirerTxIds), fn ($c) => $c->whereNotIn('id', $excludeAcquirerTxIds))
+            ->values();
+
+        if ($candidateTxs->isEmpty()) {
+            return [
+                'matched'         => false,
+                'reason'          => 'Sem transações da adquirente importadas para esta bandeira/data',
+                'brand'           => $brand,
+                'modality'        => $modality,
+                'is_anticipation' => $isAnticipation,
+                'group'           => collect(),
+                'rav_diff'        => 0.0,
+            ];
+        }
+
+        if ($isAnticipation) {
+            foreach ([6, 7, 8, 9, 10] as $days) {
+                $cutoff = $stmt->bank_date->copy()->subDays($days)->startOfDay();
+                $subGroup = $candidateTxs->filter(fn ($tx) => $tx->transaction_date && $tx->transaction_date->gte($cutoff))->values();
+                if ($subGroup->isEmpty()) continue;
+
+                $rawNetSum = $this->sumTransactionsNet($subGroup);
+                $diff = round($rawNetSum - $targetAmount, 2);
+                $ratio = $rawNetSum > 0 ? ($diff / $rawNetSum) : 1;
+
+                if ($diff >= 0 && $ratio >= 0.004 && $ratio <= 0.035) {
+                    return [
+                        'matched'         => true,
+                        'reason'          => null,
+                        'brand'           => $brand,
+                        'modality'        => $modality,
+                        'is_anticipation' => true,
+                        'group'           => $subGroup,
+                        'rav_diff'        => $diff,
+                    ];
+                }
+            }
+
+            return [
+                'matched'         => false,
+                'reason'          => 'Soma das antecipações não fechou com o líquido do banco',
+                'brand'           => $brand,
+                'modality'        => $modality,
+                'is_anticipation' => true,
+                'group'           => collect(),
+                'rav_diff'        => 0.0,
+            ];
+        }
+
+        $byDate = $candidateTxs->groupBy(fn ($tx) => $tx->expected_settlement_date->toDateString());
+        $orderedDates = $byDate->keys()->sortBy(fn ($d) => $d === $stmt->bank_date->toDateString() ? 0 : 1);
+
+        $matchedGroup = null;
+        foreach ($orderedDates as $dueDateStr) {
+            $group = $byDate->get($dueDateStr);
+            if (abs($this->sumTransactionsNet($group) - $targetAmount) < 0.02) {
+                $matchedGroup = $group->values();
+                break;
+            }
+
+            $shortHorizon = $group->filter(fn ($tx) => $tx->transaction_date && $tx->transaction_date->diffInDays($tx->expected_settlement_date) <= 7);
+            if ($shortHorizon->isNotEmpty() && $shortHorizon->count() < $group->count()) {
+                if (abs($this->sumTransactionsNet($shortHorizon) - $targetAmount) < 0.02) {
+                    $matchedGroup = $shortHorizon->values();
+                    break;
+                }
+            }
+
+            $longHorizon = $group->filter(fn ($tx) => $tx->transaction_date && $tx->transaction_date->diffInDays($tx->expected_settlement_date) > 7);
+            if ($longHorizon->isNotEmpty() && $longHorizon->count() < $group->count()) {
+                if (abs($this->sumTransactionsNet($longHorizon) - $targetAmount) < 0.02) {
+                    $matchedGroup = $longHorizon->values();
+                    break;
+                }
+            }
+        }
+
+        // Fallback: Acúmulo de fim de semana/feriado (Sexta + Sábado + Domingo liquidados juntos na segunda)
+        if (!$matchedGroup && $byDate->count() > 1) {
+            $rolloverGroup = $candidateTxs->filter(fn ($tx) => $tx->expected_settlement_date->lte($stmt->bank_date))->values();
+            if ($rolloverGroup->isNotEmpty() && abs($this->sumTransactionsNet($rolloverGroup) - $targetAmount) < 0.02) {
+                $matchedGroup = $rolloverGroup;
+            }
+        }
+
+        if ($matchedGroup) {
+            return [
+                'matched'         => true,
+                'reason'          => null,
+                'brand'           => $brand,
+                'modality'        => $modality,
+                'is_anticipation' => false,
+                'group'           => $matchedGroup,
+                'rav_diff'        => 0.0,
+            ];
+        }
+
+        $foundSum = number_format($this->sumTransactionsNet($candidateTxs), 2, ',', '.');
+        return [
+            'matched'         => false,
+            'reason'          => "Líquido na APOS (R$ {$foundSum}) difere do repasse no extrato",
+            'brand'           => $brand,
+            'modality'        => $modality,
+            'is_anticipation' => false,
+            'group'           => collect(),
+            'rav_diff'        => 0.0,
+        ];
+    }
+
     public function reconcilePendingCardSettlementsSince(string $since): array
     {
         $statements = BankStatement::where('status', 'pending')
@@ -138,85 +264,23 @@ class CardSettlementReconciliationService
         $reconciledReceivables = 0;
 
         foreach ($statements as $stmt) {
-            $parsed = $this->parseBankCardSettlement($stmt);
-            if (!$parsed || empty($parsed['brand'])) {
+            $eval = $this->matchSettlementGroupForStatement($stmt);
+            if (!$eval || !$eval['matched'] || $eval['group']->isEmpty()) {
                 continue;
             }
 
             $targetAmount = round(abs((float) $stmt->amount), 2);
-            $brand = $parsed['brand'];
-            $modality = $parsed['modality'];
-            $isAnticipation = $parsed['is_anticipation'];
-
-            $candidateTxs = $this->findCandidateTransactions($stmt, false);
-            if ($candidateTxs->isEmpty()) {
-                continue;
-            }
-
-            if ($isAnticipation) {
-                $matchedAnticGroup = null;
-                $matchedDiff = 0.0;
-
-                foreach ([6, 7, 8, 9, 10] as $days) {
-                    $cutoff = $stmt->bank_date->copy()->subDays($days)->startOfDay();
-                    $subGroup = $candidateTxs->filter(fn ($tx) => $tx->transaction_date && $tx->transaction_date->gte($cutoff));
-                    if ($subGroup->isEmpty()) continue;
-
-                    $rawNetSum = $this->sumTransactionsNet($subGroup);
-                    $diff = round($rawNetSum - $targetAmount, 2);
-                    $ratio = $rawNetSum > 0 ? ($diff / $rawNetSum) : 1;
-
-                    // Taxa RAV típica Sicredi entre 0.4% e 3.5%
-                    if ($diff >= 0 && $ratio >= 0.004 && $ratio <= 0.035) {
-                        $matchedAnticGroup = $subGroup;
-                        $matchedDiff = $diff;
-                        break;
-                    }
-                }
-
-                if ($matchedAnticGroup) {
-                    $this->createSettlementBatch($stmt, $matchedAnticGroup, $targetAmount, $brand, $modality, true, $matchedDiff);
-                    $reconciledBatches++;
-                    $reconciledReceivables += $matchedAnticGroup->count();
-                }
-                continue;
-            }
-
-            // Repasse Normal: agrupa por expected_settlement_date (e sub-agrupa por horizonte curto <=7d vs D+30)
-            $byDate = $candidateTxs->groupBy(fn ($tx) => $tx->expected_settlement_date->toDateString());
-            $orderedDates = $byDate->keys()->sortBy(fn ($d) => $d === $stmt->bank_date->toDateString() ? 0 : 1);
-
-            $matchedGroup = null;
-            foreach ($orderedDates as $dueDateStr) {
-                $group = $byDate->get($dueDateStr);
-                if (abs($this->sumTransactionsNet($group) - $targetAmount) < 0.02) {
-                    $matchedGroup = $group;
-                    break;
-                }
-
-                // Tenta separar liquidação curta (D+1..D+7) de D+30 na mesma data de vencimento
-                $shortHorizon = $group->filter(fn ($tx) => $tx->transaction_date && $tx->transaction_date->diffInDays($tx->expected_settlement_date) <= 7);
-                if ($shortHorizon->isNotEmpty() && $shortHorizon->count() < $group->count()) {
-                    if (abs($this->sumTransactionsNet($shortHorizon) - $targetAmount) < 0.02) {
-                        $matchedGroup = $shortHorizon->values();
-                        break;
-                    }
-                }
-
-                $longHorizon = $group->filter(fn ($tx) => $tx->transaction_date && $tx->transaction_date->diffInDays($tx->expected_settlement_date) > 7);
-                if ($longHorizon->isNotEmpty() && $longHorizon->count() < $group->count()) {
-                    if (abs($this->sumTransactionsNet($longHorizon) - $targetAmount) < 0.02) {
-                        $matchedGroup = $longHorizon->values();
-                        break;
-                    }
-                }
-            }
-
-            if ($matchedGroup) {
-                $this->createSettlementBatch($stmt, $matchedGroup, $targetAmount, $brand, $modality, false, 0.0);
-                $reconciledBatches++;
-                $reconciledReceivables += $matchedGroup->count();
-            }
+            $this->createSettlementBatch(
+                $stmt,
+                $eval['group'],
+                $targetAmount,
+                $eval['brand'],
+                $eval['modality'],
+                $eval['is_anticipation'],
+                $eval['rav_diff']
+            );
+            $reconciledBatches++;
+            $reconciledReceivables += $eval['group']->count();
         }
 
         return [

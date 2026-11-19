@@ -23,6 +23,7 @@ enum BankMovementType: string implements HasLabel, HasColor, HasIcon
     case ATM_IN              = 'atm_in';
     case ATM_OUT             = 'atm_out';
     case LOAN_IN             = 'loan_in';
+    case LOAN_OUT            = 'loan_out';
     case OTHER               = 'other';
 
     public function getLabel(): ?string
@@ -43,6 +44,7 @@ enum BankMovementType: string implements HasLabel, HasColor, HasIcon
             self::ATM_IN              => 'Depósito ATM',
             self::ATM_OUT             => 'Saque ATM',
             self::LOAN_IN             => 'Crédito / Giro',
+            self::LOAN_OUT            => 'Parcela de Empréstimo / Giro',
             self::OTHER               => 'Outros',
         };
     }
@@ -51,6 +53,7 @@ enum BankMovementType: string implements HasLabel, HasColor, HasIcon
     {
         return match ($this) {
             self::PIX_IN, self::CARD_IN, self::ATM_IN, self::LOAN_IN => 'success',
+            self::LOAN_OUT            => 'warning',
             self::REFUND, self::TAX_BILL, self::CREDIT_CARD_PAYMENT  => 'info',
             self::BANK_FEE                                           => 'danger',
             self::OTHER                                              => 'gray',
@@ -76,6 +79,7 @@ enum BankMovementType: string implements HasLabel, HasColor, HasIcon
             self::ATM_IN              => 'heroicon-m-banknotes',
             self::ATM_OUT             => 'heroicon-m-banknotes',
             self::LOAN_IN             => 'heroicon-m-plus-circle',
+            self::LOAN_OUT            => 'heroicon-o-banknotes',
             self::OTHER               => 'heroicon-m-ellipsis-horizontal-circle',
         };
     }

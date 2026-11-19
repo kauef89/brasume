@@ -30,8 +30,8 @@ class AccountPayableObserver
             }
         }
 
-        // 2. Lógica Bancária: Se já nasceu PAGO via conta bancária avulsa, gera transação de saída
-        if ($payable->status === 'paid' && $payable->bank_account_id) {
+        // 2. Lógica Bancária: Se já nasceu PAGO via conta bancária avulsa (sem conciliação prévia), gera transação de saída
+        if ($payable->status === 'paid' && $payable->bank_account_id && empty($payable->transaction_id)) {
             $this->createBankTransaction($payable);
         }
     }
@@ -54,8 +54,8 @@ class AccountPayableObserver
                 }
             }
 
-            // 2. Lógica Bancária: Efetuou pagamento
-            if ($payable->status === 'paid' && $payable->bank_account_id) {
+            // 2. Lógica Bancária: Efetuou pagamento manual (evita duplicidade quando conciliado via BankReconciliationService)
+            if ($payable->status === 'paid' && $payable->bank_account_id && empty($payable->transaction_id)) {
                 $this->createBankTransaction($payable);
             }
 

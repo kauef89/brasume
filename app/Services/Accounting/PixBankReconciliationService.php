@@ -114,7 +114,7 @@ class PixBankReconciliationService
             ->where(function ($q) {
                 $q->where('movement_type', 'pix_in')
                     ->orWhereNull('movement_type')
-                    ->orWhereNotIn('movement_type', ['card_settlement', 'loan', 'transfer_in']);
+                    ->orWhereNotIn('movement_type', ['card_in', 'loan_in', 'loan_out', 'transfer']);
             })
             ->whereNull('deleted_at')
             ->orderBy('bank_date', 'asc')
@@ -317,14 +317,29 @@ class PixBankReconciliationService
             if ($best && $best['score'] >= 50) {
                 /** @var BankStatement $bestStmt */
                 $bestStmt = $best['stmt'];
-                $bestStmt->update([
-                    'status'                => 'reconciled',
-                    'reconciliation_source' => 'auto',
-                    'reconciled_by_name'    => 'Motor Inteligente',
-                    'reconciled_at'         => now(),
-                    'conciliable_type'      => Payment::class,
-                    'conciliable_id'        => $p->id,
-                ]);
+
+                DB::transaction(function () use ($bestStmt, $p) {
+                    $payerDisplay = $bestStmt->counterparty_name ?: ($bestStmt->description ?: 'Cliente PIX');
+                    $orderLabel = $p->order_id ? "Pedido #{$p->order_id}" : "Pagamento #{$p->id}";
+
+                    $tx = \App\Models\Transaction::create([
+                        'bank_account_id'  => $bestStmt->bank_account_id,
+                        'type'             => 'in',
+                        'amount'           => abs((float) $bestStmt->amount),
+                        'description'      => "Recebimento PIX {$orderLabel} ({$payerDisplay})",
+                        'transaction_date' => clone $bestStmt->bank_date,
+                    ]);
+
+                    $bestStmt->update([
+                        'status'                => 'reconciled',
+                        'reconciliation_source' => 'auto',
+                        'reconciled_by_name'    => 'Motor Inteligente',
+                        'reconciled_at'         => now(),
+                        'conciliable_type'      => Payment::class,
+                        'conciliable_id'        => $p->id,
+                        'transaction_id'        => $tx->id,
+                    ]);
+                });
 
                 if ($customerObj) {
                     $customerObj->recordUsualPayer($bestStmt->counterparty_name ?: $bestStmt->description, $bestStmt->document);
@@ -344,6 +359,139 @@ class PixBankReconciliationService
             'reconciled' => $reconciled,
             'ambiguous'  => $ambiguous,
         ];
+    }
+
+    /**
+     * Simula em memória o pareamento de entradas PIX (pix_in) de um lote OFX antes da gravação.
+     * Retorna mapa [stmt_temp_key => ['payment_id' => int, 'order_id' => ?int, 'customer_name' => string]].
+     */
+    public function previewPixMatchesForStatements(array $pixStatements): array
+    {
+        if (empty($pixStatements)) {
+            return [];
+        }
+
+        $dates = array_column($pixStatements, 'bank_date');
+        $minDate = Carbon::parse(min($dates))->subDays(5)->toDateString();
+        $maxDate = Carbon::parse(max($dates))->addDays(2)->toDateString();
+
+        $pixPayments = Payment::with(['order.customer', 'cashShift', 'paymentMethod'])
+            ->whereBetween('created_at', [$minDate . ' 00:00:00', $maxDate . ' 23:59:59'])
+            ->where('is_paid', true)
+            ->where(function ($q) {
+                $q->where('payment_method_id', 13)
+                    ->orWhere('method', 'like', '%Chave%')
+                    ->orWhereHas('paymentMethod', fn ($pm) => $pm->whereIn('engine_type', ['pix_static', 'bank_api']));
+            })
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        $alreadyLinkedPaymentIds = BankStatement::where('conciliable_type', Payment::class)
+            ->whereIn('conciliable_id', $pixPayments->pluck('id'))
+            ->pluck('conciliable_id')
+            ->flip()
+            ->toArray();
+
+        $matches = [];
+        $usedStmtKeys = [];
+
+        foreach ($pixPayments as $p) {
+            if (isset($alreadyLinkedPaymentIds[$p->id])) {
+                continue;
+            }
+
+            $window = $p->cashShift?->opened_at
+                ? $this->calendar->getSettlementWindow($p->cashShift->opened_at, $p->cashShift->closed_at)
+                : $this->calendar->getSettlementWindow($p->created_at);
+
+            $startDate = $window['min_date'];
+            $endDate   = $window['max_date'];
+
+            $candidates = collect($pixStatements)->filter(function ($s) use ($p, $startDate, $endDate, $usedStmtKeys) {
+                if (isset($usedStmtKeys[$s['fitid']])) {
+                    return false;
+                }
+                if ($s['bank_date'] < $startDate || $s['bank_date'] > $endDate) {
+                    return false;
+                }
+                return abs((float) $s['amount'] - (float) $p->amount) < 0.02;
+            })->values();
+
+            if ($candidates->isEmpty()) {
+                continue;
+            }
+
+            $competingPaymentsCount = $pixPayments->filter(function ($other) use ($p, $startDate, $endDate) {
+                if ($other->id === $p->id || abs((float) $other->amount - (float) $p->amount) >= 0.02) {
+                    return false;
+                }
+                $d = $other->created_at->toDateString();
+                return $d >= $startDate && $d <= $endDate;
+            })->count();
+
+            $custTokens = collect(explode(' ', Str::ascii(mb_strtolower($p->order?->customer_name ?? ''))))
+                ->filter(fn ($w) => mb_strlen($w) >= 3)
+                ->values();
+
+            $customerObj = $p->order?->customer;
+            $matchingCustomersByName = collect();
+            if (!$customerObj && !empty($p->order?->customer_name)) {
+                $matchingCustomersByName = Customer::where('name', 'like', '%' . trim($p->order->customer_name) . '%')
+                    ->whereNotNull('usual_payers')
+                    ->get();
+            }
+
+            $scored = $candidates->map(function ($s) use ($custTokens, $customerObj, $matchingCustomersByName, $p, $candidates, $competingPaymentsCount) {
+                $payerName = $s['counterparty_name'] ?: $s['clean_description'];
+                $payerDoc  = $s['document'];
+                $score = 0;
+
+                $isUsualPayer = false;
+                if ($customerObj && $customerObj->matchesUsualPayer($payerName, $payerDoc)) {
+                    $isUsualPayer = true;
+                } else {
+                    foreach ($matchingCustomersByName as $mc) {
+                        if ($mc->matchesUsualPayer($payerName, $payerDoc)) {
+                            $isUsualPayer = true;
+                            break;
+                        }
+                    }
+                }
+                if ($isUsualPayer) {
+                    $score += 180;
+                }
+
+                $stmtText = Str::ascii(mb_strtolower($payerName . ' ' . ($s['clean_description'] ?? '')));
+                foreach ($custTokens as $token) {
+                    if (str_contains($stmtText, $token)) {
+                        $score += 70;
+                    }
+                }
+
+                if ($candidates->count() === 1 && $competingPaymentsCount === 0) {
+                    $score += 50;
+                }
+
+                if ($s['bank_date'] === $p->created_at->toDateString()) {
+                    $score += 5;
+                }
+
+                return ['stmt' => $s, 'score' => $score];
+            })->sortByDesc('score')->values();
+
+            $best = $scored->first();
+            if ($best && $best['score'] >= 50) {
+                $fitid = $best['stmt']['fitid'];
+                $usedStmtKeys[$fitid] = true;
+                $matches[$fitid] = [
+                    'payment_id'    => $p->id,
+                    'order_id'      => $p->order_id,
+                    'customer_name' => $p->order?->customer_name ?? 'Cliente PDV',
+                ];
+            }
+        }
+
+        return $matches;
     }
 
     /**
@@ -417,7 +565,7 @@ class PixBankReconciliationService
             })
             ->where(function ($q) {
                 $q->whereNull('movement_type')
-                    ->orWhereNotIn('movement_type', ['card_settlement', 'loan']);
+                    ->orWhereNotIn('movement_type', ['card_in', 'loan_in', 'loan_out']);
             })
             ->where(function ($q) {
                 $q->where('status', 'pending')

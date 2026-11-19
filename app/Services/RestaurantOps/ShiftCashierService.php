@@ -34,7 +34,10 @@ class ShiftCashierService
             throw new \Exception('Já existe um turno aberto neste terminal.');
         }
 
-        $bankAccountId = $data['bank_account_id'] ?? BankAccount::first()?->id ?? 1;
+        $bankAccountId = $data['bank_account_id']
+            ?? BankAccount::vaults()->first()?->id
+            ?? BankAccount::liquidTreasury()->first()?->id
+            ?? 1;
 
         return DB::transaction(function () use ($data, $operatorId, $operatorName, $bankAccountId) {
             $shift = CashShift::create([

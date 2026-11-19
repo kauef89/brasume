@@ -3,10 +3,10 @@
 namespace App\Models;
 
 use App\Enums\BankAccountType;
-
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\HasMany; // 🚀 Import da relação
 
 /**
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\CreditCard> $creditCards
@@ -66,5 +66,58 @@ class BankAccount extends Model
     public function accountPayables(): HasMany
     {
         return $this->hasMany(AccountPayable::class);
+    }
+
+    // =========================================================================
+    // ESCOPOS SEMÂNTICOS POR TIPO DE CONTA
+    // =========================================================================
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
+
+    /**
+     * Apenas instituições bancárias reais (Corrente, Poupança, Investimento) — aptas a OFX e CNAB 240.
+     */
+    public function scopeBankInstitutions(Builder $query): Builder
+    {
+        return $query->where('is_active', true)->whereIn('type', [
+            BankAccountType::CHECKING->value,
+            BankAccountType::SAVINGS->value,
+            BankAccountType::INVESTMENT->value,
+        ]);
+    }
+
+    /**
+     * Disponibilidade imediata de tesouraria (Bancos + Cofre Físico), excluindo Cartão de Crédito e contas virtuais.
+     */
+    public function scopeLiquidTreasury(Builder $query): Builder
+    {
+        return $query->where('is_active', true)->whereIn('type', [
+            BankAccountType::CHECKING->value,
+            BankAccountType::SAVINGS->value,
+            BankAccountType::VAULT->value,
+            BankAccountType::INVESTMENT->value,
+        ]);
+    }
+
+    /**
+     * Contas de movimentação financeira real (inclui Cartão de Crédito para pagamento de fatura, exclui virtuais).
+     */
+    public function scopeRealFunds(Builder $query): Builder
+    {
+        return $query->where('is_active', true)->whereNotIn('type', [
+            BankAccountType::REVENUE_DEDUCTION->value,
+            BankAccountType::TRANSIT->value,
+        ]);
+    }
+
+    /**
+     * Apenas cofres físicos / gavetas de PDV.
+     */
+    public function scopeVaults(Builder $query): Builder
+    {
+        return $query->where('is_active', true)->where('type', BankAccountType::VAULT->value);
     }
 }

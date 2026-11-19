@@ -128,7 +128,7 @@ class PayrollsTable
                             ->columns(1),
                     ])
                     ->action(function (Payroll $record, array $data): ?StreamedResponse {
-                        $sicredi = BankAccount::where('bank_code', '748')->first();
+                        $sicredi = BankAccount::bankInstitutions()->where('bank_code', '748')->first();
 
                         if (! $sicredi || empty($sicredi->account_number)) {
                             Notification::make()

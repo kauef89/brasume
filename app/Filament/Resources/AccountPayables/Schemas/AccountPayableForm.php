@@ -257,7 +257,7 @@ class AccountPayableForm
                 // 🚀 NOVO CAMPO: Qual conta pagou?
                 Select::make("bank_account_id")
                     ->label("Conta Bancária (Saída)")
-                    ->options(fn () => \App\Models\BankAccount::where('is_active', true)->pluck('name', 'id'))
+                    ->options(fn () => \App\Models\BankAccount::liquidTreasury()->orderBy('name')->pluck('name', 'id'))
                     ->visible(fn($get) => $get("status") === "paid")
                     ->required(fn($get) => $get("status") === "paid")
                     ->searchable()

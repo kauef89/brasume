@@ -33,9 +33,18 @@ class ManageAcquirerTransactions extends ManageRecords
                     $engine = app(\App\Services\Financial\Acquirers\AcquirerReconciliationEngine::class);
                     $promoted = $engine->reprocessPending();
 
+                    $settlementRes = app(\App\Services\Accounting\CardSettlementReconciliationService::class)
+                        ->reconcilePendingCardSettlementsSince(now()->subDays(45)->toDateString());
+                    $settledBatches = (int) ($settlementRes['batches'] ?? 0);
+
+                    $body = "{$promoted} venda(s) conciliada(s) com o PDV.";
+                    if ($settledBatches > 0) {
+                        $body .= " {$settledBatches} lote(s) de repasse bancário no extrato também foram conciliados.";
+                    }
+
                     \Filament\Notifications\Notification::make()
                         ->title('Reprocessamento Concluído')
-                        ->body("{$promoted} transação(ões) foram conciliadas automaticamente.")
+                        ->body($body)
                         ->success()
                         ->send();
                 }),

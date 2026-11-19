@@ -292,7 +292,8 @@ HTML;
         return [
             Actions\CreateAction::make(),
 
-            Actions\Action::make('malote_pix_cnab240')
+            Actions\ActionGroup::make([
+                Actions\Action::make('malote_pix_cnab240')
                 ->label('Malote PIX (CNAB 240)')
                 ->icon('heroicon-o-bolt')
                 ->color('warning')
@@ -490,7 +491,7 @@ HTML;
                         ]),
                 ])
                 ->action(function (array $data) {
-                    $sicredi = \App\Models\BankAccount::where('bank_code', '748')->first();
+                    $sicredi = \App\Models\BankAccount::bankInstitutions()->where('bank_code', '748')->first();
 
                     if (!$sicredi || empty($sicredi->account_number)) {
                         Notification::make()
@@ -807,6 +808,11 @@ HTML;
                         ->success()
                         ->send();
                 })
+            ])
+                ->label('Ferramentas')
+                ->icon('heroicon-m-wrench-screwdriver')
+                ->button()
+                ->color('gray'),
         ];
     }
 

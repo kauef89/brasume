@@ -30,8 +30,8 @@ class BulkTransferAction extends BulkAction
             ->form([
                 Select::make('target_account_id')
                     ->label('Conta de Destino / Origem')
-                    ->helperText('Selecione o Cartão de Crédito ou a Conta Bancária que recebeu/enviou estes valores.')
-                    ->options(BankAccount::where('is_active', true)->pluck('name', 'id'))
+                    ->helperText('Selecione o Cartão de Crédito, Cofre ou Conta Bancária que recebeu/enviou estes valores.')
+                    ->options(fn () => BankAccount::realFunds()->orderBy('name')->pluck('name', 'id'))
                     ->searchable()
                     ->required(),
 

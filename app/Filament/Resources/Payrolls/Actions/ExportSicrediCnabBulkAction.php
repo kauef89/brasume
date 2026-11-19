@@ -29,7 +29,7 @@ class ExportSicrediCnabBulkAction extends BulkAction
             ->modalSubmitActionLabel('Gerar Arquivo .REM')
             ->action(function (Collection $records): ?StreamedResponse {
                 // 1. Localiza a conta corrente pagadora Sicredi PJ
-                $sicredi = BankAccount::where('bank_code', '748')->first();
+                $sicredi = BankAccount::bankInstitutions()->where('bank_code', '748')->first();
 
                 if (! $sicredi || empty($sicredi->account_number)) {
                     Notification::make()
