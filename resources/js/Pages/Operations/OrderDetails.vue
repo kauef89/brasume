@@ -107,6 +107,7 @@
                 @toggle-select="toggleItemSelection($event)"
                 @toggle-all="toggleSelectAllItems"
                 @action="handleItemAction"
+                @cancel-pending-pix="handleCancelPendingPix"
             />
         </div>
 
@@ -533,9 +534,38 @@ const openCustomerWhatsApp = () => {
     if (hasPhone.value) sendWhatsApp(customerPhone.value, `Olá! Falando do restaurante sobre o pedido #${props.order?.id}. `);
 };
 
-const isPaid = computed(() => props.order?.payment_status === 'paid');
-const orderTotalPaid = computed(() => (props.order?.payments || []).reduce((sum, p) => sum + Number(p.amount), 0));
+const isPaid = computed(() => ['paid', 'settled_internal'].includes(props.order?.payment_status));
+const orderTotalPaid = computed(() =>
+    (props.order?.payments || [])
+        .filter(p => p.status !== 'cancelled' && (p.is_paid || ['paid', 'completed'].includes(p.status)))
+        .reduce((sum, p) => sum + Number(p.amount), 0)
+);
 const orderRemaining = computed(() => Math.max(0, Number(props.order?.total || 0) - orderTotalPaid.value));
+
+const handleCancelPendingPix = async () => {
+    if (!props.order?.id) return;
+    try {
+        await axios.post(route('operations.orders.cancel-intent', props.order.id));
+        toast.add({
+            severity: 'success',
+            summary: 'PIX Cancelado',
+            detail: 'Cobrança PIX descartada. Agora você pode definir a nova forma de pagamento.',
+            life: 3500
+        });
+        router.reload({
+            only: ['order', 'initialOrders'],
+            preserveScroll: true,
+            preserveState: true
+        });
+    } catch (e) {
+        toast.add({
+            severity: 'error',
+            summary: 'Erro',
+            detail: e.response?.data?.message || 'Não foi possível cancelar a cobrança PIX.',
+            life: 4000
+        });
+    }
+};
 
 const paymentMissing = computed(() => {
     if (props.order?.type === 'table' || isPaid.value) return false;

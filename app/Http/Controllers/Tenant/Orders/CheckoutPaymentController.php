@@ -163,11 +163,19 @@ class CheckoutPaymentController extends Controller
     ): JsonResponse|RedirectResponse {
         $paymentService->cancelPixPayment($order);
 
+        $freshOrder = $order->fresh([
+            'items.modifiers',
+            'payments.items.modifiers',
+            'payments.paymentMethod',
+            'customer',
+            'diningTable',
+        ]);
+
         if ($request->wantsJson()) {
             return response()->json([
                 'success' => true,
                 'message' => 'Cobrança PIX cancelada com sucesso.',
-                'order'   => $order,
+                'order'   => $freshOrder,
             ]);
         }
 

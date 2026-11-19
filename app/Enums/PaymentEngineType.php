@@ -95,4 +95,17 @@ enum PaymentEngineType: string implements HasLabel, HasIcon, HasColor
     {
         return in_array($this, [self::ALLOWANCE, self::INTERNAL, self::INTERNAL_LOYALTY, self::LOSS]);
     }
+
+    /**
+     * Motores que NUNCA podem gerar emissão fiscal (NFC-e) nem receita comercial.
+     */
+    public function isFiscallyExempt(): bool
+    {
+        return in_array($this, [self::ALLOWANCE, self::INTERNAL, self::LOSS], true);
+    }
+
+    public function isNonRevenue(): bool
+    {
+        return in_array($this, [self::ALLOWANCE, self::INTERNAL, self::LOSS], true);
+    }
 }

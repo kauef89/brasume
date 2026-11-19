@@ -1,100 +1,161 @@
 <template>
-    <div v-if="orderPayments.length > 0 || paidItems.length > 0" class="mt-2 animate-fade-in flex flex-col gap-3">
-        <!-- CABEÇALHO DO BLOCO -->
-        <div class="flex items-center justify-between border-b border-surface-border/50 pb-2">
-            <h3 class="text-[11px] font-black text-surface-muted uppercase tracking-widest flex items-center gap-1.5">
-                <i class="pi pi-check-circle text-success-500 text-xs"></i>
-                Pagamentos Realizados ({{ orderPayments.length }})
-            </h3>
-            <span class="text-xs font-black text-success-500">
-                Total Pago: {{ $formatCurrency(totalPaidAmount) }}
-            </span>
-        </div>
+    <div v-if="pendingPixPayments.length > 0 || completedPayments.length > 0 || paidItems.length > 0" class="mt-2 animate-fade-in flex flex-col gap-3">
 
-        <div class="flex flex-col gap-3">
-            <!-- BLOCO DE CADA PAGAMENTO -->
-            <div
-                v-for="(pay, pIdx) in paymentBlocks"
-                :key="pay.id || pIdx"
-                class="bg-surface-1 border border-surface-border rounded-2xl p-3 flex flex-col gap-2.5 shadow-sm"
-            >
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2.5">
-                        <div class="w-9 h-9 rounded-xl bg-success-500/10 text-success-500 flex items-center justify-center font-bold text-sm shrink-0">
-                            <i :class="getPaymentIcon(pay.method)"></i>
-                        </div>
-                        <div class="flex flex-col">
-                            <span class="text-xs font-black text-surface-text">{{ pay.method || 'Pagamento' }}</span>
-                            <span class="text-[11px] text-surface-muted font-bold flex items-center gap-1 mt-0.5">
-                                <i class="pi pi-clock text-[10px]"></i>
-                                {{ formatPaymentTime(pay.created_at) || `Lançamento #${pIdx + 1}` }}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-3 text-right">
-                        <div class="flex flex-col items-end">
-                            <span class="text-sm font-black text-success-500">{{ $formatCurrency(pay.amount) }}</span>
-                            <span class="text-[9px] text-surface-muted font-bold uppercase tracking-wider">Recebido</span>
-                        </div>
-
-                        <button
-                            v-if="mode === 'checkout' && pay.id"
-                            type="button"
-                            @click.stop="$emit('rollback-payment', pay)"
-                            class="w-8 h-8 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center outline-none shrink-0 cursor-pointer"
-                            title="Estornar Pagamento"
-                        >
-                            <i class="pi pi-undo text-xs"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- ITENS COBERTOS -->
-                <div v-if="pay.items && pay.items.length > 0" class="border-t border-surface-border/40 pt-2 flex flex-col gap-1.5">
-                    <span class="text-[9px] font-black uppercase tracking-wider text-surface-muted">Itens cobertos:</span>
-                    <div v-for="(item, iIdx) in pay.items" :key="iIdx" class="flex flex-col gap-1 py-1.5 px-2.5 rounded-lg bg-surface-2/60 text-surface-text">
-                        <div class="flex justify-between items-center text-xs">
-                            <div class="flex items-center gap-2 min-w-0">
-                                <span class="font-bold text-surface-muted text-[11px]">{{ formatFraction(item.paid_parts || item.quantity, item.parts_per_unit || 1) }}×</span>
-                                <span class="truncate font-medium text-xs">{{ item.name || item.product_name }}</span>
-                            </div>
-                            <span class="font-bold text-surface-text text-xs shrink-0 ml-2">
-                                {{ $formatCurrency(item.total_amount) }}
-                            </span>
-                        </div>
-
-                        <div v-if="getItemModsLines(item).length > 0 || item.notes" class="flex flex-col pl-4 text-[10px] text-surface-muted gap-0.5">
-                            <span v-for="(modLine, mIdx) in getItemModsLines(item)" :key="mIdx" class="leading-tight">
-                                ↳ {{ modLine }}
-                            </span>
-                            <span v-if="item.notes && getItemModsLines(item).length === 0" class="leading-tight">
-                                ↳ {{ item.notes }}
-                            </span>
-                        </div>
-                    </div>
-                </div>
+        <!-- BLOCO DE COBRANÇAS PIX PENDENTES (NÃO LIQUIDADAS) -->
+        <div v-if="pendingPixPayments.length > 0" class="flex flex-col gap-2">
+            <div class="flex items-center justify-between border-b border-warning-500/30 pb-1.5">
+                <h3 class="text-[11px] font-black text-warning-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <i class="pi pi-clock text-xs"></i>
+                    Cobrança PIX Pendente ({{ pendingPixPayments.length }})
+                </h3>
+                <span class="text-[11px] font-black text-warning-500">
+                    Aguardando Pagamento
+                </span>
             </div>
 
-            <!-- BAIXAS SEM COMPROVANTE ISOLADO -->
-            <div v-if="unassignedPaidItems.length > 0" class="bg-surface-1/70 border border-surface-border/70 rounded-2xl p-3 flex flex-col gap-2">
-                <div class="flex items-center justify-between border-b border-surface-border/40 pb-1.5">
-                    <span class="text-[10px] font-black uppercase tracking-wider text-surface-muted flex items-center gap-1">
-                        <i class="pi pi-receipt text-xs"></i> Baixas sem comprovante isolado
-                    </span>
-                </div>
-                <div class="flex flex-col gap-1">
-                    <div v-for="item in unassignedPaidItems" :key="(item.unique_id || item.id) + '_unassigned'" class="flex justify-between items-center text-xs py-1 px-2 rounded-lg bg-surface-2/50">
-                        <div class="flex items-center gap-2 min-w-0">
-                            <span class="font-black text-surface-muted text-[11px]">{{ formatFraction(item.paid_parts, item.parts_per_unit) }}×</span>
-                            <span class="truncate font-medium text-xs text-surface-text">{{ item.name || item.product_name }}</span>
-                        </div>
-                        <span class="font-black text-surface-muted text-xs shrink-0 ml-2">
-                            {{ $formatCurrency(item.paid_parts * (item.effective_unit_price / item.parts_per_unit)) }}
+            <div
+                v-for="(pay, pIdx) in pendingPixPayments"
+                :key="'pending_' + (pay.id || pIdx)"
+                class="bg-warning-500/5 border border-warning-500/30 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-sm"
+            >
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-9 h-9 rounded-xl bg-warning-500/15 text-warning-500 flex items-center justify-center font-bold text-sm shrink-0">
+                        <i class="pi pi-bolt"></i>
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-xs font-black text-surface-text truncate">{{ pay.method || 'PIX' }} (Não Pago)</span>
+                        <span class="text-[11px] text-surface-muted font-bold flex items-center gap-1 mt-0.5 truncate">
+                            <i class="pi pi-clock text-[10px]"></i>
+                            {{ formatPaymentTime(pay.created_at) || 'Aguardando cliente' }}
                         </span>
                     </div>
                 </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                    <div class="flex flex-col items-end mr-1">
+                        <span class="text-sm font-black text-warning-500">{{ $formatCurrency(pay.amount) }}</span>
+                        <span class="text-[9px] text-warning-500/80 font-black uppercase tracking-wider">Pendente</span>
+                    </div>
+
+                    <button
+                        v-if="mode === 'checkout'"
+                        type="button"
+                        @click.stop="$emit('view-pix', pay)"
+                        class="px-2.5 h-8 rounded-lg bg-primary-500/15 text-primary-smart hover:bg-primary-500/25 transition-colors text-[10px] font-black uppercase tracking-wider flex items-center gap-1 outline-none cursor-pointer border-none"
+                        title="Exibir QR Code PIX"
+                    >
+                        <i class="pi pi-qrcode text-xs"></i> QR
+                    </button>
+
+                    <button
+                        type="button"
+                        @click.stop="$emit('cancel-pending-pix', pay)"
+                        class="px-2.5 h-8 rounded-lg bg-danger-500/15 text-danger-500 hover:bg-danger-500 hover:text-white transition-colors text-[10px] font-black uppercase tracking-wider flex items-center gap-1 outline-none cursor-pointer border-none"
+                        title="Cancelar Cobrança PIX Pendente"
+                    >
+                        <i class="pi pi-times text-xs"></i> Cancelar PIX
+                    </button>
+                </div>
             </div>
         </div>
+
+        <!-- CABEÇALHO DO BLOCO DE PAGAMENTOS REALIZADOS -->
+        <template v-if="completedPayments.length > 0 || paidItems.length > 0">
+            <div class="flex items-center justify-between border-b border-surface-border/50 pb-2">
+                <h3 class="text-[11px] font-black text-surface-muted uppercase tracking-widest flex items-center gap-1.5">
+                    <i class="pi pi-check-circle text-success-500 text-xs"></i>
+                    Pagamentos Realizados ({{ completedPayments.length }})
+                </h3>
+                <span class="text-xs font-black text-success-500">
+                    Total Pago: {{ $formatCurrency(totalPaidAmount) }}
+                </span>
+            </div>
+
+            <div class="flex flex-col gap-3">
+                <!-- BLOCO DE CADA PAGAMENTO LIQUIDADO -->
+                <div
+                    v-for="(pay, pIdx) in paymentBlocks"
+                    :key="pay.id || pIdx"
+                    class="bg-surface-1 border border-surface-border rounded-2xl p-3 flex flex-col gap-2.5 shadow-sm"
+                >
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-9 h-9 rounded-xl bg-success-500/10 text-success-500 flex items-center justify-center font-bold text-sm shrink-0">
+                                <i :class="getPaymentIcon(pay.method)"></i>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-xs font-black text-surface-text">{{ pay.method || 'Pagamento' }}</span>
+                                <span class="text-[11px] text-surface-muted font-bold flex items-center gap-1 mt-0.5">
+                                    <i class="pi pi-clock text-[10px]"></i>
+                                    {{ formatPaymentTime(pay.created_at) || `Lançamento #${pIdx + 1}` }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 text-right">
+                            <div class="flex flex-col items-end">
+                                <span class="text-sm font-black text-success-500">{{ $formatCurrency(pay.amount) }}</span>
+                                <span class="text-[9px] text-surface-muted font-bold uppercase tracking-wider">Recebido</span>
+                            </div>
+
+                            <button
+                                v-if="mode === 'checkout' && pay.id"
+                                type="button"
+                                @click.stop="$emit('rollback-payment', pay)"
+                                class="w-8 h-8 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center outline-none shrink-0 cursor-pointer"
+                                title="Estornar Pagamento"
+                            >
+                                <i class="pi pi-undo text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ITENS COBERTOS -->
+                    <div v-if="pay.items && pay.items.length > 0" class="border-t border-surface-border/40 pt-2 flex flex-col gap-1.5">
+                        <span class="text-[9px] font-black uppercase tracking-wider text-surface-muted">Itens cobertos:</span>
+                        <div v-for="(item, iIdx) in pay.items" :key="iIdx" class="flex flex-col gap-1 py-1.5 px-2.5 rounded-lg bg-surface-2/60 text-surface-text">
+                            <div class="flex justify-between items-center text-xs">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <span class="font-bold text-surface-muted text-[11px]">{{ formatFraction(item.paid_parts || item.quantity, item.parts_per_unit || 1) }}×</span>
+                                    <span class="truncate font-medium text-xs">{{ item.name || item.product_name }}</span>
+                                </div>
+                                <span class="font-bold text-surface-text text-xs shrink-0 ml-2">
+                                    {{ $formatCurrency(item.total_amount) }}
+                                </span>
+                            </div>
+
+                            <div v-if="getItemModsLines(item).length > 0 || item.notes" class="flex flex-col pl-4 text-[10px] text-surface-muted gap-0.5">
+                                <span v-for="(modLine, mIdx) in getItemModsLines(item)" :key="mIdx" class="leading-tight">
+                                    ↳ {{ modLine }}
+                                </span>
+                                <span v-if="item.notes && getItemModsLines(item).length === 0" class="leading-tight">
+                                    ↳ {{ item.notes }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BAIXAS SEM COMPROVANTE ISOLADO -->
+                <div v-if="unassignedPaidItems.length > 0" class="bg-surface-1/70 border border-surface-border/70 rounded-2xl p-3 flex flex-col gap-2">
+                    <div class="flex items-center justify-between border-b border-surface-border/40 pb-1.5">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-surface-muted flex items-center gap-1">
+                            <i class="pi pi-receipt text-xs"></i> Baixas sem comprovante isolado
+                        </span>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <div v-for="item in unassignedPaidItems" :key="(item.unique_id || item.id) + '_unassigned'" class="flex justify-between items-center text-xs py-1 px-2 rounded-lg bg-surface-2/50">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="font-black text-surface-muted text-[11px]">{{ formatFraction(item.paid_parts, item.parts_per_unit) }}×</span>
+                                <span class="truncate font-medium text-xs text-surface-text">{{ item.name || item.product_name }}</span>
+                            </div>
+                            <span class="font-black text-surface-muted text-xs shrink-0 ml-2">
+                                {{ $formatCurrency(item.paid_parts * (item.effective_unit_price / item.parts_per_unit)) }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
     </div>
 </template>
 
@@ -109,20 +170,28 @@ const props = defineProps({
     mode: { type: String, default: 'checkout' }
 });
 
-defineEmits(['rollback-payment']);
+defineEmits(['rollback-payment', 'cancel-pending-pix', 'view-pix']);
 
 const { formatModifiersList } = useOrderFormatting();
 const getItemModsLines = (item) => formatModifiersList(item);
 
+const pendingPixPayments = computed(() => {
+    return (props.orderPayments || []).filter(p => p.status === 'pending' && !p.is_paid);
+});
+
+const completedPayments = computed(() => {
+    return (props.orderPayments || []).filter(p => p.status !== 'cancelled' && (p.is_paid || ['paid', 'completed'].includes(p.status)));
+});
+
 const totalPaidAmount = computed(() => {
-    if (props.orderPayments && props.orderPayments.length > 0) {
-        return props.orderPayments.filter(p => p.is_paid || p.status === 'paid').reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    if (completedPayments.value.length > 0) {
+        return completedPayments.value.reduce((sum, p) => sum + Number(p.amount || 0), 0);
     }
     return props.paidItems.reduce((sum, i) => sum + (i.paid_parts * (i.effective_unit_price / i.parts_per_unit)), 0);
 });
 
 const paymentBlocks = computed(() => {
-    const payments = props.orderPayments || [];
+    const payments = completedPayments.value;
     if (payments.length === 0) return [];
 
     return payments.map(pay => {
@@ -179,8 +248,8 @@ const paymentBlocks = computed(() => {
 });
 
 const unassignedPaidItems = computed(() => {
-    const hasAttachedItems = (props.orderPayments || []).some(p => Array.isArray(p.items) && p.items.length > 0);
-    if (hasAttachedItems || (props.orderPayments || []).length <= 1) return [];
+    const hasAttachedItems = completedPayments.value.some(p => Array.isArray(p.items) && p.items.length > 0);
+    if (hasAttachedItems || completedPayments.value.length <= 1) return [];
     return props.paidItems;
 });
 

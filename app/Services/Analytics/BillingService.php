@@ -27,6 +27,10 @@ class BillingService
         $queryV3 = DB::table('orders as v3')
             ->selectRaw("DATE(v3.created_at) as report_date, SUM(v3.total) as total_revenue, COUNT(v3.id) as total_orders, 'v3' as source")
             ->whereIn('v3.status', ['closed', 'paid', 'completed'])
+            ->where(function ($q) {
+                $q->whereNull('v3.payment_status')
+                  ->orWhere('v3.payment_status', '!=', 'settled_internal');
+            })
             ->whereBetween('v3.created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
 
         if (!empty($orderTypes)) {

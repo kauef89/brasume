@@ -30,7 +30,7 @@ class PosCheckoutService
             throw new \Exception("Ação Recusada: O Pedido #{$order->id} já se encontra finalizado, cancelado ou transferido.");
         }
 
-        if (!$allowIfPaid && $order->payment_status === 'paid') {
+        if (!$allowIfPaid && in_array($order->payment_status, ['paid', 'settled_internal'], true)) {
             throw new \Exception("Ação Recusada: O Pedido #{$order->id} já se encontra quitado.");
         }
     }

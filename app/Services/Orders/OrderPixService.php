@@ -27,8 +27,13 @@ class OrderPixService
             throw new Exception("A integração PIX Sicredi não está ativa nas configurações.");
         }
 
-        $alreadyPaid = (float) $order->payments()->where('status', 'paid')->sum('amount');
+        $alreadyPaid = (float) $order->payments()->where('is_paid', true)->sum('amount');
         $totalOutstanding = max(0, round((float) $order->total - $alreadyPaid, 2));
+
+        // Cancela eventual cobrança PIX anterior ainda em aberto antes de gerar outra
+        if ($order->payments()->where('status', 'pending')->where('is_paid', false)->exists()) {
+            $this->cancelIntent($order, false);
+        }
 
         if ($totalOutstanding <= 0.01) {
             throw new Exception("Este pedido já está quitado.");
@@ -76,18 +81,104 @@ class OrderPixService
     }
 
     /**
-     * Cancela a intenção PIX pendente do pedido.
+     * Cancela a intenção PIX pendente do pedido, invalida o registro pendente em payments
+     * e libera o pedido para a fila operacional caso estivesse retido em pending_payment.
      */
-    public function cancelIntent(Order $order): void
+    public function cancelIntent(Order $order, bool $releaseToKitchen = true): void
     {
-        $order->update([
-            'txid'                  => null,
-            'pix_payload'           => null,
-            'pix_expires_at'        => null,
-            'payment_intent_status' => null,
-        ]);
+        $txidsToCancel = collect([$order->txid])
+            ->merge(
+                $order->payments()
+                    ->where('is_paid', false)
+                    ->where('status', 'pending')
+                    ->pluck('txid')
+            )
+            ->filter()
+            ->unique()
+            ->values();
 
-        broadcast(new OrderUpdated($order->fresh(['items', 'payments'])));
+        if ($txidsToCancel->isNotEmpty()) {
+            try {
+                $gateway = app(SicrediPixGateway::class);
+                foreach ($txidsToCancel as $txid) {
+                    $gateway->cancelCharge((string) $txid);
+                }
+            } catch (\Throwable $e) {
+                Log::warning("⚠️ [OrderPixService] Erro ao notificar Sicredi no cancelamento do PIX do Pedido #{$order->id}: " . $e->getMessage());
+            }
+        }
+
+        $wasWaitingPayment = ($order->status === 'pending_payment');
+
+        DB::transaction(function () use ($order, $releaseToKitchen, $wasWaitingPayment) {
+            $order->payments()
+                ->where('is_paid', false)
+                ->where('status', 'pending')
+                ->update(['status' => 'cancelled']);
+
+            $filteredIntents = null;
+            if (is_array($order->payment_intent_methods)) {
+                $remaining = array_values(array_filter($order->payment_intent_methods, function ($m) {
+                    $eng = (string) ($m['engine_type'] ?? '');
+                    $name = mb_strtolower((string) ($m['method_name'] ?? ''));
+                    return $eng !== 'bank_api' && !str_contains($name, 'pix');
+                }));
+                $filteredIntents = !empty($remaining) ? $remaining : null;
+            }
+
+            $updatePayload = [
+                'txid'                   => null,
+                'pix_payload'            => null,
+                'pix_expires_at'         => null,
+                'payment_intent_methods' => $filteredIntents,
+            ];
+
+            if (in_array($order->payment_intent_status, ['pix_waiting', 'pending_pix', null], true)) {
+                $updatePayload['payment_intent_status'] = 'pending_choice';
+            }
+
+            if ($releaseToKitchen && $wasWaitingPayment) {
+                $updatePayload['status'] = 'pending';
+            }
+
+            $order->update($updatePayload);
+
+            if ($releaseToKitchen && $wasWaitingPayment) {
+                OrderItem::where('order_id', $order->id)
+                    ->where('status', '!=', 'cancelled')
+                    ->update([
+                        'status'            => 'active',
+                        'production_status' => 'pending',
+                    ]);
+            }
+        });
+
+        $freshOrder = $order->fresh(['items.modifiers', 'items.product', 'payments.paymentMethod']);
+
+        if ($releaseToKitchen && $wasWaitingPayment) {
+            try {
+                $inventoryService = app(\App\Services\Catalog\InventoryService::class);
+                foreach ($freshOrder->items as $item) {
+                    if ($item->parent_item_id === null && $item->status !== 'cancelled') {
+                        $inventoryService->processOrderItemStock($item, 'deduct');
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::error("🚨 [PIX CANCEL INVENTORY] Pedido #{$freshOrder->id}: " . $e->getMessage());
+            }
+
+            try {
+                app(\App\Services\Orders\CustomerOrderSideEffects::class)->handle(
+                    order: $freshOrder,
+                    isAppend: false,
+                    needsPixPayment: false
+                );
+            } catch (\Throwable $e) {
+                Log::error("🚨 [PIX CANCEL SIDE-EFFECTS] Pedido #{$freshOrder->id}: " . $e->getMessage());
+            }
+        }
+
+        broadcast(new OrderUpdated($freshOrder));
     }
 
     /**

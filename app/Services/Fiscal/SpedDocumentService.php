@@ -49,6 +49,20 @@ class SpedDocumentService
     ) {
         $order->loadMissing(['items.product', 'customer', 'payments.paymentMethod']);
 
+        // 🛡️ 0. BLOQUEIO FISCAL ABSOLUTO (Perda, Cortesia, Vale-Alimentação e Consumo Interno)
+        if ($prohibitionReason = $this->getFiscalProhibitionReason($order)) {
+            $order->update([
+                'fiscal_status' => 'skipped',
+                'fiscal_error'  => null,
+            ]);
+
+            return [
+                'success' => true,
+                'status'  => 'skipped',
+                'message' => $prohibitionReason,
+            ];
+        }
+
         // 🚀 1. BLINDAGEM DE EMISSÃO AUTOMÁTICA / CONTINGÊNCIA
         if (!$force && !$this->shouldEmitAutomatically($order)) {
             $order->update([
@@ -535,10 +549,66 @@ class SpedDocumentService
     }
 
     /**
+     * Retorna o motivo de proibição fiscal caso o pedido envolva operações não-tributáveis
+     * (Perda, Cortesia, Vale-Alimentação interno ou Consumo Interno da equipe).
+     */
+    public function getFiscalProhibitionReason(Order $order): ?string
+    {
+        if ($order->payment_status === 'settled_internal') {
+            return 'Emissão fiscal proibida: pedido encerrado como Baixa Interna / Sem Receita.';
+        }
+
+        $order->loadMissing('payments.paymentMethod');
+
+        $exemptEngines = ['loss', 'allowance', 'internal'];
+
+        foreach ($order->payments as $payment) {
+            if ($payment->status === 'cancelled') {
+                continue;
+            }
+
+            $engine = is_object($payment->paymentMethod?->engine_type)
+                ? $payment->paymentMethod->engine_type->value
+                : ($payment->paymentMethod?->engine_type ?? '');
+
+            if (in_array($engine, $exemptEngines, true)) {
+                $methodLabel = $payment->paymentMethod?->name ?? $payment->method ?? $engine;
+                return "Emissão fiscal proibida para pedidos com baixa via {$methodLabel}.";
+            }
+
+            $nameLower = mb_strtolower(trim((string) ($payment->method ?? '')));
+            if (preg_match('/\b(perda|cortesia|consumo interno|vale[- ]alimenta)/u', $nameLower)) {
+                return "Emissão fiscal proibida para pedidos com baixa via {$payment->method}.";
+            }
+        }
+
+        if ($order->payments->isEmpty() && is_array($order->payment_intent_methods)) {
+            foreach ($order->payment_intent_methods as $intent) {
+                $intentEngine = (string) ($intent['engine_type'] ?? '');
+                if (in_array($intentEngine, $exemptEngines, true)) {
+                    $label = $intent['method_name'] ?? $intentEngine;
+                    return "Emissão fiscal proibida para intenção de baixa via {$label}.";
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public function isFiscallyProhibited(Order $order): bool
+    {
+        return $this->getFiscalProhibitionReason($order) !== null;
+    }
+
+    /**
      * Avalia se todas as formas de pagamento do pedido autorizam a emissão fiscal automática.
      */
     public function shouldEmitAutomatically(Order $order): bool
     {
+        if ($this->isFiscallyProhibited($order)) {
+            return false;
+        }
+
         $order->loadMissing('payments.paymentMethod');
 
         if ($order->payments->isEmpty()) {

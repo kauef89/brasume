@@ -1,182 +1,218 @@
 <?php
+
 namespace App\Filament\Resources\Orders\Tables;
 
-use Filament\Tables\Table;
-use Filament\Tables;
-use Filament\Actions\EditAction;
+use App\Filament\Resources\Orders\Schemas\OrderInfolist;
+use App\Models\Order;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
-use App\Enums\ProductType;
-use App\Models\Product;
+use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\HtmlString;
 
-class OrdersTable {
-    public static function configure(Table $table): Table {
-        return $table->columns([
-            Tables\Columns\TextColumn::make('id')->label('Pedido #')->sortable()->searchable(),
+class OrdersTable
+{
+    public static function configure(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('id')
+                    ->label('Pedido')
+                    ->formatStateUsing(fn ($state) => "#{$state}")
+                    ->weight('bold')
+                    ->sortable()
+                    ->searchable(),
 
-            Tables\Columns\TextColumn::make('customer_name')->label('Cliente / Mesa')
-                ->state(function ($record) {
-                    if ($record->customer) return $record->customer->name;
-                    if ($record->customer_name) return $record->customer_name;
-                    if ($record->table_number) return 'Mesa: ' . $record->table_number;
-                    return 'Não Identificado';
-                })
-                ->searchable(),
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label('Data / Hora')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable(),
 
-            Tables\Columns\TextColumn::make('type')->label('Modalidade')->badge(),
-
-            Tables\Columns\TextColumn::make('total')->label('Total')->money('BRL')->sortable(),
-
-            Tables\Columns\TextColumn::make('status')->label('Status')->badge(),
-
-            Tables\Columns\TextColumn::make('payment_status')->label('Pagamento')->badge(),
-
-            Tables\Columns\TextColumn::make('created_at')->label('Data')->dateTime('d/m/Y H:i')->sortable(),
-        ])->defaultSort('created_at', 'desc')
-                ->filters([
-            Tables\Filters\SelectFilter::make('status')
-                ->label('Status do Pedido')
-                ->options(\App\Enums\OrderStatus::class)
-                ->multiple(),
-
-            Tables\Filters\SelectFilter::make('type')
-                ->label('Modalidade')
-                ->options(\App\Enums\OrderType::class),
-
-            Tables\Filters\SelectFilter::make('payment_status')
-                ->label('Status Pagamento')
-                ->options(\App\Enums\PaymentStatus::class),
-
-            Tables\Filters\Filter::make('created_at')
-                ->form([
-                    \Filament\Forms\Components\DatePicker::make('created_from')->label('De'),
-                    \Filament\Forms\Components\DatePicker::make('created_until')->label('Até'),
-                ])
-                ->query(function ($query, array $data) {
-                    return $query
-                        ->when($data['created_from'], fn ($q, $date) => $q->whereDate('created_at', '>=', $date))
-                        ->when($data['created_until'], fn ($q, $date) => $q->whereDate('created_at', '<=', $date));
-                }),
-        ])
-        ->actions([
-            EditAction::make()->iconButton(),
-
-            // ==========================================
-            // 🚀 BOTÕES FISCAIS (Ajustado com Danfce para Bobinas Térmicas)
-            // ==========================================
-            ActionGroup::make([
-                // 1. Download Nativo do XML
-                Action::make('download_xml')
-                    ->label('Baixar XML')
-                    ->icon('heroicon-o-code-bracket')
-                    ->color('info')
-                    ->action(function ($record) {
-                        $doc = $record->fiscalDocument;
-                        return response()->streamDownload(function () use ($doc) {
-                            echo $doc->xml_content;
-                        }, "{$doc->access_key}.xml");
+                Tables\Columns\TextColumn::make('source')
+                    ->label('Origem')
+                    ->badge()
+                    ->color(fn ($state) => str_starts_with((string) $state, 'customer_app') ? 'info' : 'gray')
+                    ->formatStateUsing(fn ($state) => match ((string) $state) {
+                        'customer_app'       => 'CustomerApp',
+                        'customer_app_table' => 'Mesa QR',
+                        'pos_app'            => 'PDV',
+                        'cashier'            => 'Caixa',
+                        'team_app'           => 'TeamApp',
+                        'kiosk'              => 'Totem',
+                        'backoffice'         => 'Retaguarda',
+                        default              => (string) ($state ?: 'Sistema'),
                     }),
 
-                // 2. Visualização do DANFE NFC-e usando Danfce 🚀
-                Action::make('view_danfe')
-                    ->label('Ver Cupom (DANFE)')
-                    ->icon('heroicon-o-document-text')
-                    ->color('gray')
-                    ->modalHeading(fn ($record) => "NFC-e Autorizada - Pedido #{$record->id}")
-                    ->modalWidth('2xl') // Reduzido de 7xl para 2xl pois cupom térmico é estreito e fica lindo compacto!
-                    ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('Fechar')
-                    ->modalContent(function ($record) {
-                        try {
-                            // 🚀 CORREÇÃO DEFINITIVA: Instancia a classe Danfce para o Modelo 65
-                            $danfce = new \NFePHP\DA\NFe\Danfce($record->fiscalDocument->xml_content);
-                            $danfce->creditsIntegratorFooter("Gerado por Brasume ERP");
-                            $pdf = $danfce->render();
-                            $base64 = base64_encode($pdf);
-                            return new HtmlString("<iframe src='data:application/pdf;base64,{$base64}#toolbar=0' width='100%' height='650px' style='border: none; border-radius: 8px;'></iframe>");
-                        } catch (\Exception $e) {
-                            return new HtmlString("<div class='p-4 text-red-500'>Erro ao gerar PDF do Cupom: {$e->getMessage()}</div>");
+                Tables\Columns\TextColumn::make('type')
+                    ->label('Modalidade')
+                    ->badge()
+                    ->color('primary')
+                    ->formatStateUsing(fn ($state) => match ((string) $state) {
+                        'delivery' => 'Delivery',
+                        'pickup'   => 'Retirada',
+                        'counter'  => 'Balcão',
+                        'table'    => 'Mesa',
+                        default    => (string) ($state ?: '—'),
+                    }),
+
+                Tables\Columns\TextColumn::make('customer_info')
+                    ->label('Cliente & Perfil')
+                    ->state(function (Order $record) {
+                        if ($record->customer) {
+                            return $record->customer->name;
                         }
+                        if ($record->customer_name) {
+                            return $record->customer_name;
+                        }
+                        if ($record->table_number || $record->diningTable) {
+                            return $record->diningTable?->name ?? "Mesa {$record->table_number}";
+                        }
+                        return 'Não Identificado';
+                    })
+                    ->description(function (Order $record) {
+                        $profile = OrderInfolist::resolveCustomerProfile($record);
+                        $phone = $record->customer_phone ?: $record->customer?->phone;
+                        $phoneText = $phone ? " • {$phone}" : '';
+                        return "{$profile['label']}{$phoneText}";
+                    })
+                    ->searchable(['customer_name', 'customer_phone']),
+
+                Tables\Columns\TextColumn::make('payment_summary')
+                    ->label('Pagamento / Promessa')
+                    ->state(function (Order $record) {
+                        if ($record->payments && $record->payments->where('is_paid', true)->isNotEmpty()) {
+                            return $record->payments
+                                ->where('is_paid', true)
+                                ->pluck('method')
+                                ->unique()
+                                ->implode(' + ');
+                        }
+
+                        if (is_array($record->payment_intent_methods) && !empty($record->payment_intent_methods)) {
+                            $methods = collect($record->payment_intent_methods)
+                                ->pluck('method_name')
+                                ->filter()
+                                ->unique()
+                                ->implode(' + ');
+                            return $methods ? "Promessa: {$methods}" : 'Promessa não detalhada';
+                        }
+
+                        return OrderInfolist::formatIntentStatus($record->payment_intent_status);
+                    })
+                    ->description(fn (Order $record) => OrderInfolist::formatPaymentStatus($record->payment_status)),
+
+                Tables\Columns\TextColumn::make('total')
+                    ->label('Total')
+                    ->money('BRL')
+                    ->weight('bold')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('status')
+                    ->label('Status')
+                    ->badge()
+                    ->color(fn ($state) => OrderInfolist::statusColor((string) $state))
+                    ->formatStateUsing(fn ($state) => OrderInfolist::formatStatus((string) $state)),
+            ])
+            ->defaultSort('created_at', 'desc')
+            ->filters([
+                Tables\Filters\SelectFilter::make('status')
+                    ->label('Status do Pedido')
+                    ->options(\App\Enums\OrderStatus::class)
+                    ->multiple(),
+
+                Tables\Filters\SelectFilter::make('type')
+                    ->label('Modalidade')
+                    ->options(\App\Enums\OrderType::class),
+
+                Tables\Filters\SelectFilter::make('source')
+                    ->label('Canal / Origem')
+                    ->options([
+                        'customer_app'       => 'CustomerApp (Delivery/Retirada)',
+                        'customer_app_table' => 'CustomerApp (Mesa QR)',
+                        'pos_app'            => 'PDV / Balcão',
+                        'cashier'            => 'Frente de Caixa',
+                        'team_app'           => 'App Equipe / Garçom',
+                        'kiosk'              => 'Totem',
+                        'backoffice'         => 'Retaguarda / Importação',
+                    ]),
+
+                Tables\Filters\SelectFilter::make('customer_profile')
+                    ->label('Perfil do Cliente')
+                    ->options([
+                        'registered' => 'Cliente Cadastrado (Com Conta)',
+                        'guest'      => 'Visitante (Guest / Sem Conta)',
+                        'anonymous'  => 'Avulso (Sem Vínculo)',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return match ($data['value'] ?? null) {
+                            'registered' => $query->whereHas('customer', fn (Builder $q) => $q->whereNotNull('user_id')),
+                            'guest'      => $query->whereHas('customer', fn (Builder $q) => $q->whereNull('user_id')),
+                            'anonymous'  => $query->whereNull('customer_id'),
+                            default      => $query,
+                        };
+                    }),
+
+                Tables\Filters\SelectFilter::make('payment_status')
+                    ->label('Status Financeiro')
+                    ->options(\App\Enums\PaymentStatus::class),
+
+                Tables\Filters\Filter::make('created_at')
+                    ->form([
+                        DatePicker::make('created_from')->label('De'),
+                        DatePicker::make('created_until')->label('Até'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when($data['created_from'] ?? null, fn (Builder $q, $date) => $q->whereDate('created_at', '>=', $date))
+                            ->when($data['created_until'] ?? null, fn (Builder $q, $date) => $q->whereDate('created_at', '<=', $date));
                     }),
             ])
-            ->label('Fiscal')
-            ->icon('heroicon-m-document-check')
-            ->color('gray')
-            ->tooltip('Ações Fiscais (NFC-e)')
-            ->visible(fn ($record) => $record->fiscalDocument && filled($record->fiscalDocument->xml_content)),
+            ->actions([
+                ViewAction::make()
+                    ->label('Detalhes')
+                    ->iconButton(),
 
-            // ==========================================
-            // BOTÃO DA INTELIGÊNCIA DE EXPEDIÇÃO
-            // ==========================================
-            Action::make('despachar')
-                ->label('Despachar')
-                ->icon('heroicon-m-truck')
-                ->color('success')
-                ->hidden(fn ($record) => in_array($record->status, ['out_for_delivery', 'closed', 'cancelled']) || in_array($record->type, ['table', 'counter']))
-                ->fillForm(function ($record): array {
-                    $totalPoints = 0;
+                ActionGroup::make([
+                    Action::make('download_xml')
+                        ->label('Baixar XML')
+                        ->icon('heroicon-o-code-bracket')
+                        ->color('info')
+                        ->action(function (Order $record) {
+                            $doc = $record->fiscalDocument;
+                            return response()->streamDownload(function () use ($doc) {
+                                echo $doc->xml_content;
+                            }, "{$doc->access_key}.xml");
+                        }),
 
-                    if ($record->items) {
-                        foreach ($record->items as $item) {
-                            $pontosDoProduto = $item->product->packaging_points ?? 0;
-                            $totalPoints += ($pontosDoProduto * $item->quantity);
-                        }
-                    }
-
-                    $sacolaIdeal = Product::whereIn('type', [ProductType::PACKAGING->value, ProductType::CONSUMABLE->value])
-                        ->where('packaging_points', '>=', $totalPoints)
-                        ->where('packaging_points', '>', 0)
-                        ->orderBy('packaging_points', 'asc')
-                        ->first();
-
-                    return [
-                        'packaging_product_id' => $sacolaIdeal ? $sacolaIdeal->id : null,
-                        'packaging_qty' => $sacolaIdeal ? 1 : 0,
-                    ];
-                })
-                ->form([
-                    Select::make('packaging_product_id')
-                        ->label('Embalagem Sugerida')
-                        ->options(Product::whereIn('type', [ProductType::PACKAGING->value, ProductType::CONSUMABLE->value])->where('status', '!=', 'archived')->pluck('name', 'id'))
-                        ->searchable()
-                        ->required()
-                        ->helperText('O sistema calculou o volume deste pedido e sugeriu a embalagem ideal.'),
-
-                    TextInput::make('packaging_qty')
-                        ->label('Quantidade Utilizada')
-                        ->numeric()
-                        ->default(1)
-                        ->required(),
+                    Action::make('view_danfe')
+                        ->label('Ver Cupom (DANFE)')
+                        ->icon('heroicon-o-document-text')
+                        ->color('gray')
+                        ->modalHeading(fn (Order $record) => "NFC-e Autorizada - Pedido #{$record->id}")
+                        ->modalWidth('2xl')
+                        ->modalSubmitAction(false)
+                        ->modalCancelActionLabel('Fechar')
+                        ->modalContent(function (Order $record) {
+                            try {
+                                $danfce = new \NFePHP\DA\NFe\Danfce($record->fiscalDocument->xml_content);
+                                $danfce->creditsIntegratorFooter('Gerado por Brasume ERP');
+                                $pdf = $danfce->render();
+                                $base64 = base64_encode($pdf);
+                                return new HtmlString("<iframe src='data:application/pdf;base64,{$base64}#toolbar=0' width='100%' height='650px' style='border: none; border-radius: 8px;'></iframe>");
+                            } catch (\Throwable $e) {
+                                return new HtmlString("<div class='p-4 text-red-500'>Erro ao gerar PDF do Cupom: {$e->getMessage()}</div>");
+                            }
+                        }),
                 ])
-                ->modalSubmitActionLabel('Confirmar Expedição')
-                ->action(function (array $data, $record): void {
-                    $sacola = Product::find($data['packaging_product_id']);
-
-                    if ($sacola && $sacola->track_inventory) {
-                        $sacola->current_stock -= $data['packaging_qty'];
-                        $sacola->save();
-                    }
-
-                    $record->status = \App\Enums\OrderStatus::OUT_FOR_DELIVERY->value;
-                    $record->save();
-
-                    Notification::make()
-                        ->title('Pedido Despachado!')
-                        ->body('Estoque de embalagem baixado e pedido a caminho.')
-                        ->success()
-                        ->send();
-                }),
-        ])
-        ->bulkActions([
-            BulkActionGroup::make([
-                DeleteBulkAction::make(),
-            ]),
-        ]);
+                    ->label('Fiscal')
+                    ->icon('heroicon-m-document-check')
+                    ->color('gray')
+                    ->tooltip('Ações Fiscais (NFC-e)')
+                    ->visible(fn (Order $record) => $record->fiscalDocument && filled($record->fiscalDocument->xml_content)),
+            ])
+            ->bulkActions([]);
     }
 }

@@ -151,6 +151,18 @@ export function useCustomerCheckoutNavigation(props, cartContext, activeTab, isC
     };
 
     const cancelPixPayment = (forceCancelOrder = false) => {
+        const existingPaid = (page.props.myActiveOrders || []).find(
+            o => String(o.id) === String(activeOrderId.value) && o.payment_status === 'paid'
+        );
+        if (existingPaid) {
+            isCheckoutModalVisible.value = false;
+            activePixData.value = null;
+            activeOrderId.value = null;
+            sessionStorage.removeItem('customer_active_pix_data');
+            sessionStorage.removeItem('customer_active_pix_order_id');
+            return;
+        }
+
         if (activeOrderId.value && forceCancelOrder) {
             router.post(route('customer.orders.cancel', activeOrderId.value), {}, {
                 preserveState: true,

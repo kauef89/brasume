@@ -9,10 +9,9 @@ export function useCheckoutPix(order, handlePixApprovedCallback, toast) {
     const checkPendingPix = () => {
         if (!order.value) return;
         const hasPixIntent = order.value.payment_intent_status === 'pending_pix';
-        const hasTxidAndPayload = Boolean(order.value.txid && order.value.pix_payload);
         const isPendingOrPartial = ['pending', 'pending_payment', 'partial'].includes(order.value.payment_status);
 
-        if ((hasPixIntent || (hasTxidAndPayload && isPendingOrPartial)) && order.value.payment_intent_status !== 'manual') {
+        if (hasPixIntent && isPendingOrPartial) {
             showPixPanel.value = true;
         }
     };
@@ -56,28 +55,40 @@ export function useCheckoutPix(order, handlePixApprovedCallback, toast) {
 
         showPixPanel.value = false; // Fecha a tela de imediato por UX
         
+        let freshOrder = null;
         try {
-            // 🚀 Cancelamento silencioso usando axios
-            await (window.axios || axios).post(route('operations.orders.cancel-intent', orderId));
+            const resp = await (window.axios || axios).post(route('operations.orders.cancel-intent', orderId));
+            freshOrder = resp.data?.order || null;
         } catch (e) {
             console.warn('PIX já cancelado ou erro de rede', e);
         }
 
-        // Limpa referências reativas cruzadas
-        if (order.value) {
-            order.value.txid = null;
-            order.value.pix_payload = null;
-            order.value.pix_expires_at = null;
-            order.value.payment_intent_status = null;
-        }
+        const applyCancellationState = (target) => {
+            if (!target) return;
+            target.txid = null;
+            target.pix_payload = null;
+            target.pix_expires_at = null;
+            target.payment_intent_status = freshOrder?.payment_intent_status ?? 'pending_choice';
+            target.payment_intent_methods = freshOrder?.payment_intent_methods ?? null;
+            if (freshOrder?.status) target.status = freshOrder.status;
+            if (Array.isArray(freshOrder?.payments)) {
+                target.payments = freshOrder.payments;
+            } else if (Array.isArray(target.payments)) {
+                target.payments = target.payments.map(p =>
+                    (p.status === 'pending' && !p.is_paid) ? { ...p, status: 'cancelled' } : p
+                );
+            }
+        };
 
+        applyCancellationState(order.value);
         const fromList = (page.props.initialOrders || []).find(o => o.id === orderId);
-        if (fromList) {
-            fromList.txid = null;
-            fromList.pix_payload = null;
-            fromList.pix_expires_at = null;
-            fromList.payment_intent_status = null;
-        }
+        applyCancellationState(fromList);
+
+        router.reload({
+            only: ['order', 'initialOrders'],
+            preserveState: true,
+            preserveScroll: true
+        });
 
         if (isAutoExpire) {
             toast.add({ severity: 'error', summary: 'PIX Expirado', detail: 'O tempo limite esgotou-se. A cobrança foi descartada.', life: 5000 });

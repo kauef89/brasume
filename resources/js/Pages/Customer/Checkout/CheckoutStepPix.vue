@@ -149,6 +149,12 @@ watch(() => page.props.myActiveOrders, (orders) => {
     }
 }, { deep: true });
 
+function handleAppResume() {
+    if (document.visibilityState === 'visible') {
+        checkPaymentStatus();
+    }
+}
+
 onMounted(() => {
     emit('update-header', {
         title: 'Pagamento PIX',
@@ -157,11 +163,16 @@ onMounted(() => {
         maxProgress: 4
     });
 
-    pollInterval.value = setInterval(checkPaymentStatus, 5000);
+    checkPaymentStatus();
+    pollInterval.value = setInterval(checkPaymentStatus, 4000);
+    document.addEventListener('visibilitychange', handleAppResume);
+    window.addEventListener('focus', checkPaymentStatus);
 });
 
 onUnmounted(() => {
     clearInterval(timer.value);
     clearInterval(pollInterval.value);
+    document.removeEventListener('visibilitychange', handleAppResume);
+    window.removeEventListener('focus', checkPaymentStatus);
 });
 </script>

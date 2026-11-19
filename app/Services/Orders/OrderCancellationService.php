@@ -36,32 +36,61 @@ class OrderCancellationService
 
     public function cancelByCustomer(Order $order, ?int $activeCustomerId): void
     {
-        if ($order->customer_id && (int) $order->customer_id !== (int)$activeCustomerId) {
-            throw new Exception("Operação não autorizada. Este pedido não pertence à sua conta.", 403);
-        }
+        $lockedOrder = DB::transaction(function () use ($order, $activeCustomerId) {
+            $locked = Order::where('id', $order->id)->lockForUpdate()->firstOrFail();
 
-        if (!in_array($order->status, ['pending', 'pending_payment'])) {
-            throw new Exception("Este pedido já entrou em preparação e não pode mais ser cancelado.");
-        }
+            if ($locked->customer_id && (int) $locked->customer_id !== (int) $activeCustomerId) {
+                throw new Exception("Operação não autorizada. Este pedido não pertence à sua conta.", 403);
+            }
 
-        $this->executeB2CCancellation($order, 'Cancelado pelo cliente via App');
+            $hasSettledPayment = $locked->payment_status === 'paid'
+                || $locked->payment_intent_status === 'paid'
+                || $locked->payments()->where('is_paid', true)->exists();
 
-        $this->notificationDispatcher->notifyTeamOfCancellation($order,
-            "ALERTA: O cliente cancelou o pedido #{$order->id} pelo App!"
+            if ($hasSettledPayment) {
+                throw new Exception("Este pedido já teve o pagamento confirmado e não pode mais ser cancelado pelo App.", 409);
+            }
+
+            if (!in_array($locked->status, ['pending', 'pending_payment'])) {
+                throw new Exception("Este pedido já entrou em preparação e não pode mais ser cancelado.");
+            }
+
+            $this->executeB2CCancellation($locked, 'Cancelado pelo cliente via App');
+
+            return $locked;
+        });
+
+        $this->notificationDispatcher->notifyTeamOfCancellation($lockedOrder,
+            "ALERTA: O cliente cancelou o pedido #{$lockedOrder->id} pelo App!"
         );
     }
 
-    public function cancelBySystem(Order $order, string$reason = 'Cancelado pelo sistema'): void
+    public function cancelBySystem(Order $order, string $reason = 'Cancelado pelo sistema'): void
     {
-        if (!in_array($order->status, ['pending', 'pending_payment'])) {
-            return;
+        $lockedOrder = DB::transaction(function () use ($order, $reason) {
+            $locked = Order::where('id', $order->id)->lockForUpdate()->first();
+            if (!$locked) {
+                return null;
+            }
+
+            $hasSettledPayment = $locked->payment_status === 'paid'
+                || $locked->payment_intent_status === 'paid'
+                || $locked->payments()->where('is_paid', true)->exists();
+
+            if ($hasSettledPayment || !in_array($locked->status, ['pending', 'pending_payment'])) {
+                return null;
+            }
+
+            $this->executeB2CCancellation($locked, $reason);
+
+            return $locked;
+        });
+
+        if ($lockedOrder) {
+            $this->notificationDispatcher->notifyTeamOfCancellation($lockedOrder,
+                "Sistema: Pedido #{$lockedOrder->id} cancelado ({$reason})."
+            );
         }
-
-        $this->executeB2CCancellation($order,$reason);
-
-        $this->notificationDispatcher->notifyTeamOfCancellation($order,
-            "Sistema: Pedido #{$order->id} cancelado ({$reason})."
-        );
     }
 
     protected function executeB2CCancellation(Order $order, string$reason): void

@@ -62,6 +62,15 @@ class OrderStatusService
             return;
         }
 
+        $spedService = app(\App\Services\Fiscal\SpedDocumentService::class);
+        if ($spedService->isFiscallyProhibited($order)) {
+            $order->update([
+                'fiscal_status' => 'skipped',
+                'fiscal_error'  => null,
+            ]);
+            return;
+        }
+
         $order->loadMissing('payments.paymentMethod');
 
         // Se qualquer forma de pagamento usada tiver auto_fiscal_emission = false, dispensa a emissão

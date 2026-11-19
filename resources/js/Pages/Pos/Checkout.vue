@@ -46,6 +46,8 @@
             :order-payments="liveOrder.payments || []"
             :search-query="itemSearchQuery"
             @rollback-payment="handleRollbackPayment"
+            @cancel-pending-pix="handleCancelPendingPix"
+            @view-pix="showPixPanel = true"
             @increment="increment"
             @decrement="decrement"
             @divide-item="handleDivideItem"
@@ -64,11 +66,11 @@
         <div v-if="showPixPanel" class="flex flex-col h-full w-full bg-surface-2 p-6 justify-center" key="pix-phase">
             <PixWaitingArea
                 :order-id="liveOrder.id"
-                :qr-code-string="liveOrder.pix_payload"
-                :txid="liveOrder.txid"
+                :qr-code-string="resolvedPixPayload"
+                :txid="liveOrder.txid || pendingPixRecord?.txid"
                 :expires-at="liveOrder.pix_expires_at"
                 @hide="showPixPanel = false"
-                @cancel="cancelPixPayment(false)"
+                @cancel="handleCancelPendingPix"
                 @refresh="refreshPixPayment"
                 @expired="cancelPixPayment(true)"
                 @payment-approved="onPixApprovedByWebhook"
@@ -295,9 +297,13 @@ watch(
 
         const calcPaid = totalPaidVal !== undefined && totalPaidVal !== null
             ? Number(totalPaidVal)
-            : (Array.isArray(paymentsList) ? paymentsList.filter(p => p.status !== 'cancelled').reduce((acc, p) => acc + Number(p.amount || 0), 0) : 0);
+            : (Array.isArray(paymentsList)
+                ? paymentsList
+                    .filter(p => p.status !== 'cancelled' && (p.is_paid || ['paid', 'completed'].includes(p.status)))
+                    .reduce((acc, p) => acc + Number(p.amount || 0), 0)
+                : 0);
 
-        const isFullyPaid = payStatus === 'paid' || (calcPaid >= orderTotal - 0.05 && orderTotal > 0);
+        const isFullyPaid = ['paid', 'settled_internal'].includes(payStatus) || (calcPaid >= orderTotal - 0.05 && orderTotal > 0);
         const isClosedOrFinal = ['closed', 'completed'].includes(orderStatus);
 
         if (isClosedOrFinal || isFullyPaid) {
@@ -376,8 +382,18 @@ const {
     toast
 });
 
+const pendingPixRecord = computed(() => {
+    return (liveOrder.value?.payments || []).find(p => p.status === 'pending' && !p.is_paid) || null;
+});
+
+const resolvedPixPayload = computed(() => {
+    return liveOrder.value?.pix_payload || pendingPixRecord.value?.pix_payload || null;
+});
+
 const totalAlreadyPaid = computed(() => {
-    return (liveOrder.value?.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    return (liveOrder.value?.payments || [])
+        .filter(p => p.status !== 'cancelled' && (p.is_paid || ['paid', 'completed'].includes(p.status)))
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 });
 
 const pendingOriginalBalance = computed(() => {
@@ -683,6 +699,12 @@ const handleSaveNewCustomer = (customerData) => {
 const handlePixApproved = () => { isPostPaymentPhase.value = true; };
 
 const { showPixPanel, cancelPixPayment, refreshPixPayment, onPixApprovedByWebhook } = useCheckoutPix(orderRef, handlePixApproved, toast);
+
+const handleCancelPendingPix = async () => {
+    await cancelPixPayment(false);
+    stagedPayments.value = [];
+    clearDivisor();
+};
 
 const handlePostPaymentActionIntercepted = (action) => {
     const type = typeof action === 'string' ? action : action?.type;

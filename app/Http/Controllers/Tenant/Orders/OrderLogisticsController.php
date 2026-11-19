@@ -118,6 +118,14 @@ class OrderLogisticsController extends Controller
             $methods = json_decode($methods, true) ?: $methods;
         }
 
+        $hasPendingPix = in_array($order->payment_intent_status, ['pix_waiting', 'pending_pix'], true)
+            || $order->payments()->where('status', 'pending')->where('is_paid', false)->exists();
+
+        if ($hasPendingPix && !in_array($status, ['pix_waiting', 'pending_pix'], true)) {
+            app(\App\Services\Orders\OrderPixService::class)->cancelIntent($order, true);
+            $order->refresh();
+        }
+
         $order->update([
             'payment_intent_status'  => $status,
             'payment_intent_methods' => $methods,

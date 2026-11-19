@@ -67,6 +67,9 @@ class CustomerCheckoutController extends Controller
 
             return redirect()->back()->with('success', 'Pedido cancelado com sucesso.');
         } catch (\Exception $e) {
+            if ($e->getCode() === 409) {
+                return redirect()->back()->with('success', 'Pagamento já confirmado! Seu pedido já está sendo preparado.');
+            }
             return redirect()->back()->with('error', $e->getMessage());
         }
     }

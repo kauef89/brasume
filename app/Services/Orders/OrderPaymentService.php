@@ -86,11 +86,23 @@ class OrderPaymentService
                 throw new Exception("Operação negada: O Pedido #{$lockedOrder->id} já se encontra finalizado ou cancelado.");
             }
 
-            $currentPaid = (float) $lockedOrder->payments()->sum('amount');
+            // Cancela qualquer intenção PIX pendente não liquidada antes de processar pagamento presencial
+            $lockedOrder->payments()
+                ->where('is_paid', false)
+                ->where('status', 'pending')
+                ->update(['status' => 'cancelled']);
+
+            if ($lockedOrder->txid || $lockedOrder->pix_payload) {
+                $lockedOrder->txid = null;
+                $lockedOrder->pix_payload = null;
+                $lockedOrder->pix_expires_at = null;
+            }
+
+            $currentPaid = (float) $lockedOrder->payments()->where('is_paid', true)->sum('amount');
             $currentTotal = (float) $lockedOrder->total;
 
             // 🛡️ GUARDA 2: Bloqueia se o pedido já estiver quitado
-            if ($lockedOrder->payment_status === 'paid' && $currentTotal > 0 && ($currentTotal - $currentPaid) <= 0.05) {
+            if (in_array($lockedOrder->payment_status, ['paid', 'settled_internal'], true) && $currentTotal > 0 && ($currentTotal - $currentPaid) <= 0.05) {
                 throw new Exception("Operação negada: O Pedido #{$lockedOrder->id} já se encontra integralmente quitado.");
             }
 
@@ -209,7 +221,7 @@ class OrderPaymentService
                 $this->settlementService->settleItems($order, $data['items'], $targetPayment, $fallbackAmount);
             }
 
-            $totalPaid = (float) $order->payments()->sum('amount');
+            $totalPaid = (float) $order->payments()->where('is_paid', true)->sum('amount');
             $excess = round($totalPaid - $expectedTotal, 2);
             $areAllItemsPaid = $this->settlementService->areAllItemsPaid($order);
 
@@ -231,11 +243,33 @@ class OrderPaymentService
                 ]);
             }
 
+            $settledPayments = $order->payments()->with('paymentMethod')->where('is_paid', true)->get();
+            $commercialPaid = (float) $settledPayments->filter(function ($p) {
+                $engine = is_object($p->paymentMethod?->engine_type)
+                    ? $p->paymentMethod->engine_type->value
+                    : ($p->paymentMethod?->engine_type ?? '');
+                return !in_array($engine, ['loss', 'allowance', 'internal', 'internal_loyalty'], true);
+            })->sum('amount');
+
+            $hasNonRevenueEngine = $settledPayments->contains(function ($p) {
+                $engine = is_object($p->paymentMethod?->engine_type)
+                    ? $p->paymentMethod->engine_type->value
+                    : ($p->paymentMethod?->engine_type ?? '');
+                return in_array($engine, ['loss', 'allowance', 'internal'], true);
+            });
+
             // Atualização do status financeiro do pedido
             if ($totalPaid >= ($expectedTotal - 0.05) || $areAllItemsPaid || $excess > 0.02) {
                 $order->service_fee = $requestedServiceFee;
                 $order->total = $expectedTotal;
-                $order->payment_status = 'paid';
+                $order->payment_status = ($commercialPaid <= 0.01 && $hasNonRevenueEngine)
+                    ? 'settled_internal'
+                    : 'paid';
+
+                if ($hasNonRevenueEngine) {
+                    $order->fiscal_status = 'skipped';
+                    $order->fiscal_error = null;
+                }
 
                 OrderItem::where('order_id', $order->id)
                     ->where('status', '!=', 'cancelled')
@@ -252,6 +286,11 @@ class OrderPaymentService
                 $order->service_fee = $requestedServiceFee;
                 $order->total = $expectedTotal;
                 $order->payment_status = 'partial';
+
+                if ($hasNonRevenueEngine) {
+                    $order->fiscal_status = 'skipped';
+                    $order->fiscal_error = null;
+                }
             }
 
             $order->save();
@@ -297,7 +336,7 @@ class OrderPaymentService
                 $order->recalculatePaymentStatus();
 
         // 🚀 FECHAMENTO AUTOMÁTICO (Balcão)
-        if ($order->type === 'counter' && $order->payment_status === 'paid') {
+        if ($order->type === 'counter' && in_array($order->payment_status, ['paid', 'settled_internal'], true)) {
             $order->status = 'closed';
         }
 
@@ -327,8 +366,8 @@ class OrderPaymentService
      */
     public function resolveOrderCompletion(Order $order): bool
     {
-        $shouldClose = ($order->type === 'delivery' && in_array($order->status, ['dispatched', 'delivered']) && $order->payment_status === 'paid')
-            || (in_array($order->type, ['table', 'counter'], true) && $order->payment_status === 'paid');
+        $shouldClose = ($order->type === 'delivery' && in_array($order->status, ['dispatched', 'delivered']) && in_array($order->payment_status, ['paid', 'settled_internal'], true))
+            || (in_array($order->type, ['table', 'counter'], true) && in_array($order->payment_status, ['paid', 'settled_internal'], true));
 
         if (!$shouldClose) {
             return false;

@@ -302,15 +302,34 @@ class Order extends Model
 
     public function recalculatePaymentStatus(): void
     {
-        $totalPaid = $this->total_paid;
+        $settledPayments = $this->payments()
+            ->with('paymentMethod')
+            ->where('is_paid', true)
+            ->get();
+
+        $totalSettled = (float) $settledPayments->sum('amount');
         $totalOrder = (float) $this->total;
 
-        if ($totalPaid <= 0) {
+        if ($totalSettled <= 0) {
             $status = 'pending';
-        } elseif ($totalPaid < ($totalOrder - 0.01)) {
+        } elseif ($totalSettled < ($totalOrder - 0.01)) {
             $status = 'partial';
         } else {
-            $status = 'paid';
+            $commercialPaid = (float) $settledPayments->filter(function ($payment) {
+                $engine = is_object($payment->paymentMethod?->engine_type)
+                    ? $payment->paymentMethod->engine_type->value
+                    : ($payment->paymentMethod?->engine_type ?? '');
+                return !in_array($engine, ['loss', 'allowance', 'internal', 'internal_loyalty'], true);
+            })->sum('amount');
+
+            $hasNonRevenue = $settledPayments->contains(function ($payment) {
+                $engine = is_object($payment->paymentMethod?->engine_type)
+                    ? $payment->paymentMethod->engine_type->value
+                    : ($payment->paymentMethod?->engine_type ?? '');
+                return in_array($engine, ['loss', 'allowance', 'internal'], true);
+            });
+
+            $status = ($commercialPaid <= 0.01 && $hasNonRevenue) ? 'settled_internal' : 'paid';
         }
 
         $this->updateQuietly(['payment_status' => $status]);

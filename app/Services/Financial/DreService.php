@@ -27,11 +27,30 @@ class DreService
 
     public function calculate(): array
     {
-        // 1. RECEITA OPERACIONAL BRUTA
-        $currentRevenue = (float) Order::query()
+        // 1. RECEITA OPERACIONAL BRUTA (Exclui Perdas, Cortesias, Vale-Alimentação e Consumo Interno)
+        $grossOrdersTotal = (float) Order::query()
             ->whereBetween('created_at', [$this->startDate, $this->endDate])
             ->whereNotIn('status', ['cancelled', 'canceled', 'rejected', 'draft'])
+            ->where(function ($q) {
+                $q->whereNull('payment_status')
+                  ->orWhere('payment_status', '!=', 'settled_internal');
+            })
             ->sum('total');
+
+        $nonRevenueDeductions = (float) DB::table('payments')
+            ->join('orders', 'orders.id', '=', 'payments.order_id')
+            ->join('payment_methods', 'payment_methods.id', '=', 'payments.payment_method_id')
+            ->whereBetween('orders.created_at', [$this->startDate, $this->endDate])
+            ->whereNotIn('orders.status', ['cancelled', 'canceled', 'rejected', 'draft'])
+            ->where(function ($q) {
+                $q->whereNull('orders.payment_status')
+                  ->orWhere('orders.payment_status', '!=', 'settled_internal');
+            })
+            ->where('payments.status', '!=', 'cancelled')
+            ->whereIn('payment_methods.engine_type', ['loss', 'allowance', 'internal'])
+            ->sum('payments.amount');
+
+        $currentRevenue = max(0, round($grossOrdersTotal - $nonRevenueDeductions, 2));
 
         $legacyRevenue = 0.0;
         if (class_exists(\App\Models\LegacyOrder::class)) {

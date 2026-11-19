@@ -41,12 +41,18 @@
             </button>
         </div>
 
-        <div class="flex items-center justify-between w-full gap-3 mt-2 border-t border-white/10 pt-4">
-            <button @click="$emit('hide')" class="px-6 h-10 rounded-full text-surface-muted hover:text-white font-black text-sm uppercase tracking-widest transition-colors outline-none cursor-pointer border-none bg-transparent">
-                Voltar / Minimizar
-            </button>
-            <button @click="$emit('refresh')" class="flex-1 h-10 rounded-xl text-white bg-white/10 hover:bg-white/20 font-black text-[10px] uppercase tracking-widest transition-colors outline-none cursor-pointer border-none">
-                Gerar Novo Código
+        <div class="flex flex-col w-full gap-2 mt-2 border-t border-white/10 pt-4">
+            <div class="flex items-center justify-between w-full gap-2">
+                <button @click="$emit('hide')" class="px-4 h-10 rounded-xl text-surface-muted hover:text-white font-black text-[10px] uppercase tracking-widest transition-colors outline-none cursor-pointer border-none bg-transparent">
+                    Minimizar
+                </button>
+                <button @click="$emit('refresh')" class="flex-1 h-10 rounded-xl text-white bg-white/10 hover:bg-white/20 font-black text-[10px] uppercase tracking-widest transition-colors outline-none cursor-pointer border-none">
+                    Gerar Novo Código
+                </button>
+            </div>
+            <button @click="$emit('cancel')" class="w-full h-10 rounded-xl text-danger-400 bg-danger-500/10 hover:bg-danger-500/20 border border-danger-500/20 font-black text-[10px] uppercase tracking-widest transition-colors outline-none cursor-pointer flex items-center justify-center gap-1.5">
+                <i class="pi pi-times-circle text-xs"></i>
+                Cancelar Cobrança PIX
             </button>
         </div>
     </div>
@@ -66,7 +72,7 @@ const props = defineProps({
     isLoading: { type: Boolean, default: false }
 });
 
-const emit = defineEmits(['hide', 'refresh', 'expired']);
+const emit = defineEmits(['hide', 'cancel', 'refresh', 'expired']);
 const toast = useToast();
 
 const calculateRemainingSeconds = () => {

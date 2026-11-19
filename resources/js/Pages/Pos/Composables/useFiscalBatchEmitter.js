@@ -17,12 +17,19 @@ export function useFiscalBatchEmitter(props, unifiedHistory) {
             const isNotCancelled = order.status !== 'cancelled';
             const isNotAuthorized = order.fiscal_status !== 'authorized';
             const isNotSkipped = order.fiscal_status !== 'skipped';
+            const isNotInternal = order.payment_status !== 'settled_internal';
+            const hasExemptPayment = Array.isArray(order.payments) && order.payments.some(p => {
+                const eng = typeof p.payment_method?.engine_type === 'object'
+                    ? p.payment_method?.engine_type?.value
+                    : (p.payment_method?.engine_type || p.engine_type || '');
+                return ['loss', 'allowance', 'internal'].includes(eng);
+            });
             const hasPayment = order.payment_status === 'paid' || (Array.isArray(order.payments) && order.payments.length > 0);
             const hasFinancialValue = Number(order.total || 0) > 0 || Number(order.subtotal || 0) > 0;
             const isSettled = ['closed', 'completed'].includes(order.status) || order.payment_status === 'paid';
             const isNotOpenTable = !(order.type === 'table' && order.status !== 'closed' && order.payment_status !== 'paid');
 
-            return isNotCancelled && isNotAuthorized && isNotSkipped && hasPayment && hasFinancialValue && isSettled && isNotOpenTable;
+            return isNotCancelled && isNotAuthorized && isNotSkipped && isNotInternal && !hasExemptPayment && hasPayment && hasFinancialValue && isSettled && isNotOpenTable;
         });
     });
 

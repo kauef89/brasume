@@ -65,6 +65,8 @@
             :paid-items="paidItems"
             :mode="mode"
             @rollback-payment="$emit('rollback-payment', $event)"
+            @cancel-pending-pix="$emit('cancel-pending-pix', $event)"
+            @view-pix="$emit('view-pix', $event)"
         />
 
         <ItemActionPopover
@@ -102,7 +104,9 @@ const emit = defineEmits([
     "toggle-select",
     "toggle-all",
     "action",
-    "rollback-payment"
+    "rollback-payment",
+    "cancel-pending-pix",
+    "view-pix"
 ]);
 
 const { formatModifiersList } = useOrderFormatting();

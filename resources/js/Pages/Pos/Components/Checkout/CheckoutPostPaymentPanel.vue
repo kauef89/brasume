@@ -27,9 +27,10 @@
 
             <!-- STATUS FISCAL (NFC-e) -->
             <div v-if="!isCancelled && isFiscalEmitter" class="flex justify-center mb-3 animate-in fade-in slide-in-from-bottom-2">
-                <!-- CASO 1: FATURAMENTO R$ 0,00 (DISPENSADO DE NFC-e) -->
-                <span v-if="isZeroRevenue" class="bg-surface-2 text-surface-muted border border-surface-border px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-sm">
-                    <i class="pi pi-info-circle text-xs text-amber-500"></i> NFC-e Dispensada (Faturamento R$ 0,00)
+                <!-- CASO 1: FATURAMENTO R$ 0,00 OU OPERAÇÃO INTERNA/PERDA (DISPENSADO DE NFC-e) -->
+                <span v-if="isZeroRevenue || isFiscalExempt" class="bg-surface-2 text-surface-muted border border-surface-border px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-sm">
+                    <i class="pi pi-info-circle text-xs text-amber-500"></i>
+                    {{ isFiscalExempt ? 'NFC-e Dispensada (Perda / Cortesia / Equipe)' : 'NFC-e Dispensada (Faturamento R$ 0,00)' }}
                 </span>
 
                 <!-- CASO 2: AUTORIZADA NA SEFAZ -->
@@ -100,13 +101,13 @@
 
                         <button
                             v-if="isFiscalEmitter && !hasFiscalDocument"
-                            @click="isZeroRevenue ? null : $emit('action', { type: 'emit_nfce' })"
-                            :disabled="isZeroRevenue"
+                            @click="(isZeroRevenue || isFiscalExempt) ? null : $emit('action', { type: 'emit_nfce' })"
+                            :disabled="isZeroRevenue || isFiscalExempt"
                             class="h-12 rounded-xl border font-black text-xs uppercase tracking-wider transition-colors outline-none flex items-center justify-center gap-2 shadow-sm"
-                            :class="isZeroRevenue
+                            :class="(isZeroRevenue || isFiscalExempt)
                                 ? 'bg-surface-2 border-surface-border/50 text-surface-muted/40 cursor-not-allowed opacity-50'
                                 : 'bg-warning-500/10 border-warning-500/20 text-warning-500 hover:bg-warning-500/20 cursor-pointer'"
-                            :title="isZeroRevenue ? 'Emissão fiscal não permitida para pedidos com faturamento zerado' : 'Tentar NFC-e'"
+                            :title="(isZeroRevenue || isFiscalExempt) ? 'Emissão fiscal proibida para operações internas, perdas ou cortesias' : 'Tentar NFC-e'"
                         >
                             <i class="pi pi-refresh text-base"></i> Tentar NFC-e
                         </button>
@@ -183,6 +184,19 @@ defineEmits(["action"]);
 const page = usePage();
 const companySettings = computed(() => page.props.companySettings || {});
 const isFiscalEmitter = computed(() => companySettings.value.is_fiscal_emitter || false);
+
+const isFiscalExempt = computed(() => {
+    if (props.order?.fiscal_status === 'skipped' || props.order?.payment_status === 'settled_internal') {
+        return true;
+    }
+    const payments = props.order?.payments || [];
+    return payments.some((p) => {
+        const eng = typeof p.payment_method?.engine_type === 'object'
+            ? p.payment_method?.engine_type?.value
+            : (p.payment_method?.engine_type || p.engine_type || '');
+        return ['loss', 'allowance', 'internal'].includes(eng);
+    });
+});
 
 const hasFiscalDocument = computed(() => {
     return props.fiscalSuccess === true

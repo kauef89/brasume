@@ -129,6 +129,10 @@ class BillingConsolidator
                 $query->whereNotIn('status', ['cancelled', 'canceled', 'rejected', 'pending'])
                       ->orWhereNull('status');
             })
+            ->where(function($query) {
+                $query->whereNull('payment_status')
+                      ->orWhere('payment_status', '!=', 'settled_internal');
+            })
             ->whereBetween('created_at', [$start, $end]);
 
         // Filtro de Tipo V3

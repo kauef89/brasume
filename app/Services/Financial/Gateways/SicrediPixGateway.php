@@ -132,6 +132,36 @@ class SicrediPixGateway implements PaymentGatewayInterface
         throw new Exception("Erro ao gerar PIX Sicredi: " . $response->json('detail', $response->body()));
     }
 
+    /**
+     * Solicita o cancelamento (baixa) de uma cobrança PIX dinâmica pendente no Sicredi.
+     */
+    public function cancelCharge(string $txid): bool
+    {
+        if (empty($txid)) {
+            return false;
+        }
+
+        try {
+            $token = $this->obterTokenOauth();
+            $response = Http::withOptions($this->getHttpOptions())
+                ->withToken($token)
+                ->patch("{$this->baseUrl}/api/v3/cob/{$txid}", [
+                    'status' => 'REMOVIDA_PELO_USUARIO_RECEBEDOR',
+                ]);
+
+            if ($response->successful()) {
+                Log::info("✅ [SicrediPixGateway] Cobrança PIX {$txid} cancelada no banco.");
+                return true;
+            }
+
+            Log::warning("⚠️ [SicrediPixGateway] Não foi possível cancelar COB {$txid} no Sicredi: " . $response->body());
+            return false;
+        } catch (\Throwable $e) {
+            Log::warning("⚠️ [SicrediPixGateway] Falha de comunicação ao cancelar COB {$txid}: " . $e->getMessage());
+            return false;
+        }
+    }
+
     private function generateTxid(): string
     {
         return substr(preg_replace('/[^a-zA-Z0-9]/', '', (string) Str::uuid() . Str::random(10)), 0, 30);

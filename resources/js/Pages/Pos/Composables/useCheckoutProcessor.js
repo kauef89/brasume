@@ -62,7 +62,16 @@ export function useCheckoutProcessor({
                 force: true
             }, { headers: { 'Accept': 'application/json' } });
 
-            if (response.data?.success && response.data?.status !== 'failed') {
+            if (response.data?.success && response.data?.status === 'skipped') {
+                isFiscalSuccess.value = false;
+                isEmittingNfce.value = false;
+                const target = typeof getOrder === 'function' ? getOrder() : null;
+                if (target) {
+                    target.has_fiscal_document = false;
+                    target.fiscal_status = 'skipped';
+                }
+                executeAutoPrintRule();
+            } else if (response.data?.success && response.data?.status !== 'failed') {
                 isFiscalSuccess.value = true;
                 const target = typeof getOrder === 'function' ? getOrder() : null;
                 if (target) {
@@ -165,8 +174,14 @@ export function useCheckoutProcessor({
             ? crypto.randomUUID()
             : (Date.now() + '_' + Math.random().toString(36).substring(2, 9));
 
+        const fiscalExemptEngines = ['loss', 'allowance', 'internal'];
+        const hasFiscalExemptPayment = standardPayments.some((p) => {
+            const eng = typeof p.engine_type === 'object' ? p.engine_type?.value : p.engine_type;
+            return fiscalExemptEngines.includes(eng);
+        });
+
         try {
-            await apiClient.post(route('operations.orders.pay', orderId), {
+            const payRes = await apiClient.post(route('operations.orders.pay', orderId), {
                 payments: standardPayments.map(p => ({ method_id: p.real_method_id || p.method_id, amount: Number(p.amount) })),
                 items: itemsToPay,
                 service_fee: Math.max(0, Number(unref(serviceFeeAmount) || 0)),
@@ -176,14 +191,27 @@ export function useCheckoutProcessor({
                 idempotency_key: idempotencyKey
             }, { headers: { 'Accept': 'application/json' } });
 
+            const updatedOrder = payRes.data?.order;
+            const target = getOrder();
+            if (target && updatedOrder) {
+                target.payment_status = updatedOrder.payment_status;
+                target.fiscal_status = updatedOrder.fiscal_status;
+                target.payments = updatedOrder.payments;
+            }
+
             stagedPayments.value = [];
             localCashbackAmountToSend.value = 0;
             isPaymentSuccess.value = true;
             isProcessingPayment.value = false;
             if (isPostPaymentPhase) isPostPaymentPhase.value = true;
+
+            const isExempt = hasFiscalExemptPayment
+                || updatedOrder?.fiscal_status === 'skipped'
+                || updatedOrder?.payment_status === 'settled_internal';
+
             const isEmitter = Boolean(props?.companySettings?.is_fiscal_emitter || false);
-            if (isEmitter && !(isZeroRevenueOrder && unref(isZeroRevenueOrder))) {
-                triggerSilentEmission(); // Disparo automático pós-pagamento
+            if (isEmitter && !isExempt && !(isZeroRevenueOrder && unref(isZeroRevenueOrder))) {
+                triggerSilentEmission(); // Disparo automático pós-pagamento apenas para vendas tributáveis
             } else {
                 executeAutoPrintRule();
             }
