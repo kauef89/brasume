@@ -18,6 +18,140 @@ use Illuminate\Support\Str;
 class AcquirerReconciliationEngine
 {
     /**
+     * Simula a conciliação (Dry Run) sem gravar registros no banco, identificando
+     * terminais não cadastrados, vendas já importadas, matches automáticos e órfãs.
+     */
+    public function previewReconcile(array $transactions): array
+    {
+        $devicesByCode = Device::query()
+            ->whereNotNull('terminal_code')
+            ->get()
+            ->keyBy('terminal_code');
+
+        $alreadyImported = [];
+        $newSales = [];
+        $unregisteredTerminals = [];
+        $matchedPaymentIdsThisRun = [];
+
+        $willMatchCount = 0;
+        $willAmbiguousCount = 0;
+        $orphanPreview = [];
+
+        foreach ($transactions as $dto) {
+            /** @var AcquirerTransactionDTO $dto */
+            $cleanTid = strtoupper(str_replace([' ', '-', '_'], '', $dto->terminalCode));
+            $device = $devicesByCode->get($dto->terminalCode)
+                ?? $devicesByCode->first(function ($d) use ($cleanTid) {
+                    $devTid = strtoupper(str_replace([' ', '-', '_'], '', $d->terminal_code ?? ''));
+                    if ($devTid === $cleanTid) return true;
+                    return str_replace('O', '0', $devTid) === str_replace('O', '0', $cleanTid);
+                });
+
+            if (!$device && $dto->terminalCode !== '') {
+                $unregisteredTerminals[$dto->terminalCode] = ($unregisteredTerminals[$dto->terminalCode] ?? 0) + 1;
+            }
+
+            $existing = AcquirerTransaction::where('acquirer_name', $dto->acquirerName)
+                ->where('terminal_code', $dto->terminalCode)
+                ->where('nsu', $dto->nsu)
+                ->where('transaction_date', $dto->transactionDate)
+                ->first();
+
+            if ($existing) {
+                $alreadyImported[] = [
+                    'nsu'          => $dto->nsu,
+                    'date'         => $dto->transactionDate->format('d/m/Y H:i:s'),
+                    'gross_amount' => $dto->grossAmount,
+                    'status'       => $existing->status?->value ?? (string) $existing->status,
+                ];
+                continue;
+            }
+
+            $tempTx = new AcquirerTransaction([
+                'acquirer_name'            => $dto->acquirerName,
+                'terminal_code'            => $dto->terminalCode,
+                'device_id'                => $device?->id,
+                'nsu'                      => $dto->nsu,
+                'transaction_date'         => $dto->transactionDate,
+                'modality'                 => $dto->modality,
+                'brand'                    => $dto->brand,
+                'gross_amount'             => $dto->grossAmount,
+                'fee_amount'               => $dto->feeAmount,
+                'net_amount'               => $dto->netAmount,
+                'authorization_code'       => $dto->authorizationCode,
+                'expected_settlement_date' => $dto->expectedSettlementDate,
+            ]);
+            if ($device) {
+                $tempTx->setRelation('device', $device);
+            }
+
+            $predictedStatus = 'orphan';
+            $scored = $this->findCandidatesFor($tempTx, $matchedPaymentIdsThisRun);
+
+            if ($scored->isNotEmpty()) {
+                $topCandidate = $scored->first();
+                $secondCandidate = $scored->get(1);
+
+                $isTied = $secondCandidate && ($topCandidate['score'] - $secondCandidate['score']) < 15;
+                $tiedCandidates = $scored->filter(fn ($c) => ($topCandidate['score'] - $c['score']) < 15);
+                $isSameOrderTie = $tiedCandidates->pluck('order.id')->unique()->filter()->count() === 1;
+                $isLowConfidence = $topCandidate['score'] < 45;
+
+                if (!(($scored->count() > 1 && $isTied && !$isSameOrderTie) || $isLowConfidence)) {
+                    $predictedStatus = 'matched';
+                    $matchedPaymentIdsThisRun[] = $topCandidate['payment']->id;
+                    $willMatchCount++;
+                }
+            }
+
+            if ($predictedStatus === 'orphan') {
+                $bundles = $this->findBundleCandidatesFor($tempTx, $matchedPaymentIdsThisRun);
+                if ($bundles->isNotEmpty() && ($bundles->first()['confidence'] ?? 0) >= 70) {
+                    $predictedStatus = 'matched_bundle';
+                    foreach ($bundles->first()['payments'] as $bp) {
+                        $matchedPaymentIdsThisRun[] = $bp->id;
+                    }
+                    $willMatchCount++;
+                } elseif ($scored->isNotEmpty()) {
+                    $predictedStatus = 'ambiguous';
+                    $willAmbiguousCount++;
+                } else {
+                    $orphanPreview[] = [
+                        'nsu'          => $dto->nsu,
+                        'terminal'     => $dto->terminalCode,
+                        'device_name'  => $device?->name ?? 'Terminal Não Cadastrado',
+                        'date'         => $dto->transactionDate->format('d/m/Y H:i:s'),
+                        'modality'     => $dto->modality,
+                        'brand'        => $dto->brand,
+                        'gross_amount' => $dto->grossAmount,
+                    ];
+                }
+            }
+
+            $newSales[] = [
+                'nsu'              => $dto->nsu,
+                'terminal'         => $dto->terminalCode,
+                'date'             => $dto->transactionDate->format('d/m/Y H:i:s'),
+                'modality'         => $dto->modality,
+                'brand'            => $dto->brand,
+                'gross_amount'     => $dto->grossAmount,
+                'net_amount'       => $dto->netAmount,
+                'predicted_status' => $predictedStatus,
+            ];
+        }
+
+        return [
+            'new_sales'              => $newSales,
+            'already_imported'       => $alreadyImported,
+            'unregistered_terminals' => $unregisteredTerminals,
+            'will_match'             => $willMatchCount,
+            'will_ambiguous'         => $willAmbiguousCount,
+            'will_orphan'            => count($orphanPreview),
+            'orphan_preview'         => $orphanPreview,
+        ];
+    }
+
+    /**
      * Processa a lista de DTOs do CSV, persiste no banco e tenta conciliar.
      */
     public function reconcile(array $transactions): array
