@@ -62,21 +62,18 @@ class SchedulesRelationManager extends RelationManager
                 ->required()
                 ->default(now()),
 
-            Toggle::make('is_day_off')
-                ->label('É Dia de Folga?')
-                ->default(false)
+            Select::make('shift_type')
+                ->label('Regime / Tipo de Turno')
+                ->options(\App\Enums\ScheduleShiftType::class)
+                ->default(\App\Enums\ScheduleShiftType::REGULAR->value)
+                ->required()
                 ->live(),
 
             Select::make('assigned_role')
                 ->label('Função / Posto de Trabalho')
                 ->options($roles)
-                ->visible(fn ($get) => ! (bool) $get('is_day_off'))
+                ->visible(fn ($get) => $get('shift_type') !== \App\Enums\ScheduleShiftType::DAY_OFF->value)
                 ->searchable(),
-
-            Toggle::make('is_extra_shift')
-                ->label('Turno Extra / Dobra?')
-                ->default(false)
-                ->visible(fn ($get) => ! (bool) $get('is_day_off')),
 
             Select::make('status')
                 ->label('Situação do Turno')
@@ -118,11 +115,10 @@ class SchedulesRelationManager extends RelationManager
                     ->sortable()
                     ->weight('bold'),
 
-                TextColumn::make('is_day_off')
-                    ->label('Regime')
+                TextColumn::make('shift_type')
+                    ->label('Regime / Turno')
                     ->badge()
-                    ->color(fn (bool $state) => $state ? 'gray' : 'success')
-                    ->formatStateUsing(fn (bool $state) => $state ? 'Folga' : 'Escalado'),
+                    ->sortable(),
 
                 TextColumn::make('assigned_role')
                     ->label('Função / Posto')
@@ -130,12 +126,6 @@ class SchedulesRelationManager extends RelationManager
                     ->color('info')
                     ->placeholder('-')
                     ->formatStateUsing(fn (?string $state) => ucfirst($state ?? '-')),
-
-                TextColumn::make('is_extra_shift')
-                    ->label('Turno')
-                    ->badge()
-                    ->color(fn (bool $state) => $state ? 'warning' : 'gray')
-                    ->formatStateUsing(fn (bool $state) => $state ? 'Dobra / Extra' : 'Normal'),
 
                 TextColumn::make('status')
                     ->label('Situação')
@@ -162,11 +152,9 @@ class SchedulesRelationManager extends RelationManager
                     ->placeholder('-'),
             ])
             ->filters([
-                TernaryFilter::make('is_day_off')
-                    ->label('Tipo de Escala')
-                    ->trueLabel('Apenas Folgas')
-                    ->falseLabel('Apenas Dias de Trabalho')
-                    ->placeholder('Todos'),
+                SelectFilter::make('shift_type')
+                    ->label('Regime / Turno')
+                    ->options(\App\Enums\ScheduleShiftType::class),
 
                 SelectFilter::make('status')
                     ->label('Situação')

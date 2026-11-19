@@ -170,10 +170,11 @@ class RecurringExpenseForm
                     ])
                     ->default("company")
                     ->required(),
-                Toggle::make("is_auto_debit")
-                    ->label("Em Débito Automático?")
-                    ->default(false)
-                    ->inline(false),
+                Select::make("settlement_mode")
+                    ->label("Modalidade Bancária")
+                    ->options(\App\Enums\PayableSettlementMode::class)
+                    ->default(\App\Enums\PayableSettlementMode::MANUAL->value)
+                    ->required(),
             ]),
             Grid::make(1)->schema([
                 Textarea::make("notes")

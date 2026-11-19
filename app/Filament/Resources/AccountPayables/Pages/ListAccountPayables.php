@@ -792,6 +792,7 @@ HTML;
                                 'accounting_category' => $recurringExpense->accounting_category,
                                 'accounting_subcategory' => $recurringExpense->accounting_subcategory,
                                 'contract_number' => $recurringExpense->contract_number,
+                                'settlement_mode' => $recurringExpense->settlement_mode?->value ?? ($recurringExpense->is_auto_debit ? \App\Enums\PayableSettlementMode::AUTO_DEBIT->value : \App\Enums\PayableSettlementMode::MANUAL->value),
                                 'is_auto_debit' => $recurringExpense->is_auto_debit,
                                 'account_holder' => $recurringExpense->account_holder,
                                 'paid_by' => $recurringExpense->paid_by,

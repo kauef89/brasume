@@ -58,6 +58,7 @@ class GenerateRecurringPayables extends Command
                         'status'                 => 'pending',
                         'accounting_category'    => $expense->accounting_category,
                         'accounting_subcategory' => $expense->accounting_subcategory,
+                        'settlement_mode'        => $expense->settlement_mode?->value ?? ($expense->is_auto_debit ? \App\Enums\PayableSettlementMode::AUTO_DEBIT->value : \App\Enums\PayableSettlementMode::MANUAL->value),
                         'is_personal'            => $expense->is_personal,
                         'notes'                  => "Gerado automaticamente por rotina recorrente (" . ($expense->frequency ?? 'monthly') . ").",
                     ]);

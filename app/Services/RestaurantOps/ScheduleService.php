@@ -148,13 +148,16 @@ class ScheduleService
 
                 $role = $entry['assigned_role'] ?? ($isDayOff ? 'Folga' : 'Operação');
 
+                $shiftType = \App\Enums\ScheduleShiftType::fromFlags($isDayOff, $isExtra);
+
                 $schedule = EmployeeSchedule::updateOrCreate(
                     ['employee_id' => $employeeId, 'date' => $date],
                     [
                         'schedule_slot_id' => $slotId,
-                        'assigned_role' => $role,
-                        'is_day_off' => $isDayOff,
-                        'is_extra_shift' => $isExtra
+                        'assigned_role'    => $role,
+                        'shift_type'       => $shiftType->value,
+                        'is_day_off'       => $isDayOff,
+                        'is_extra_shift'   => $isExtra,
                     ]
                 );
 

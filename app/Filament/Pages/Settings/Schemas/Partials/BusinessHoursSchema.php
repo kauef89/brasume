@@ -61,26 +61,19 @@ class BusinessHoursSchema
             Section::make("Matriz de Horários de Operação")
                 ->description("Cadastre os turnos de funcionamento. Crie múltiplos turnos para horários quebrados ou canais independentes (Ex: 18h só Delivery, 19h Salão e Delivery).")
                 ->schema([
-                    Grid::make(2)->schema([
-                        Toggle::make('is_24_hours')
-                            ->label('Aberto 24 Horas')
-                            ->helperText('A loja opera sem interrupções. Ignora e oculta a matriz de horários.')
-                            ->live()
-                            ->afterStateUpdated(fn ($state, Set $set) => $state ? $set('is_closed_indefinitely', false) : null)
-                            ->inline(false)
-                            ->columnSpan(1),
-
-                        Toggle::make('is_closed_indefinitely')
-                            ->label('Fechado Indeterminadamente')
-                            ->helperText('Oculta horários, fecha a loja e bloqueia novos pedidos (Ideal para emergências ou reformas).')
-                            ->live()
-                            ->afterStateUpdated(fn ($state, Set $set) => $state ? $set('is_24_hours', false) : null)
-                            ->inline(false)
-                            ->columnSpan(1),
-                    ])->extraAttributes(['class' => 'mb-4']),
+                    \Filament\Forms\Components\ToggleButtons::make('operation_mode')
+                        ->label('Regime de Funcionamento da Loja')
+                        ->options(\App\Enums\StoreOperationMode::class)
+                        ->default(\App\Enums\StoreOperationMode::SCHEDULED->value)
+                        ->inline()
+                        ->live()
+                        ->required()
+                        ->helperText('Horários Programados usa a grade semanal abaixo; 24h opera sem interrupção; Fechado bloqueia novos pedidos.')
+                        ->columnSpanFull()
+                        ->extraAttributes(['class' => 'mb-4']),
 
                     Repeater::make('business_hours')
-                        ->hidden(fn (Get $get) => $get('is_24_hours') || $get('is_closed_indefinitely'))
+                        ->hidden(fn (Get $get) => ($get('operation_mode') ?? \App\Enums\StoreOperationMode::SCHEDULED->value) !== \App\Enums\StoreOperationMode::SCHEDULED->value)
                         ->hiddenLabel()
                         ->schema([
                             Select::make('day_of_week')

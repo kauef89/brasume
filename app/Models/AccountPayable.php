@@ -39,6 +39,19 @@ class AccountPayable extends Model
 
             $payable->settlement_mode = \App\Enums\PayableSettlementMode::MANUAL;
         });
+
+        static::saving(function (AccountPayable $payable) {
+            if ($payable->isDirty('settlement_mode') && $payable->settlement_mode !== null) {
+                $mode = $payable->settlement_mode instanceof \App\Enums\PayableSettlementMode
+                    ? $payable->settlement_mode
+                    : \App\Enums\PayableSettlementMode::tryFrom((string) $payable->settlement_mode);
+                $payable->is_auto_debit = $mode === \App\Enums\PayableSettlementMode::AUTO_DEBIT;
+            } elseif ($payable->isDirty('is_auto_debit')) {
+                $payable->settlement_mode = $payable->is_auto_debit
+                    ? \App\Enums\PayableSettlementMode::AUTO_DEBIT
+                    : \App\Enums\PayableSettlementMode::MANUAL;
+            }
+        });
     }
 
     // ==========================================

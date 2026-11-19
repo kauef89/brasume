@@ -28,10 +28,31 @@ class RecurringExpense extends Model
     protected $guarded = [];
 
     protected $casts = [
-        "is_auto_debit" => "boolean",
-        "is_active" => "boolean",
-        "default_amount" => "decimal:2",
+        "is_auto_debit"   => "boolean",
+        "settlement_mode" => \App\Enums\PayableSettlementMode::class,
+        "is_active"       => "boolean",
+        "default_amount"  => "decimal:2",
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (RecurringExpense $expense) {
+            if ($expense->isDirty('settlement_mode') && $expense->settlement_mode !== null) {
+                $mode = $expense->settlement_mode instanceof \App\Enums\PayableSettlementMode
+                    ? $expense->settlement_mode
+                    : \App\Enums\PayableSettlementMode::tryFrom((string) $expense->settlement_mode);
+                $expense->is_auto_debit = $mode === \App\Enums\PayableSettlementMode::AUTO_DEBIT;
+            } elseif ($expense->isDirty('is_auto_debit')) {
+                $expense->settlement_mode = $expense->is_auto_debit
+                    ? \App\Enums\PayableSettlementMode::AUTO_DEBIT
+                    : \App\Enums\PayableSettlementMode::MANUAL;
+            } elseif (empty($expense->settlement_mode)) {
+                $expense->settlement_mode = $expense->is_auto_debit
+                    ? \App\Enums\PayableSettlementMode::AUTO_DEBIT
+                    : \App\Enums\PayableSettlementMode::MANUAL;
+            }
+        });
+    }
 
     /**
      * @return BelongsTo<Supplier,RecurringExpense>

@@ -15,12 +15,34 @@ class EmployeeSchedule extends Model
 
     protected $casts = [
         'date'             => 'date',
+        'shift_type'       => \App\Enums\ScheduleShiftType::class,
         'is_day_off'       => 'boolean',
         'is_extra_shift'   => 'boolean',
         'schedule_slot_id' => 'integer',
         'employee_id'      => 'integer',
         'payable_id'       => 'integer',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (EmployeeSchedule $schedule) {
+            if ($schedule->isDirty('shift_type') && $schedule->shift_type !== null) {
+                $type = $schedule->shift_type instanceof \App\Enums\ScheduleShiftType
+                    ? $schedule->shift_type
+                    : (\App\Enums\ScheduleShiftType::tryFrom((string) $schedule->shift_type) ?? \App\Enums\ScheduleShiftType::REGULAR);
+
+                $schedule->is_day_off = $type === \App\Enums\ScheduleShiftType::DAY_OFF;
+                $schedule->is_extra_shift = $type === \App\Enums\ScheduleShiftType::EXTRA_SHIFT;
+            } elseif ($schedule->isDirty('is_day_off') || $schedule->isDirty('is_extra_shift') || empty($schedule->shift_type)) {
+                $isDayOff = (bool) $schedule->is_day_off;
+                $isExtra = $isDayOff ? false : (bool) $schedule->is_extra_shift;
+
+                $schedule->is_day_off = $isDayOff;
+                $schedule->is_extra_shift = $isExtra;
+                $schedule->shift_type = \App\Enums\ScheduleShiftType::fromFlags($isDayOff, $isExtra);
+            }
+        });
+    }
 
     public function slot(): BelongsTo
     {

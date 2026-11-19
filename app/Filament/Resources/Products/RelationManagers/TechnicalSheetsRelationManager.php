@@ -65,20 +65,14 @@ class TechnicalSheetsRelationManager extends RelationManager
                     ->suffix(fn(Get $get) => Product::find($get("ingredient_product_id"))?->unit_of_measure)
                     ->columnSpan(1),
 
-                // 🚀 O MODO DE CONSUMO REAL:
-                Toggle::make("is_dine_in")
-                    ->label("Consumo no Local (Salão)")
-                    ->default(true)
-                    ->helperText("Ative se este item é servido no consumo dentro da loja.")
+                Select::make("consumption_scope")
+                    ->label("Canal de Consumo (Aplicação)")
+                    ->options(\App\Enums\ConsumptionChannelScope::class)
+                    ->default(\App\Enums\ConsumptionChannelScope::ALL->value)
+                    ->required()
+                    ->helperText("Define se o insumo/embalagem entra no salão, na viagem/delivery ou em ambos.")
                     ->visible($isFinalProduct)
-                    ->columnSpan(1),
-
-                Toggle::make("is_takeaway")
-                    ->label("Para Viagem (Embalagem)")
-                    ->default(true)
-                    ->helperText("Ative se este item compõe a entrega ou retirada.")
-                    ->visible($isFinalProduct)
-                    ->columnSpan(1),
+                    ->columnSpan(2),
 
                 Toggle::make("is_active")
                     ->label("Ativo na Receita")
@@ -207,22 +201,9 @@ class TechnicalSheetsRelationManager extends RelationManager
                     ->weight("bold")
                     ->color(fn ($record) => $record->is_active ? 'danger' : 'gray'),
 
-                // 🚀 COLUNA DE MODO DE CONSUMO:
-                Tables\Columns\TextColumn::make("consumption_mode")
+                Tables\Columns\TextColumn::make("consumption_scope")
                     ->label("Aplicação")
                     ->badge()
-                    ->state(function ($record) {
-                        if ($record->is_dine_in && $record->is_takeaway) return 'Salão & Viagem';
-                        if ($record->is_dine_in) return 'Apenas Salão';
-                        if ($record->is_takeaway) return 'Apenas Viagem';
-                        return 'Inativo';
-                    })
-                    ->color(fn (string $state): string => match ($state) {
-                        'Salão & Viagem' => 'gray',
-                        'Apenas Salão'   => 'info',
-                        'Apenas Viagem'  => 'warning',
-                        default          => 'danger',
-                    })
                     ->visible($isFinalProduct),
             ])
             ->filters([
@@ -286,6 +267,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                                     "parent_product_id"     => $ownerRecord->id,
                                     "ingredient_product_id" => $item->ingredient_product_id,
                                     "quantity"              => $item->quantity,
+                                    "consumption_scope"     => $item->consumption_scope?->value ?? \App\Enums\ConsumptionChannelScope::fromFlags((bool) ($item->is_dine_in ?? true), (bool) ($item->is_takeaway ?? true))->value,
                                     "is_dine_in"            => $item->is_dine_in ?? true,
                                     "is_takeaway"           => $item->is_takeaway ?? true,
                                     "order_type" => is_array($item->order_type) ? json_encode($item->order_type) : ($item->order_type ?: "all"),
@@ -347,6 +329,7 @@ class TechnicalSheetsRelationManager extends RelationManager
                                         "parent_product_id"     => $targetId,
                                         "ingredient_product_id" => $item->ingredient_product_id,
                                         "quantity"              => $item->quantity,
+                                        "consumption_scope"     => $item->consumption_scope?->value ?? \App\Enums\ConsumptionChannelScope::fromFlags((bool) ($item->is_dine_in ?? true), (bool) ($item->is_takeaway ?? true))->value,
                                         "is_dine_in"            => $item->is_dine_in ?? true,
                                         "is_takeaway"           => $item->is_takeaway ?? true,
                                         "order_type" => is_array($item->order_type) ? json_encode($item->order_type) : ($item->order_type ?: "all"),

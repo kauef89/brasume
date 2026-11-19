@@ -39,6 +39,7 @@ class CompanySetting extends Model
         'allow_pre_orders'              => 'boolean',
         'pre_order_buffer_minutes'   => 'integer',
         'business_hours'             => 'array',
+        'operation_mode'             => \App\Enums\StoreOperationMode::class,
         'is_24_hours'                => 'boolean',
         'is_closed_indefinitely'     => 'boolean',
         'home_bg_open'               => 'array',
@@ -193,6 +194,24 @@ class CompanySetting extends Model
 
     protected static function booted(): void
     {
+        static::saving(function ($settings) {
+            if ($settings->isDirty('operation_mode') && $settings->operation_mode !== null) {
+                $mode = $settings->operation_mode instanceof \App\Enums\StoreOperationMode
+                    ? $settings->operation_mode
+                    : (\App\Enums\StoreOperationMode::tryFrom((string) $settings->operation_mode) ?? \App\Enums\StoreOperationMode::SCHEDULED);
+
+                $settings->is_24_hours = $mode === \App\Enums\StoreOperationMode::ALWAYS_24H;
+                $settings->is_closed_indefinitely = $mode === \App\Enums\StoreOperationMode::CLOSED_INDEFINITELY;
+            } elseif ($settings->isDirty('is_24_hours') || $settings->isDirty('is_closed_indefinitely') || empty($settings->operation_mode)) {
+                $isClosed = (bool) $settings->is_closed_indefinitely;
+                $is24h = $isClosed ? false : (bool) $settings->is_24_hours;
+
+                $settings->is_closed_indefinitely = $isClosed;
+                $settings->is_24_hours = $is24h;
+                $settings->operation_mode = \App\Enums\StoreOperationMode::fromFlags($is24h, $isClosed);
+            }
+        });
+
         static::saved(function ($settings) {
             // 1. Limpeza de Cache da Loja
             self::purgeCache();

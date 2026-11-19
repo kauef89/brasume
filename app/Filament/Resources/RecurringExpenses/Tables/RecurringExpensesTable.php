@@ -44,9 +44,10 @@ class RecurringExpensesTable
                         fn($state) => $state === "fixed" ? "Fixo" : "Variável",
                     ),
 
-                IconColumn::make("is_auto_debit")
-                    ->label("Débito Aut.")
-                    ->boolean(),
+                TextColumn::make("settlement_mode")
+                    ->label("Modalidade")
+                    ->badge()
+                    ->sortable(),
 
                 ToggleColumn::make("is_active")->label("Ativa"),
             ])

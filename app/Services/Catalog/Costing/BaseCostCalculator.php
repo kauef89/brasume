@@ -21,8 +21,17 @@ class BaseCostCalculator
 
         $query = TechnicalSheet::where("parent_product_id", $product->id)->where("is_active", true);
 
-        if ($consumptionMode === 'dine_in') $query->where('is_dine_in', true);
-        elseif ($consumptionMode === 'takeaway') $query->where('is_takeaway', true);
+        if ($consumptionMode === 'dine_in') {
+            $query->whereIn('consumption_scope', [
+                \App\Enums\ConsumptionChannelScope::ALL->value,
+                \App\Enums\ConsumptionChannelScope::DINE_IN->value,
+            ]);
+        } elseif ($consumptionMode === 'takeaway') {
+            $query->whereIn('consumption_scope', [
+                \App\Enums\ConsumptionChannelScope::ALL->value,
+                \App\Enums\ConsumptionChannelScope::TAKEAWAY->value,
+            ]);
+        }
 
         $sheetItems = $query->get();
 

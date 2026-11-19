@@ -30,8 +30,13 @@ class StoreAvailabilityService
         // 1. TRAVAS EMERGENCIAIS E OPERACIONAIS (Overrides Absolutos)
         // ========================================================
 
+        $operationMode = $settings->operation_mode instanceof \App\Enums\StoreOperationMode
+            ? $settings->operation_mode
+            : (\App\Enums\StoreOperationMode::tryFrom((string) $settings->operation_mode)
+                ?? \App\Enums\StoreOperationMode::fromFlags((bool) $settings->is_24_hours, (bool) $settings->is_closed_indefinitely));
+
         // A) Fechamento por tempo indeterminado
-        if (!empty($settings->is_closed_indefinitely)) {
+        if ($operationMode === \App\Enums\StoreOperationMode::CLOSED_INDEFINITELY) {
             $status['reason'] = 'closed_indefinitely';
             return $status;
         }
@@ -58,7 +63,7 @@ class StoreAvailabilityService
         $isShiftOpen = CashShift::where('status', 'open')->exists();
 
         // Loja 24 Horas
-        if (!empty($settings->is_24_hours)) {
+        if ($operationMode === \App\Enums\StoreOperationMode::ALWAYS_24H) {
             $status['is_open'] = true;
             $status['active_channels'] = ['delivery', 'counter', 'table'];
             return $status;
