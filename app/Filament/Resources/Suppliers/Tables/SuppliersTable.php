@@ -44,6 +44,21 @@ class SuppliersTable
                         "warning" => "physical",
                     ]),
 
+                Tables\Columns\TextColumn::make("settlement_mode")
+                    ->label("Liquidação")
+                    ->badge()
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make("invoice_terms")
+                    ->label("Faturamento")
+                    ->state(fn (Supplier $record) => $record->is_invoiced
+                        ? ($record->invoice_payment_days ? "Faturado ({$record->invoice_payment_days}d)" : "Faturado")
+                        : "À Vista / Boleto"
+                    )
+                    ->badge()
+                    ->color(fn (Supplier $record) => $record->is_invoiced ? "info" : "gray")
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make("branches_count")
                     ->label("Filiais")
                     ->counts("branches")
@@ -68,6 +83,10 @@ class SuppliersTable
                     ->label("Apenas Matrizes")
                     ->default(true)
                     ->query(fn (Builder $query): Builder => $query->whereNull("parent_id")),
+
+                Tables\Filters\SelectFilter::make("settlement_mode")
+                    ->label("Modalidade Bancária")
+                    ->options(\App\Enums\PayableSettlementMode::class),
 
                 Tables\Filters\SelectFilter::make("type")
                     ->label("Filtrar por Tipo")

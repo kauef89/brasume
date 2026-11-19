@@ -2,12 +2,17 @@
 
 namespace App\Services\Financial;
 
+use App\Enums\PayableSettlementMode;
+use App\Models\AccountPayable;
 use App\Models\BankAccount;
 use App\Models\CompanySetting;
 use App\Models\PaymentBatch;
 use App\Models\Payslip;
+use App\Services\BankDictionaries\SicrediCnab240PixDictionary;
 use Carbon\Carbon;
+use Exception;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class SicrediCnab240Service
 {
@@ -187,17 +192,274 @@ class SicrediCnab240Service
     }
 
     /**
-     * Header de Lote (Manual Sicredi Pág. 11)
+     * Pré-valida (Dry Run) uma coleção de títulos do Contas a Pagar para o Malote Diário PIX (CNAB 240).
      */
-    protected function buildLotHeader(int $lotSeq, string $cnpj, string $name, string $agreement, string $agency, string $agencyDv, string $account, string $accountDv, string $desc): string
+    public static function previewPixBatch(Collection $payables): array
     {
+        $ready = [];
+        $blockedAuto = [];
+        $missingPix = [];
+
+        foreach ($payables as $payable) {
+            /** @var AccountPayable $payable */
+            if ($payable->status !== 'pending' || !empty($payable->payment_batch_id) || (float) $payable->amount <= 0) {
+                continue;
+            }
+
+            $resolved = SicrediCnab240PixDictionary::resolvePayee($payable);
+
+            $row = [
+                'id'               => $payable->id,
+                'description'      => $payable->description,
+                'due_date'         => $payable->due_date?->format('Y-m-d'),
+                'amount'           => (float) $payable->amount,
+                'beneficiary_type' => $resolved['beneficiary_type'],
+                'beneficiary_name' => $resolved['beneficiary_name'],
+                'settlement_mode'  => $resolved['settlement_mode'],
+                'pix'              => $resolved['pix'],
+                'error_reason'     => $resolved['error_reason'],
+            ];
+
+            if ($resolved['valid']) {
+                $ready[] = $row;
+            } elseif ($resolved['blocked_by_mode']) {
+                $blockedAuto[] = $row;
+            } else {
+                $missingPix[] = $row;
+            }
+        }
+
+        return [
+            'ready'        => $ready,
+            'blocked_auto' => $blockedAuto,
+            'missing_pix'  => $missingPix,
+            'total_amount' => round(array_sum(array_column($ready, 'amount')), 2),
+        ];
+    }
+
+    /**
+     * Gera arquivo remessa CNAB 240 Sicredi — Pagamento a Fornecedores / Colaboradores via PIX Transferência (Serviço 20 / Forma 45).
+     */
+    public function generatePixBatch(Collection $payables, string $batchDescription = 'MALOTE PIX DIARIO'): array
+    {
+        $preview = self::previewPixBatch($payables);
+
+        if (empty($preview['ready'])) {
+            throw new Exception('Nenhum título elegível com chave PIX válida foi encontrado para gerar a remessa.');
+        }
+
+        $readyMap = collect($preview['ready'])->keyBy('id');
+        $validPayables = $payables->filter(fn ($p) => $readyMap->has($p->id))->values();
+
+        return DB::transaction(function () use ($validPayables, $readyMap, $batchDescription) {
+            $lines = [];
+            $totalAmount = 0.0;
+            $lotSequence = 1;
+            $recordsInLot = 0;
+
+            $tenantCnpj = $this->numPad(CompanySetting::get('cnpj', '00000000000000'), 14);
+            $companyName = CompanySetting::get('company_name', 'EMPRESA');
+
+            $agency = $this->numPad($this->sourceAccount->agency, 5);
+            $agencyDv = (!empty($this->sourceAccount->agency_digit) && $this->sourceAccount->agency_digit !== '0')
+                ? substr($this->sourceAccount->agency_digit, 0, 1)
+                : $this->calculateMod11($this->sourceAccount->agency);
+
+            $account = $this->numPad($this->sourceAccount->account_number, 12);
+            $accountDv = $this->numPad($this->sourceAccount->account_digit ?: '0', 1);
+
+            $agreementCode = $this->sourceAccount->agreement_number ?: $this->sourceAccount->account_number;
+            $agreement = $this->asciiPad($agreementCode, 20);
+
+            // 1. HEADER DE ARQUIVO (Manual Sicredi Pág. 6)
+            $lines[] = $this->buildFileHeader($tenantCnpj, $companyName, $agreement, $agency, $agencyDv, $account, $accountDv);
+
+            // 2. HEADER DE LOTE (Manual Sicredi Pág. 11-12: Serviço 20 / Forma 45)
+            $lines[] = $this->buildLotHeader(
+                $lotSequence,
+                $tenantCnpj,
+                $companyName,
+                $agreement,
+                $agency,
+                $agencyDv,
+                $account,
+                $accountDv,
+                $batchDescription,
+                SicrediCnab240PixDictionary::SERVICE_TYPE_SUPPLIER,
+                SicrediCnab240PixDictionary::LAUNCH_FORM_PIX
+            );
+            $recordsInLot++;
+
+            // 3. DETALHES PIX (Segmento A + Segmento B PIX)
+            $detailSeq = 1;
+            foreach ($validPayables as $payable) {
+                $amount = (float) $payable->amount;
+                if ($amount <= 0) {
+                    continue;
+                }
+
+                $info = $readyMap->get($payable->id);
+                $totalAmount += $amount;
+
+                $lines[] = $this->buildPixSegmentA($lotSequence, $detailSeq++, $payable, $info['beneficiary_name'], $amount);
+                $recordsInLot++;
+
+                $lines[] = $this->buildPixSegmentB($lotSequence, $detailSeq++, $payable, $info['pix']);
+                $recordsInLot++;
+            }
+
+            // 4. TRAILER DE LOTE (Manual Sicredi Pág. 24)
+            $recordsInLot++;
+            $lines[] = $this->buildLotTrailer($lotSequence, $recordsInLot, $totalAmount);
+
+            // 5. TRAILER DE ARQUIVO (Manual Sicredi Pág. 7)
+            $totalFileRecords = count($lines) + 1;
+            $lines[] = $this->buildFileTrailer($totalFileRecords, 1);
+
+            $content = implode("\r\n", $lines) . "\r\n";
+
+            $batch = PaymentBatch::create([
+                'description'  => "{$batchDescription} (PIX) - " . $this->paymentDate->format('d/m/Y'),
+                'total_amount' => round($totalAmount, 2),
+                'status'       => 'transmitted',
+                'payment_date' => $this->paymentDate->toDateString(),
+            ]);
+
+            AccountPayable::whereIn('id', $validPayables->pluck('id'))->update([
+                'payment_batch_id' => $batch->id,
+                'settlement_mode'  => PayableSettlementMode::PIX_REMITTANCE->value,
+            ]);
+
+            // Nomenclatura oficial Sicredi: CCCCDDSS.REM (Manual Pág. 9)
+            $cleanConvenio = substr($this->asciiPad($agreementCode, 4, '0'), 0, 4);
+            $batchSeq = str_pad((string) ($batch->id % 100), 2, '0', STR_PAD_LEFT);
+            $filename = $cleanConvenio . $this->paymentDate->format('d') . $batchSeq . '.REM';
+
+            return [
+                'content'      => $content,
+                'filename'     => $filename,
+                'batch_id'     => $batch->id,
+                'total_amount' => round($totalAmount, 2),
+                'count'        => $validPayables->count(),
+            ];
+        });
+    }
+
+    /**
+     * Segmento A — PIX Transferência (Manual Sicredi Págs. 13, 16 e 48)
+     */
+    protected function buildPixSegmentA(int $lotSeq, int $recSeq, AccountPayable $payable, string $payeeName, float $amount): string
+    {
+        $docNumber = $this->asciiPad("AP-{$payable->id}", 20);
+        $favName = $this->asciiPad($payeeName, 30);
+        $cents = $this->numPad((int) round($amount * 100), 15);
+
+        $s = '';
+        $s .= '748';                                                     // 01.3A (001-003): Banco (3)
+        $s .= $this->numPad($lotSeq, 4);                                 // 02.3A (004-007): Lote (4)
+        $s .= '3';                                                       // 03.3A (008-008): Tipo Registro (1)
+        $s .= $this->numPad($recSeq, 5);                                 // 04.3A (009-013): Sequencial Registro no Lote (5)
+        $s .= 'A';                                                       // 05.3A (014-014): Código Segmento (1)
+        $s .= '0';                                                       // 06.3A (015-015): Tipo Movimento 0=Inclusão (1)
+        $s .= '00';                                                      // 07.3A (016-017): Código Instrução (2)
+        $s .= SicrediCnab240PixDictionary::CLEARING_HOUSE_SPI;           // 08.3A (018-020): Câmara Centralizadora '009' = PIX SPI (3)
+        $s .= '000';                                                     // 09.3A (021-023): Banco Favorecido Zeros p/ chave 01..04 (3)
+        $s .= '00000';                                                   // 10.3A (024-028): Agência Favorecido Zeros (5)
+        $s .= ' ';                                                       // 11.3A (029-029): DV Agência (1 Branco)
+        $s .= '000000000000';                                            // 12.3A (030-041): Conta Favorecido Zeros (12)
+        $s .= '0';                                                       // 13.3A (042-042): DV Conta (1)
+        $s .= ' ';                                                       // 14.3A (043-043): DV Ag/Conta (1 Branco)
+        $s .= $favName;                                                  // 15.3A (044-073): Nome Favorecido (30)
+        $s .= $docNumber;                                                // 16.3A (074-093): Seu Número (20)
+        $s .= $this->paymentDate->format('dmY');                         // 17.3A (094-101): Data Pagamento DDMMAAAA (8)
+        $s .= 'BRL';                                                     // 18.3A (102-104): Tipo Moeda (3)
+        $s .= str_repeat('0', 15);                                       // 19.3A (105-119): Quantidade Moeda (15)
+        $s .= $cents;                                                    // 20.3A (120-134): Valor Pagamento (15)
+        $s .= str_repeat(' ', 20);                                       // 21.3A (135-154): Nosso Número (20)
+        $s .= str_repeat('0', 8);                                        // 22.3A (155-162): Data Real Efetivação (8)
+        $s .= str_repeat('0', 15);                                       // 23.3A (163-177): Valor Real Efetivação (15)
+        $s .= str_repeat(' ', 40);                                       // 24.3A (178-217): Informação 2 (40)
+        $s .= '  ';                                                      // 25.3A (218-219): Finalidade DOC (2)
+        $s .= str_repeat(' ', 5);                                        // 26.3A (220-224): Finalidade TED (5)
+        $s .= '  ';                                                      // 27.3A (225-226): Finalidade Complementar (2)
+        $s .= '   ';                                                     // 28.3A (227-229): Uso Exclusivo SICREDI (3)
+        $s .= '0';                                                       // 29.3A (230-230): P006 Aviso ao Favorecido (1)
+        $s .= str_repeat(' ', 10);                                       // 30.3A (231-240): Ocorrências Retorno (10)
+
+        return substr($s, 0, 240);
+    }
+
+    /**
+     * Segmento B — PIX Transferência (Manual Sicredi Págs. 15, 16 e 44)
+     */
+    protected function buildPixSegmentB(int $lotSeq, int $recSeq, AccountPayable $payable, array $pixData): string
+    {
+        $keyTypeField = str_pad($pixData['type'], 3, ' ', STR_PAD_RIGHT); // Pos 15-17 (Alfa 3): '01 ', '02 ', '03 ', '04 '
+        $docType = $pixData['doc_type'] ?? '0';
+        $docNumber = $this->numPad($pixData['doc_number'] ?? '0', 14);
+
+        $info10Txid = str_repeat(' ', 30);                               // Pos 33-62: TXID opcional (30 Alfa)
+        $info11Msg = $this->asciiPad($payable->description ?? '', 65);   // Pos 63-127: Info entre usuários (65 Alfa)
+
+        // Manual Sicredi Pág. 16: Para chave tipo '03' (CPF/CNPJ), o banco valida Pos 18 e 19-32; Info 12 fica em branco.
+        $rawKeyField = $pixData['type'] === SicrediCnab240PixDictionary::KEY_TYPE_DOC
+            ? ''
+            : ($pixData['key_value'] ?? '');
+        $info12Key = $this->padPixKeyField($rawKeyField, 99);            // Pos 128-226: Chave PIX (99 Alfa)
+
+        $s = '';
+        $s .= '748';                                                     // 01.3B (001-003): Banco (3)
+        $s .= $this->numPad($lotSeq, 4);                                 // 02.3B (004-007): Lote (4)
+        $s .= '3';                                                       // 03.3B (008-008): Tipo Registro (1)
+        $s .= $this->numPad($recSeq, 5);                                 // 04.3B (009-013): Sequencial Registro no Lote (5)
+        $s .= 'B';                                                       // 05.3B (014-014): Código Segmento (1)
+        $s .= $keyTypeField;                                             // 06.3B (015-017): Tipo Identificação Chave PIX G100 (3)
+        $s .= $docType;                                                  // 07.3B (018-018): Tipo Inscrição Favorecido (1)
+        $s .= $docNumber;                                                // 08.3B (019-032): Número Inscrição Favorecido (14)
+        $s .= $info10Txid;                                              // 09.3B (033-062): Informação 10 TXID (30)
+        $s .= $info11Msg;                                                // 10.3B (063-127): Informação 11 Mensagem (65)
+        $s .= $info12Key;                                                // 11.3B (128-226): Informação 12 Chave PIX (99)
+        $s .= '000000';                                                  // 12.3B (227-232): UG Centralizadora SIAPE (6)
+        $s .= '00000000';                                                // 13.3B (233-240): Código ISPB (8)
+
+        return substr($s, 0, 240);
+    }
+
+    /**
+     * Formata a chave PIX preservando caracteres válidos (@, _, -, +, .) sem forçar caixa alta em e-mails/UUIDs.
+     */
+    protected function padPixKeyField(string $key, int $length): string
+    {
+        $clean = preg_replace('/[^A-Za-z0-9@._+\-]/', '', trim($key));
+        if (strlen($clean) > $length) {
+            $clean = substr($clean, 0, $length);
+        }
+        return str_pad($clean, $length, ' ', STR_PAD_RIGHT);
+    }
+
+    /**
+     * Header de Lote (Manual Sicredi Pág. 11-12)
+     */
+    protected function buildLotHeader(
+        int $lotSeq,
+        string $cnpj,
+        string $name,
+        string $agreement,
+        string $agency,
+        string $agencyDv,
+        string $account,
+        string $accountDv,
+        string $desc,
+        string $serviceType = '30',
+        string $launchForm = '01'
+    ): string {
         $h = '';
         $h .= '748';                                                     // 01.1 (001-003): Banco (3)
         $h .= $this->numPad($lotSeq, 4);                                 // 02.1 (004-007): Lote de Serviço (4)
         $h .= '1';                                                       // 03.1 (008-008): Tipo Registro (1)
         $h .= 'C';                                                       // 04.1 (009-009): Tipo Operação C=Crédito (1)
-        $h .= '30';                                                      // 05.1 (010-011): Tipo Serviço 30=Salários (2)
-        $h .= '01';                                                      // 06.1 (012-013): Forma Lançamento 01=Crédito CC (2)
+        $h .= $this->numPad($serviceType, 2);                            // 05.1 (010-011): Tipo Serviço ('30'=Salários, '20'=Fornecedor) (2)
+        $h .= $this->numPad($launchForm, 2);                             // 06.1 (012-013): Forma Lançamento ('01'=CC, '45'=PIX) (2)
         $h .= '042';                                                     // 07.1 (014-016): Versão Layout do Lote G030 = 042 (Manual Sicredi)
         $h .= ' ';                                                       // 08.1 (017-017): Uso Exclusivo SICREDI (1)
         $h .= '2';                                                       // 09.1 (018-018): Tipo Inscrição 2=CNPJ (1)

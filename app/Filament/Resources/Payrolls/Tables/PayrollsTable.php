@@ -29,7 +29,8 @@ class PayrollsTable
             ->columns([
                 Tables\Columns\TextColumn::make('reference_period')
                     ->label('Competência')
-                    ->date('m/Y')
+                    ->formatStateUsing(fn (?string $state) => $state ? \App\Enums\PayrollReferenceType::formatPeriod($state) : '-')
+                    ->description(fn (Payroll $record) => \App\Enums\PayrollReferenceType::fromPeriod($record->reference_period)->getLabel())
                     ->sortable()
                     ->weight('bold'),
 
@@ -77,8 +78,8 @@ class PayrollsTable
                     ])
                     ->query(function ($query, array $data) {
                         return $query
-                            ->when($data['period_from'], fn ($q, $date) => $q->whereDate('reference_period', '>=', $date))
-                            ->when($data['period_until'], fn ($q, $date) => $q->whereDate('reference_period', '<=', $date));
+                            ->when($data['period_from'], fn ($q, $date) => $q->where('reference_period', '>=', Carbon::parse($date)->format('Y-m')))
+                            ->when($data['period_until'], fn ($q, $date) => $q->where('reference_period', '<=', Carbon::parse($date)->format('Y-m') . '-ZZZ'));
                     }),
             ])
             ->actions([
@@ -89,7 +90,7 @@ class PayrollsTable
                     ->color('warning')
                     ->disabled(fn (Payroll $record): bool => (float) $record->total_net <= 0)
                     ->tooltip(fn (Payroll $record): ?string => (float) $record->total_net <= 0 ? 'Folha sem valores líquidos para gerar remessa.' : null)
-                    ->modalHeading(fn (Payroll $record) => 'Exportar CNAB 240 (Sicredi) — Competência ' . Carbon::parse($record->reference_period)->format('m/Y'))
+                    ->modalHeading(fn (Payroll $record) => 'Exportar CNAB 240 (Sicredi) — Competência ' . \App\Enums\PayrollReferenceType::formatPeriod($record->reference_period))
                     ->modalDescription('Gere o arquivo .REM de folha de pagamento para as contas-salário da cooperativa Sicredi.')
                     ->modalSubmitActionLabel('Gerar e Baixar .REM')
                     ->form(fn (Payroll $record): array => [
@@ -168,7 +169,7 @@ class PayrollsTable
                         }
 
                         $paymentDate = Carbon::parse($data['payment_date']);
-                        $refMonth = Carbon::parse($record->reference_period)->format('m/Y');
+                        $refMonth = \App\Enums\PayrollReferenceType::formatPeriod($record->reference_period);
                         $service = new SicrediCnab240Service($sicredi, $paymentDate);
                         $result = $service->generateSalaryBatch($payslips, "FOLHA {$refMonth}");
 
@@ -199,11 +200,11 @@ class PayrollsTable
                     })
                     ->requiresConfirmation()
                     ->modalHeading('Enviar Relatório ao DP')
-                    ->modalDescription(fn (Payroll $record) => 'Deseja despachar por e-mail os relatórios de fechamento da competência ' . Carbon::parse($record->reference_period)->format('m/Y') . ' para a contabilidade?')
+                    ->modalDescription(fn (Payroll $record) => 'Deseja despachar por e-mail os relatórios de fechamento da competência ' . \App\Enums\PayrollReferenceType::formatPeriod($record->reference_period) . ' para a contabilidade?')
                     ->modalSubmitActionLabel('Confirmar e Enviar')
                     ->action(function (Payroll $record) {
                         try {
-                            $date = Carbon::parse($record->reference_period);
+                            $date = \App\Enums\PayrollReferenceType::toCarbon($record->reference_period);
                             $service = new AccountingExportService();
                             $service->sendMonthlyClosing($date);
 

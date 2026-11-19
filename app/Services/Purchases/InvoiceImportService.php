@@ -125,12 +125,18 @@ class InvoiceImportService
             $nfeNode = isset($xml->NFe) ? $xml->NFe : ($xml->getName() === 'NFe' ? $xml : null);
             $inf = $nfeNode->infNFe;
 
+            $rawIssueDate = (string) ($inf->ide->dhEmi ?? $inf->ide->dEmi ?? '');
+            $issueDate = !empty($rawIssueDate)
+                ? \Carbon\Carbon::parse($rawIssueDate)->toDateString()
+                : now()->toDateString();
+
             $state = [
                 'received_invoice_id' => $receivedInvoiceId,
-                'invoice_key' => str_replace('NFe', '', (string) $inf->attributes()->Id),
-                'xml_total_amount' => (float) $inf->total->ICMSTot->vNF,
-                'xml_supplier_cnpj' => (string) $inf->emit->CNPJ,
-                'xml_supplier_name' => (string) $inf->emit->xNome,
+                'invoice_key'         => str_replace('NFe', '', (string) $inf->attributes()->Id),
+                'invoice_issue_date'  => $issueDate,
+                'xml_total_amount'    => (float) $inf->total->ICMSTot->vNF,
+                'xml_supplier_cnpj'   => (string) $inf->emit->CNPJ,
+                'xml_supplier_name'   => (string) $inf->emit->xNome,
             ];
 
             $state['financial_already_launched'] = AccountPayable::where('nfe_key', $state['invoice_key'])->exists();
@@ -140,12 +146,29 @@ class InvoiceImportService
             if (isset($inf->cobr->dup)) {
                 foreach ($inf->cobr->dup as $dup) {
                     $installments[] = [
-                        'number' => (string) $dup->nDup,
+                        'number'   => (string) $dup->nDup,
                         'due_date' => (string) $dup->dVenc,
-                        'amount' => (float) $dup->vDup
+                        'amount'   => (float) $dup->vDup
                     ];
                 }
             }
+
+            // Se a NF-e veio sem duplicata (<dup>) e o fornecedor é faturado com prazo de X dias, projeta o vencimento
+            if (empty($installments) && !empty($state['supplier_id'])) {
+                $supplierObj = Supplier::find($state['supplier_id']);
+                if ($supplierObj && $supplierObj->is_invoiced && (int) $supplierObj->invoice_payment_days > 0) {
+                    $projectedDue = \Carbon\Carbon::parse($issueDate)
+                        ->addDays((int) $supplierObj->invoice_payment_days)
+                        ->toDateString();
+
+                    $installments[] = [
+                        'number'   => '1/1',
+                        'due_date' => $projectedDue,
+                        'amount'   => $state['xml_total_amount'],
+                    ];
+                }
+            }
+
             $state['xml_installments'] = $installments;
 
             $groupedItems = [];
@@ -284,9 +307,17 @@ class InvoiceImportService
         if ($xmlTotalAmount <= 0) $xmlTotalAmount = 1; // Previne divisão por zero
         $personalRatio = min(1.0, $personalTotal / $xmlTotalAmount);
 
+        $settlementMode = $supplier?->settlement_mode?->value
+            ?? (is_string($supplier?->settlement_mode) ? $supplier->settlement_mode : \App\Enums\PayableSettlementMode::MANUAL->value);
+
         $installments = $data['xml_installments'] ?? [];
         if (empty($installments)) {
-            $installments[] = ['number' => '1/1', 'due_date' => now()->toDateString(), 'amount' => $xmlTotalAmount];
+            $defaultDue = now()->toDateString();
+            if ($supplier && $supplier->is_invoiced && (int) $supplier->invoice_payment_days > 0) {
+                $baseDate = !empty($data['invoice_issue_date']) ? \Carbon\Carbon::parse($data['invoice_issue_date']) : now();
+                $defaultDue = $baseDate->addDays((int) $supplier->invoice_payment_days)->toDateString();
+            }
+            $installments[] = ['number' => '1/1', 'due_date' => $defaultDue, 'amount' => $xmlTotalAmount];
         }
 
         foreach ($installments as $dup) {
@@ -306,6 +337,7 @@ class InvoiceImportService
                     'status'                 => 'pending',
                     'accounting_category'    => $category,
                     'accounting_subcategory' => $subcategory,
+                    'settlement_mode'        => $settlementMode,
                     'is_personal'            => false,
                 ]);
             }
@@ -322,6 +354,7 @@ class InvoiceImportService
                     'status'                 => 'pending',
                     'accounting_category'    => 'partners',
                     'accounting_subcategory' => 'personal',
+                    'settlement_mode'        => $settlementMode,
                     'is_personal'            => true,
                 ]);
             }

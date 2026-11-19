@@ -12,10 +12,34 @@ class AccountPayable extends Model
     protected $guarded = [];
 
     protected $casts = [
-        "due_date" => "date",
-        "payment_date" => "date",
-        "amount" => "decimal:2",
+        "due_date"        => "date",
+        "payment_date"    => "date",
+        "amount"          => "decimal:2",
+        "settlement_mode" => \App\Enums\PayableSettlementMode::class,
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (AccountPayable $payable) {
+            if (!empty($payable->settlement_mode)) {
+                return;
+            }
+
+            if ($payable->supplier_id && ($supplier = Supplier::find($payable->supplier_id))) {
+                $payable->settlement_mode = $supplier->settlement_mode ?? \App\Enums\PayableSettlementMode::MANUAL;
+                return;
+            }
+
+            if ($payable->employee_id && ($employee = Employee::find($payable->employee_id))) {
+                $payable->settlement_mode = !empty($employee->pix_key)
+                    ? \App\Enums\PayableSettlementMode::PIX_REMITTANCE
+                    : \App\Enums\PayableSettlementMode::MANUAL;
+                return;
+            }
+
+            $payable->settlement_mode = \App\Enums\PayableSettlementMode::MANUAL;
+        });
+    }
 
     // ==========================================
     // FUNÇÃO AUXILIAR: Insere a linha no Extrato do Colaborador

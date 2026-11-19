@@ -67,7 +67,12 @@ class AccountPayablesCalendarWidget extends FullCalendarWidget
                 $rawName = $payable->description;
             }
 
-            $displayName = Str::limit($rawName, 13, "...");
+            $modeEnum = $payable->settlement_mode instanceof \App\Enums\PayableSettlementMode
+                ? $payable->settlement_mode
+                : (\App\Enums\PayableSettlementMode::tryFrom((string) $payable->settlement_mode) ?? \App\Enums\PayableSettlementMode::MANUAL);
+            $modePrefix = $modeEnum->getCalendarPrefix();
+
+            $displayName = $modePrefix . Str::limit($rawName, 12, "...");
             $value = number_format((float) $payable->amount, 2, ",", ".");
 
             $className = "event-warning";
@@ -115,9 +120,10 @@ class AccountPayablesCalendarWidget extends FullCalendarWidget
                     "status"        => $payable->status,
                     "statusLabel"   => $statusLabel,
                     "statusColor"   => $statusColor,
-                    "category"      => $categoryFormatted,
-                    "recurringName" => $payable->recurringExpense?->name,
-                    "bankAccount"   => $payable->bankAccount?->name,
+                    "category"       => $categoryFormatted,
+                    "settlementMode" => $modeEnum->getLabel(),
+                    "recurringName"  => $payable->recurringExpense?->name,
+                    "bankAccount"    => $payable->bankAccount?->name,
                 ],
             ];
         });

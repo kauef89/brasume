@@ -50,6 +50,28 @@ class AccountPayableForm
                 // 🚀 CORREÇÃO 2: Verificação segura no visible()
                 ->visible(fn ($record) => $record instanceof \App\Models\AccountPayable && $record->bankStatement !== null)
                 ->columnSpanFull(),
+
+            Placeholder::make('dda_automation_banner')
+                ->hiddenLabel()
+                ->content(function ($record) {
+                    if (!$record instanceof \App\Models\AccountPayable) return '';
+                    $mode = $record->settlement_mode;
+                    if (!in_array($mode, [\App\Enums\PayableSettlementMode::DDA_BOLETO, \App\Enums\PayableSettlementMode::AUTO_DEBIT], true)) {
+                        return '';
+                    }
+                    $label = $mode->getLabel();
+                    return new HtmlString("
+                        <div class='p-4 bg-sky-50 dark:bg-sky-950/40 rounded-xl border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300 flex items-center gap-3 mb-4'>
+                            <span class='text-xl'>🏦</span>
+                            <div>
+                                <p class='font-bold text-xs uppercase tracking-wider'>{$label} — Gira Automaticamente no Banco</p>
+                                <p class='text-xs mt-0.5'>Este título está sinalizado para liquidação bancária automática e é bloqueado no Malote PIX (CNAB 240) para evitar pagamento duplicado.</p>
+                            </div>
+                        </div>
+                    ");
+                })
+                ->visible(fn ($record) => $record instanceof \App\Models\AccountPayable && in_array($record->settlement_mode, [\App\Enums\PayableSettlementMode::DDA_BOLETO, \App\Enums\PayableSettlementMode::AUTO_DEBIT], true))
+                ->columnSpanFull(),
         ];
 
         $abaDetalhes = [
@@ -123,6 +145,14 @@ class AccountPayableForm
                                     $supplier->accounting_subcategory,
                                 );
                             }
+                            if ($supplier->settlement_mode) {
+                                $set(
+                                    "settlement_mode",
+                                    $supplier->settlement_mode instanceof \BackedEnum
+                                        ? $supplier->settlement_mode->value
+                                        : $supplier->settlement_mode,
+                                );
+                            }
                         }
                     })
                     ->createOptionForm([
@@ -193,9 +223,16 @@ class AccountPayableForm
         ];
 
         $abaVencimento = [
-            Grid::make(4)->schema([ // Mudamos para 4 colunas
+            Grid::make(5)->schema([
                 DatePicker::make("due_date")
                     ->label("Data de Vencimento")
+                    ->required()
+                    ->columnSpan(1),
+
+                Select::make("settlement_mode")
+                    ->label("Modalidade Bancária")
+                    ->options(\App\Enums\PayableSettlementMode::class)
+                    ->default(\App\Enums\PayableSettlementMode::MANUAL->value)
                     ->required()
                     ->columnSpan(1),
 

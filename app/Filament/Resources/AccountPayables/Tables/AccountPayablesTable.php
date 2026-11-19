@@ -39,9 +39,19 @@ class AccountPayablesTable
                     ->searchable()
                     ->limit(40),
 
-                Tables\Columns\TextColumn::make('supplier.name')
-                    ->label('Fornecedor')
-                    ->searchable(),
+                Tables\Columns\TextColumn::make('beneficiary_display')
+                    ->label('Favorecido')
+                    ->state(fn ($record) => $record->supplier?->name ?? $record->employee?->name ?? $record->supplier_name ?? '-')
+                    ->description(fn ($record) => $record->employee_id ? 'Colaborador' : ($record->payment_batch_id ? "Lote CNAB #{$record->payment_batch_id}" : null))
+                    ->searchable(query: fn ($query, string $search) => $query
+                        ->whereHas('supplier', fn ($q) => $q->where('name', 'like', "%{$search}%"))
+                        ->orWhereHas('employee', fn ($q) => $q->where('name', 'like', "%{$search}%"))
+                    ),
+
+                Tables\Columns\TextColumn::make('settlement_mode')
+                    ->label('Modalidade')
+                    ->badge()
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('amount')
                     ->label('Valor')
@@ -56,6 +66,9 @@ class AccountPayablesTable
             ->filters([
                 SelectFilter::make('status')
                     ->options(\App\Enums\PaymentStatus::class),
+                SelectFilter::make('settlement_mode')
+                    ->label('Modalidade Bancária')
+                    ->options(\App\Enums\PayableSettlementMode::class),
                 TernaryFilter::make('is_late')
                     ->label('Atrasadas')
                     ->queries(

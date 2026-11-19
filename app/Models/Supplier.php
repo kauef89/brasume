@@ -18,10 +18,13 @@ class Supplier extends Model
     protected function casts(): array
     {
         return [
-            'is_trusted'  => 'boolean',
-            'is_personal' => 'boolean',
-            'is_active'   => 'boolean',
-            'order_days'  => 'array',
+            'is_trusted'           => 'boolean',
+            'is_personal'          => 'boolean',
+            'is_active'            => 'boolean',
+            'is_invoiced'          => 'boolean',
+            'invoice_payment_days' => 'integer',
+            'settlement_mode'      => \App\Enums\PayableSettlementMode::class,
+            'order_days'           => 'array',
         ];
     }
 

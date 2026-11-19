@@ -17,7 +17,9 @@ class PayrollInfolist
                     Grid::make(4)->schema([
                         TextEntry::make('reference_period')
                             ->label('Competência')
-                            ->date('m/Y')
+                            ->formatStateUsing(fn (?string $state) => $state ? \App\Enums\PayrollReferenceType::formatPeriod($state) : '-')
+                            ->badge()
+                            ->color(fn ($record) => \App\Enums\PayrollReferenceType::fromPeriod($record->reference_period)->getColor())
                             ->weight('bold'),
 
                         TextEntry::make('payment_date')

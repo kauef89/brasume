@@ -81,8 +81,39 @@ class SupplierForm
                         ]),
                     ]),
 
-                    // ABA 2: DRE / CLASSIFICAÇÃO PADRÃO
-                    SchemaComponents\Tabs\Tab::make("DRE e Padrões")->schema([
+                    // ABA 2: DRE, COBRANÇA BANCÁRIA & FATURAMENTO
+                    SchemaComponents\Tabs\Tab::make("Financeiro & DRE")->schema([
+                        SchemaComponents\Section::make("Liquidação Bancária & Faturamento")
+                            ->description("Defina como os títulos deste fornecedor giram no banco e o prazo padrão quando a NF-e chegar sem boleto.")
+                            ->schema([
+                                SchemaComponents\Grid::make(3)->schema([
+                                    FormComponents\Select::make("settlement_mode")
+                                        ->label("Modalidade de Pagamento Padrão")
+                                        ->options(\App\Enums\PayableSettlementMode::class)
+                                        ->default(\App\Enums\PayableSettlementMode::MANUAL->value)
+                                        ->required()
+                                        ->helperText("DDA/Débito Automático sinalizam no Contas a Pagar e bloqueiam inclusão no Malote PIX."),
+
+                                    FormComponents\Toggle::make("is_invoiced")
+                                        ->label("Notas Fiscais Faturadas?")
+                                        ->helperText("Ative se este fornecedor fatura a prazo (sem boleto anexo no XML).")
+                                        ->default(false)
+                                        ->live()
+                                        ->inline(false),
+
+                                    FormComponents\TextInput::make("invoice_payment_days")
+                                        ->label("Prazo de Pagamento (Dias)")
+                                        ->numeric()
+                                        ->minValue(1)
+                                        ->maxValue(365)
+                                        ->suffix("dias")
+                                        ->placeholder("Ex: 28")
+                                        ->visible(fn (Get $get) => (bool) $get("is_invoiced"))
+                                        ->required(fn (Get $get) => (bool) $get("is_invoiced"))
+                                        ->helperText("Vencimento = Data de Emissão da NF-e + X dias."),
+                                ]),
+                            ]),
+
                         SchemaComponents\Section::make(
                             "Classificação Contábil Padrão",
                         )
