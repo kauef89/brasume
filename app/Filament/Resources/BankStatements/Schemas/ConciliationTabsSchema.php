@@ -90,51 +90,47 @@ class ConciliationTabsSchema
             }
         }
 
-        // Busca par oposto pendente (ex.: pagamento -R$ 95,00 + estorno +R$ 95,00 do mesmo CNPJ/CPF)
+        // Busca par oposto (entrada original já vinculada a Pedido/Pagamento ou lançamento pendente do mesmo titular)
         $oppositeSign = $isCredit ? '<' : '>';
         $oppositeCandidate = null;
         $reconciledIncomingPayment = null;
 
+        $nameTokens = collect(explode(' ', Str::ascii(mb_strtolower((string) $statement->counterparty_name))))
+            ->map(fn ($t) => preg_replace('/[^a-z]/', '', $t))
+            ->filter(fn ($t) => strlen($t) >= 4)
+            ->values();
+
+        $matchesIdentity = function (?string $otherDoc, ?string $otherName) use ($cleanDoc, $nameTokens): bool {
+            $otherCleanDoc = preg_replace('/[^0-9]/', '', (string) $otherDoc);
+            if ($cleanDoc !== '' && $otherCleanDoc !== '') {
+                return $cleanDoc === $otherCleanDoc;
+            }
+            if ($nameTokens->isEmpty() || empty($otherName)) {
+                return false;
+            }
+            $otherAscii = Str::ascii(mb_strtolower((string) $otherName));
+            $hits = $nameTokens->filter(fn ($tok) => str_contains($otherAscii, $tok))->count();
+            return $hits >= min(2, $nameTokens->count());
+        };
+
         if ($statement->bank_date) {
-            $oppQuery = BankStatement::where('status', 'pending')
-                ->where('id', '!=', $statement->id)
-                ->where('bank_account_id', $statement->bank_account_id)
-                ->where('amount', $oppositeSign, 0)
-                ->whereBetween('bank_date', [
-                    $statement->bank_date->copy()->subDays(45)->toDateString(),
-                    $statement->bank_date->copy()->addDays(45)->toDateString(),
-                ])
-                ->whereRaw('ABS(ABS(amount) - ?) < 0.05', [$amount]);
-
-            if (!empty($cleanDoc)) {
-                $oppositeCandidate = (clone $oppQuery)->where('document', $statement->document)->first()
-                    ?? (clone $oppQuery)->where('document', $cleanDoc)->first();
-            }
-
-            if (!$oppositeCandidate && $movType === BankMovementType::REFUND->value) {
-                $oppositeCandidate = $oppQuery->first();
-            }
-
-            // Se a entrada PIX original do cliente já foi conciliada com um Payment/Order (ex: Robson Lennon), localiza-a!
-            if (!$oppositeCandidate && !$isCredit) {
-                $recOppQuery = BankStatement::where('status', 'reconciled')
+            // 1. Para devolução ao cliente (!$isCredit), verifica primeiro se há recebimento/pedido na janela de 48h
+            if (!$isCredit) {
+                $recOppCandidates = BankStatement::where('status', 'reconciled')
                     ->where('id', '!=', $statement->id)
                     ->where('bank_account_id', $statement->bank_account_id)
                     ->where('amount', '>', 0)
                     ->whereBetween('bank_date', [
-                        $statement->bank_date->copy()->subDays(5)->toDateString(),
-                        $statement->bank_date->copy()->addDays(2)->toDateString(),
+                        $statement->bank_date->copy()->subDays(2)->toDateString(),
+                        $statement->bank_date->copy()->addDay()->toDateString(),
                     ])
-                    ->whereRaw('ABS(amount - ?) < 0.05', [$amount]);
+                    ->whereRaw('ABS(amount - ?) < 0.05', [$amount])
+                    ->orderByDesc('id')
+                    ->get();
 
-                $matchedIncomingStmt = null;
-                if (!empty($cleanDoc)) {
-                    $matchedIncomingStmt = (clone $recOppQuery)->where('document', $statement->document)->first()
-                        ?? (clone $recOppQuery)->where('document', $cleanDoc)->first();
-                }
-                if (!$matchedIncomingStmt && !empty($statement->counterparty_name)) {
-                    $matchedIncomingStmt = (clone $recOppQuery)->where('counterparty_name', $statement->counterparty_name)->first();
-                }
+                $matchedIncomingStmt = $recOppCandidates->first(
+                    fn (BankStatement $s) => $matchesIdentity($s->document, $s->counterparty_name)
+                );
 
                 if ($matchedIncomingStmt) {
                     if ($matchedIncomingStmt->conciliable_type === Payment::class && $matchedIncomingStmt->conciliable_id) {
@@ -151,6 +147,47 @@ class ConciliationTabsSchema
                             ->first();
                     }
                 }
+
+                // Fallback direto em Pagamentos/Pedidos do PDV na janela de 48h pelo CPF ou nome do cliente
+                if (!$reconciledIncomingPayment) {
+                    $paymentCandidates = Payment::with(['order.customer'])
+                        ->whereBetween('created_at', [
+                            $statement->bank_date->copy()->subDays(2)->startOfDay(),
+                            $statement->bank_date->copy()->addDay()->endOfDay(),
+                        ])
+                        ->whereRaw('ABS(amount - ?) < 0.05', [$amount])
+                        ->orderByDesc('id')
+                        ->get();
+
+                    $reconciledIncomingPayment = $paymentCandidates->first(function (Payment $p) use ($matchesIdentity) {
+                        $ord = $p->order;
+                        if (!$ord) {
+                            return false;
+                        }
+                        $custDoc = $ord->customer?->cpf ?? null;
+                        $custName = $ord->customer?->name ?? $ord->customer_name;
+                        return $matchesIdentity($custDoc, $custName);
+                    });
+                }
+            }
+
+            // 2. Só busca par pendente no extrato se não houver pedido/pagamento vinculado e houver identidade compatível
+            if (!$reconciledIncomingPayment) {
+                $oppCandidates = BankStatement::where('status', 'pending')
+                    ->where('id', '!=', $statement->id)
+                    ->where('bank_account_id', $statement->bank_account_id)
+                    ->where('amount', $oppositeSign, 0)
+                    ->whereBetween('bank_date', [
+                        $statement->bank_date->copy()->subDays(45)->toDateString(),
+                        $statement->bank_date->copy()->addDays(45)->toDateString(),
+                    ])
+                    ->whereRaw('ABS(ABS(amount) - ?) < 0.05', [$amount])
+                    ->orderByDesc('id')
+                    ->get();
+
+                $oppositeCandidate = $oppCandidates->first(
+                    fn (BankStatement $s) => $matchesIdentity($s->document, $s->counterparty_name)
+                );
             }
         }
 
@@ -263,7 +300,7 @@ class ConciliationTabsSchema
 
         return [
             'conciliation_type'      => $defaultType,
-            'refund_mode'            => $oppositeCandidate ? 'pair_statement' : ($isCredit ? 'contra_payable' : 'contra_receivable'),
+            'refund_mode'            => ($reconciledIncomingPayment || !$isCredit) ? ($oppositeCandidate && !$reconciledIncomingPayment ? 'pair_statement' : 'contra_receivable') : ($oppositeCandidate ? 'pair_statement' : 'contra_payable'),
             'refund_statement_id'    => $oppositeCandidate?->id,
             'refund_payable_id'      => null,
             'refund_receivable_id'   => $reconciledIncomingPayment ? ('payment_' . $reconciledIncomingPayment->id) : null,
