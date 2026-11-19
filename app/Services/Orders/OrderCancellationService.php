@@ -276,6 +276,69 @@ class OrderCancellationService
     }
 
     /**
+     * Cancela um pedido diretamente a partir da auditoria de conciliação bancária (estorno PIX/cartão),
+     * restaurando estoque, cancelando itens, liberando mesa e registrando auditoria administrativa.
+     */
+    public function cancelOrderFromReconciliation(Order $order, string $reason = 'Estorno confirmado na conciliação bancária'): void
+    {
+        DB::transaction(function () use ($order, $reason) {
+            $locked = Order::where('id', $order->id)->lockForUpdate()->first();
+            if (!$locked || $locked->status === 'cancelled') {
+                return;
+            }
+
+            $operatorId = auth()->id();
+
+            \App\Models\PosAudit::create([
+                'action'        => 'cancel_order_reconciliation',
+                'operator_id'   => $operatorId,
+                'authorizer_id' => $operatorId,
+                'reason'        => $reason,
+                'context'       => ['order_id' => $locked->id, 'total' => $locked->total],
+            ]);
+
+            $locked->load(['items.modifiers', 'items.subItems.modifiers']);
+
+            foreach ($locked->items as $item) {
+                if ($item->status === 'cancelled') {
+                    continue;
+                }
+                if ($item->parent_item_id === null) {
+                    $this->inventoryService->processOrderItemStock($item, 'restore');
+                }
+            }
+
+            $locked->update([
+                'status'         => 'cancelled',
+                'payment_status' => 'refunded',
+                'closed_at'      => $locked->closed_at ?? now(),
+                'notes'          => trim(($locked->notes ? $locked->notes . ' | ' : '') . "Cancelado na conciliação: {$reason}"),
+            ]);
+
+            $locked->items()->update([
+                'status'            => 'cancelled',
+                'production_status' => 'cancelled',
+                'cancel_reason'     => $reason,
+            ]);
+
+            if ($locked->coupon_id) {
+                $coupon = Coupon::find($locked->coupon_id);
+                if ($coupon && $coupon->usage_count > 0) {
+                    $coupon->decrement('usage_count');
+                }
+            }
+
+            $this->evaluateTableRelease($locked);
+        });
+
+        $fresh = $order->fresh();
+        if ($fresh) {
+            broadcast(new OrderUpdated($fresh));
+            event(new OrderCancelled($fresh));
+        }
+    }
+
+    /**
      * 🛡️ Avalia a ocupação da mesa e de todo o seu grupo (mãe + filhas)
      * Nunca desmembra as mesas unidas e utiliza sempre o estado 'available'.
      */

@@ -127,8 +127,9 @@ class DreService
         $operatingProfit = $contributionMargin - $totalOperatingExpenses;
         $operatingMarginRatio = $grossRevenue > 0 ? ($operatingProfit / $grossRevenue) : 0;
 
-        // 12. CAPEX E RETIRADAS DOS SÓCIOS (ISOLADOS ABAIXO DO EBITDA)
+        // 12. CAPEX, JUROS DE EMPRÉSTIMOS E RETIRADAS DOS SÓCIOS (ISOLADOS ABAIXO DO EBITDA)
         $capexAmount = $this->getPayablesSum(categories: [AccountingCategory::CAPEX->value]);
+        $loanFinancialCosts = $this->getLoanInterestExpensesSum();
         
         // Retiradas dos Sócios: Contas pessoais pagas pela empresa + Pró-labore
         $personalExpensesRealized = $this->getPersonalPayablesSum();
@@ -136,7 +137,7 @@ class DreService
             ? max($personalExpensesRealized, $payrollForecast['partners_prolabore'])
             : $personalExpensesRealized;
 
-        $retainedNetProfit = $operatingProfit - $capexAmount - $personalExpenses;
+        $retainedNetProfit = $operatingProfit - $capexAmount - $loanFinancialCosts - $personalExpenses;
 
         // 13. PONTO DE EQUILÍBRIO (BREAK-EVEN)
         $fixedForBreakEven = $fixedStructure + $payrollCosts;
@@ -256,6 +257,9 @@ class DreService
             'capex' => [
                 'total' => $capexAmount,
                 'breakdown' => $this->getSectionBreakdown([AccountingCategory::CAPEX->value]),
+            ],
+            'financial_expenses' => [
+                'total' => $loanFinancialCosts,
             ],
             'personal_expenses' => [
                 'total' => $personalExpenses,
@@ -427,6 +431,32 @@ class DreService
                   ->orWhere('accounting_category', 'like', '%SEM%');
             })
             ->sum('amount');
+    }
+
+    /**
+     * Calcula apenas a parcela de JUROS / ENCARGOS financeiros dos empréstimos no período,
+     * ignorando a amortização do principal (que é devolução de passivo e não despesa DRE).
+     */
+    protected function getLoanInterestExpensesSum(): float
+    {
+        $payables = $this->getBasePayablesQuery()
+            ->with('loanInstallment')
+            ->where('accounting_category', AccountingCategory::FINANCIAL_EXPENSES->value)
+            ->get();
+
+        $totalInterest = 0.0;
+        foreach ($payables as $p) {
+            if ($p->accounting_subcategory === AccountingSubcategory::LOAN_AMORTIZATION->value) {
+                continue;
+            }
+            if ($p->loanInstallment) {
+                $totalInterest += (float) $p->loanInstallment->interest_portion;
+            } else {
+                $totalInterest += (float) $p->amount;
+            }
+        }
+
+        return round($totalInterest, 2);
     }
 
     protected function getPersonalPayablesSum(): float

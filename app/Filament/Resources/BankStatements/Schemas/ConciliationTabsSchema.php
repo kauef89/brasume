@@ -17,7 +17,10 @@ use App\Models\BankReconciliationRule;
 use App\Models\BankStatement;
 use App\Models\Customer;
 use App\Models\Employee;
+use App\Models\LoanContract;
+use App\Models\LoanInstallment;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\PaymentBatch;
 use App\Models\Payroll;
 use App\Models\Payslip;
@@ -90,6 +93,7 @@ class ConciliationTabsSchema
         // Busca par oposto pendente (ex.: pagamento -R$ 95,00 + estorno +R$ 95,00 do mesmo CNPJ/CPF)
         $oppositeSign = $isCredit ? '<' : '>';
         $oppositeCandidate = null;
+        $reconciledIncomingPayment = null;
 
         if ($statement->bank_date) {
             $oppQuery = BankStatement::where('status', 'pending')
@@ -109,6 +113,44 @@ class ConciliationTabsSchema
 
             if (!$oppositeCandidate && $movType === BankMovementType::REFUND->value) {
                 $oppositeCandidate = $oppQuery->first();
+            }
+
+            // Se a entrada PIX original do cliente já foi conciliada com um Payment/Order (ex: Robson Lennon), localiza-a!
+            if (!$oppositeCandidate && !$isCredit) {
+                $recOppQuery = BankStatement::where('status', 'reconciled')
+                    ->where('id', '!=', $statement->id)
+                    ->where('bank_account_id', $statement->bank_account_id)
+                    ->where('amount', '>', 0)
+                    ->whereBetween('bank_date', [
+                        $statement->bank_date->copy()->subDays(5)->toDateString(),
+                        $statement->bank_date->copy()->addDays(2)->toDateString(),
+                    ])
+                    ->whereRaw('ABS(amount - ?) < 0.05', [$amount]);
+
+                $matchedIncomingStmt = null;
+                if (!empty($cleanDoc)) {
+                    $matchedIncomingStmt = (clone $recOppQuery)->where('document', $statement->document)->first()
+                        ?? (clone $recOppQuery)->where('document', $cleanDoc)->first();
+                }
+                if (!$matchedIncomingStmt && !empty($statement->counterparty_name)) {
+                    $matchedIncomingStmt = (clone $recOppQuery)->where('counterparty_name', $statement->counterparty_name)->first();
+                }
+
+                if ($matchedIncomingStmt) {
+                    if ($matchedIncomingStmt->conciliable_type === Payment::class && $matchedIncomingStmt->conciliable_id) {
+                        $reconciledIncomingPayment = Payment::with('order')->find($matchedIncomingStmt->conciliable_id);
+                    } elseif ($matchedIncomingStmt->conciliable_type === AccountReceivable::class && $matchedIncomingStmt->conciliable_id) {
+                        $ar = AccountReceivable::with('order.payments')->find($matchedIncomingStmt->conciliable_id);
+                        $reconciledIncomingPayment = $ar?->order?->payments()
+                            ->whereRaw('ABS(amount - ?) < 0.05', [$amount])
+                            ->first();
+                    } elseif ($matchedIncomingStmt->conciliable_type === Order::class && $matchedIncomingStmt->conciliable_id) {
+                        $ord = Order::with('payments')->find($matchedIncomingStmt->conciliable_id);
+                        $reconciledIncomingPayment = $ord?->payments()
+                            ->whereRaw('ABS(amount - ?) < 0.05', [$amount])
+                            ->first();
+                    }
+                }
             }
         }
 
@@ -183,6 +225,18 @@ class ConciliationTabsSchema
                     ->where('id', '!=', $statement->bank_account_id)
                     ->first();
                 $defaultTransferTargetId = $vault?->id;
+            } elseif ($movType === BankMovementType::LOAN_OUT->value) {
+                $defaultType = ConciliationType::EXPENSE->value;
+                $defaultActionMode = 'link';
+                $code = strtoupper(trim((string) $statement->statement_identifier));
+                $loanInst = LoanInstallment::with('contract')
+                    ->where('status', '!=', 'paid')
+                    ->when($code !== '', fn ($q) => $q->whereHas('contract', fn ($cq) => $cq->where('contract_number', $code)))
+                    ->orderBy('due_date')
+                    ->first();
+                if ($loanInst && $loanInst->account_payable_id) {
+                    $defaultPayableId = 'payable_' . $loanInst->account_payable_id;
+                }
             } elseif ($movType === BankMovementType::FIXED_BILL->value) {
                 $defaultType = ConciliationType::RECURRING->value;
                 $defaultActionMode = 'link';
@@ -212,7 +266,9 @@ class ConciliationTabsSchema
             'refund_mode'            => $oppositeCandidate ? 'pair_statement' : ($isCredit ? 'contra_payable' : 'contra_receivable'),
             'refund_statement_id'    => $oppositeCandidate?->id,
             'refund_payable_id'      => null,
-            'refund_receivable_id'   => null,
+            'refund_receivable_id'   => $reconciledIncomingPayment ? ('payment_' . $reconciledIncomingPayment->id) : null,
+            'cancel_linked_order'    => $reconciledIncomingPayment?->order ? ($reconciledIncomingPayment->order->status !== 'cancelled') : true,
+            'cancel_order_reason'    => 'Estorno PIX confirmado na conciliação bancária',
             'refund_note'            => '',
             'action_mode'            => $defaultActionMode,
             'existing_payable_id'    => $defaultPayableId,
@@ -670,26 +726,126 @@ class ConciliationTabsSchema
                         ->label('Recebimento / Pedido do Cliente Estornado')
                         ->visible(fn (Get $get) => !$isCredit && $get('refund_mode') === 'contra_receivable')
                         ->searchable()
-                        ->placeholder('Busque pelo pedido ou cliente...')
-                        ->options(function () {
-                            return AccountReceivable::with(['order', 'customer'])
+                        ->live()
+                        ->placeholder('Busque pelo pedido, pagamento PIX ou cliente...')
+                        ->options(function () use ($statement) {
+                            $amount = abs((float) $statement->amount);
+                            $minDate = ($statement->bank_date ?? now())->copy()->subDays(30)->toDateString();
+
+                            $payments = Payment::with(['order.customer'])
+                                ->where('created_at', '>=', $minDate . ' 00:00:00')
+                                ->where('amount', '>', 0)
+                                ->orderByRaw('ABS(amount - ?) ASC', [$amount])
+                                ->orderByDesc('id')
+                                ->limit(120)
+                                ->get()
+                                ->mapWithKeys(function (Payment $p) {
+                                    $ord = $p->order;
+                                    $cust = $ord?->customer?->name ?? $ord?->customer_name ?? 'Cliente PDV';
+                                    $ordTag = $ord ? "Pedido #{$ord->id} (" . strtoupper((string) $ord->status) . ") • " : '';
+                                    $val = number_format((float) $p->amount, 2, ',', '.');
+                                    $dt = $p->created_at?->format('d/m H:i') ?? '-';
+                                    return ['payment_' . $p->id => "💠 {$ordTag}{$cust} — {$p->method} R$ {$val} [{$dt}]"];
+                                })
+                                ->toArray();
+
+                            $receivables = AccountReceivable::with(['order', 'customer'])
                                 ->whereIn('status', ['paid', 'pending'])
                                 ->where('net_amount', '>', 0)
                                 ->orderByDesc('due_date')
-                                ->limit(150)
+                                ->limit(80)
                                 ->get()
                                 ->mapWithKeys(function (AccountReceivable $ar) {
                                     $cust = $ar->customer?->name ?? $ar->order?->customer_name ?? 'Cliente';
                                     $ord = $ar->order_id ? "Pedido #{$ar->order_id} • " : '';
                                     $val = number_format((float) $ar->net_amount, 2, ',', '.');
-                                    return [$ar->id => "🧾 {$ord}{$cust} — R$ {$val}"];
-                                });
+                                    return ['ar_' . $ar->id => "🧾 {$ord}{$cust} — R$ {$val}"];
+                                })
+                                ->toArray();
+
+                            return $payments + $receivables;
                         })
                         ->required(fn (Get $get) => self::normalizeType($get('conciliation_type')) === ConciliationType::REFUND->value && !$isCredit && $get('refund_mode') === 'contra_receivable'),
 
+                    Placeholder::make('refund_order_audit')
+                        ->hiddenLabel()
+                        ->visible(fn (Get $get) => !$isCredit && $get('refund_mode') === 'contra_receivable' && filled($get('refund_receivable_id')))
+                        ->content(function (Get $get) {
+                            $sel = (string) $get('refund_receivable_id');
+                            $order = null;
+                            $payment = null;
+
+                            if (str_starts_with($sel, 'payment_')) {
+                                $payment = Payment::with('order.payments')->find((int) str_replace('payment_', '', $sel));
+                                $order = $payment?->order;
+                            } elseif (str_starts_with($sel, 'ar_')) {
+                                $ar = AccountReceivable::with('order.payments')->find((int) str_replace('ar_', '', $sel));
+                                $order = $ar?->order;
+                            } elseif (is_numeric($sel)) {
+                                $ar = AccountReceivable::with('order.payments')->find((int) $sel);
+                                $order = $ar?->order;
+                            }
+
+                            if (!$order) {
+                                return new HtmlString("<div class='p-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300'>Lançamento selecionado sem pedido vinculado no PDV.</div>");
+                            }
+
+                            $isCancelled = $order->status === 'cancelled';
+                            $totFmt = number_format((float) $order->total, 2, ',', '.');
+                            $cust = e($order->customer_name ?: 'Cliente');
+                            $payList = $order->payments->map(function (Payment $p) {
+                                $v = number_format((float) $p->amount, 2, ',', '.');
+                                $st = $p->status === 'refunded' ? 'Estornado' : ($p->is_paid ? 'Pago' : 'Pendente');
+                                return "Pgto #{$p->id} ({$p->method}: R$ {$v} — {$st})";
+                            })->implode(' • ');
+
+                            if ($isCancelled) {
+                                return new HtmlString("
+                                    <div class='p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 space-y-1'>
+                                        <div class='font-bold'>✅ Auditoria PDV: Pedido #{$order->id} ({$cust} • R$ {$totFmt}) já consta como CANCELADO.</div>
+                                        <div class='text-[11px] opacity-85'>{$payList}</div>
+                                    </div>
+                                ");
+                            }
+
+                            return new HtmlString("
+                                <div class='p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-xs text-amber-950 dark:text-amber-200 space-y-1'>
+                                    <div class='font-bold'>⚠️ Auditoria PDV: O Pedido #{$order->id} ({$cust} • Total R$ {$totFmt}) ainda está ATIVO/PAGO!</div>
+                                    <div class='text-[11px]'>Pagamentos associados: {$payList}</div>
+                                    <div class='text-[11px] opacity-90'>Marque a opção abaixo para cancelar o pedido, estornar os pagamentos e remover este valor do faturamento da DRE.</div>
+                                </div>
+                            ");
+                        }),
+
+                    Toggle::make('cancel_linked_order')
+                        ->label('Cancelar o Pedido associado no PDV e estornar pagamentos (devolve estoque e abate da DRE)')
+                        ->default(true)
+                        ->live()
+                        ->visible(function (Get $get) use ($isCredit) {
+                            if ($isCredit || $get('refund_mode') !== 'contra_receivable' || empty($get('refund_receivable_id'))) {
+                                return false;
+                            }
+                            $sel = (string) $get('refund_receivable_id');
+                            if (str_starts_with($sel, 'payment_')) {
+                                $p = Payment::with('order')->find((int) str_replace('payment_', '', $sel));
+                                return $p?->order && $p->order->status !== 'cancelled';
+                            }
+                            if (str_starts_with($sel, 'ar_') || is_numeric($sel)) {
+                                $arId = (int) str_replace('ar_', '', $sel);
+                                $ar = AccountReceivable::with('order')->find($arId);
+                                return $ar?->order && $ar->order->status !== 'cancelled';
+                            }
+                            return false;
+                        }),
+
+                    TextInput::make('cancel_order_reason')
+                        ->label('Motivo do Cancelamento do Pedido')
+                        ->default('Estorno PIX confirmado na conciliação bancária')
+                        ->visible(fn (Get $get) => !$isCredit && $get('refund_mode') === 'contra_receivable' && (bool) $get('cancel_linked_order')),
+
                     TextInput::make('refund_note')
-                        ->label('Motivo do Estorno (Opcional)')
-                        ->placeholder('Ex: Serviço não prestado'),
+                        ->label('Observação do Estorno Bancário (Opcional)')
+                        ->placeholder('Ex: Pedido cancelado / Devolução PIX'),
                 ]),
 
             // =========================================================================
@@ -945,23 +1101,40 @@ class ConciliationTabsSchema
                     BankReconciliationService::finalize($statement, $contraPayable, $origPayable->supplier_id, $refundDesc);
                 }
             } elseif ($rMode === 'contra_receivable' && !empty($data['refund_receivable_id'])) {
-                $origAr = AccountReceivable::find((int) $data['refund_receivable_id']);
-                if ($origAr) {
-                    $refundDesc = "Devolução ao Cliente: {$origAr->description}" . ($rNote !== '' ? " ({$rNote})" : '');
-                    $contraAr = AccountReceivable::create([
-                        'order_id'        => $origAr->order_id,
-                        'bank_account_id' => $statement->bank_account_id,
-                        'customer_id'     => $origAr->customer_id,
-                        'description'     => $refundDesc,
-                        'payment_method'  => $origAr->payment_method,
-                        'installment'     => '1/1',
-                        'gross_amount'    => -abs((float) $statement->amount),
-                        'fee_amount'      => 0,
-                        'net_amount'      => -abs((float) $statement->amount),
-                        'due_date'        => $statement->bank_date,
-                        'status'          => 'pending',
-                    ]);
-                    BankReconciliationService::finalize($statement, $contraAr, null, $refundDesc);
+                $sel = (string) $data['refund_receivable_id'];
+                $cancelOrder = (bool) ($data['cancel_linked_order'] ?? false);
+                $cancelReason = trim((string) ($data['cancel_order_reason'] ?? '')) ?: ($rNote !== '' ? $rNote : 'Estorno PIX confirmado na conciliação bancária');
+
+                if (str_starts_with($sel, 'payment_')) {
+                    $payment = Payment::with('order')->find((int) str_replace('payment_', '', $sel));
+                    if ($payment) {
+                        BankReconciliationService::reconcileCustomerPixRefund($statement, $payment, $cancelOrder, $cancelReason);
+                    }
+                } else {
+                    $arId = (int) str_replace('ar_', '', $sel);
+                    $origAr = AccountReceivable::with('order')->find($arId);
+                    if ($origAr) {
+                        $refundDesc = "Devolução ao Cliente: {$origAr->description}" . ($rNote !== '' ? " ({$rNote})" : '');
+                        $contraAr = AccountReceivable::create([
+                            'order_id'        => $origAr->order_id,
+                            'bank_account_id' => $statement->bank_account_id,
+                            'customer_id'     => $origAr->customer_id,
+                            'description'     => $refundDesc,
+                            'payment_method'  => $origAr->payment_method,
+                            'installment'     => '1/1',
+                            'gross_amount'    => -abs((float) $statement->amount),
+                            'fee_amount'      => 0,
+                            'net_amount'      => -abs((float) $statement->amount),
+                            'due_date'        => $statement->bank_date,
+                            'status'          => 'pending',
+                        ]);
+                        BankReconciliationService::finalize($statement, $contraAr, null, $refundDesc);
+
+                        if ($cancelOrder && $origAr->order && $origAr->order->status !== 'cancelled') {
+                            app(\App\Services\Orders\OrderCancellationService::class)
+                                ->cancelOrderFromReconciliation($origAr->order, $cancelReason);
+                        }
+                    }
                 }
             }
             return;

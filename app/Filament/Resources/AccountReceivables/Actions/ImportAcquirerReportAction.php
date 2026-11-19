@@ -147,8 +147,8 @@ class ImportAcquirerReportAction extends Action
                                 // 4. Linhas ignoradas por status (Canceladas / Negadas)
                                 if ($ignoredCount > 0) {
                                     $ignSlice = array_slice($audit['ignored_by_status'], 0, 15);
-                                    $html .= "<div class='p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 space-y-1'>";
-                                    $html .= "<div class='text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider'>Linhas Ignoradas por Status Não Aprovado ({$ignoredCount})</div><ul class='text-[11px] text-gray-600 dark:text-gray-400 list-disc pl-5 space-y-0.5'>";
+                                    $html .= "<details class='p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40'>";
+                                    $html .= "<summary class='text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none'>Ver linhas ignoradas por status não aprovado ({$ignoredCount} recusadas/canceladas)</summary><ul class='mt-2 text-[11px] text-gray-600 dark:text-gray-400 list-disc pl-5 space-y-0.5'>";
                                     foreach ($ignSlice as $ig) {
                                         $val = number_format($ig['gross_amount'], 2, ',', '.');
                                         $html .= "<li>Linha {$ig['line']} [<b>" . e($ig['status']) . "</b>]: {$ig['time']} | NSU " . e($ig['nsu']) . " | {$ig['modality']} | R$ {$val}</li>";
@@ -157,7 +157,7 @@ class ImportAcquirerReportAction extends Action
                                         $restIgn = $ignoredCount - count($ignSlice);
                                         $html .= "<li>... e mais {$restIgn} transação(ões) canceladas/negadas.</li>";
                                     }
-                                    $html .= "</ul></div>";
+                                    $html .= "</ul></details>";
                                 }
 
                                 $html .= "</div>";

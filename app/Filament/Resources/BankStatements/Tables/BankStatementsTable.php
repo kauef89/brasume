@@ -40,11 +40,16 @@ class BankStatementsTable
                     ->weight("bold")
                     ->description(function (BankStatement $record) {
                         $badge = "";
-                        if ($record->document) {
-                            if (Supplier::where("document", $record->document)->exists()) {
+                        $cleanDoc = preg_replace('/\D/', '', (string) $record->document);
+                        if ($cleanDoc !== '') {
+                            $hasSupplier = Supplier::whereRaw("REPLACE(REPLACE(REPLACE(document, '.', ''), '/', ''), '-', '') = ?", [$cleanDoc])->exists();
+                            if ($hasSupplier) {
                                 $badge = '<span class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800">🏢 Fornecedor</span>';
-                            } elseif (Employee::where("cpf", $record->document)->exists()) {
-                                $badge = '<span class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-fuchsia-100 text-fuchsia-800">👤 Colaborador</span>';
+                            } else {
+                                $hasEmployee = Employee::whereRaw("REPLACE(REPLACE(cpf, '.', ''), '-', '') = ?", [$cleanDoc])->exists();
+                                if ($hasEmployee) {
+                                    $badge = '<span class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-fuchsia-100 text-fuchsia-800">👤 Colaborador</span>';
+                                }
                             }
                         }
                         return $badge ? new HtmlString($badge) : null;

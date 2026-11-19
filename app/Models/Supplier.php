@@ -97,4 +97,9 @@ class Supplier extends Model
             }
         });
     }
+
+    public function goodsReceipts()
+    {
+        return $this->hasMany(GoodsReceipt::class);
+    }
 }

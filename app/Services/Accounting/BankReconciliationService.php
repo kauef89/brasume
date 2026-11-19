@@ -136,6 +136,16 @@ class BankReconciliationService
                     "bank_account_id" => $lockedStatement->bank_account_id,
                     "transaction_id"  => $transaction->id,
                 ]);
+
+                if ($conciliable->loan_installment_id && ($installment = \App\Models\LoanInstallment::find($conciliable->loan_installment_id))) {
+                    $installment->update([
+                        'status'            => 'paid',
+                        'paid_amount'       => abs((float) $lockedStatement->amount),
+                        'payment_date'      => $lockedStatement->bank_date,
+                        'bank_statement_id' => $lockedStatement->id,
+                    ]);
+                    $installment->contract?->refreshStatusFromInstallments();
+                }
             }
             // 4. Atualiza Lote Bancário (Contas a Pagar + Lote CNAB 240 de Folha)
             elseif ($conciliable instanceof PaymentBatch) {
@@ -253,6 +263,16 @@ class BankReconciliationService
                     'transaction_id'        => null,
                 ]);
             } elseif ($conciliable instanceof AccountPayable) {
+                if ($conciliable->loan_installment_id && ($installment = \App\Models\LoanInstallment::find($conciliable->loan_installment_id))) {
+                    $installment->update([
+                        'status'            => 'pending',
+                        'paid_amount'       => null,
+                        'payment_date'      => null,
+                        'bank_statement_id' => null,
+                    ]);
+                    $installment->contract?->refreshStatusFromInstallments();
+                }
+
                 $conciliable->update([
                     'status'          => 'pending',
                     'payment_date'    => null,
@@ -336,5 +356,42 @@ class BankReconciliationService
                 'transaction_id'        => null,
             ]);
         });
+    }
+
+    /**
+     * Concilia uma devolução/estorno de PIX para cliente vinculando ao Pagamento/Pedido original,
+     * estornando o pagamento e, opcionalmente, cancelando o pedido no PDV.
+     */
+    public static function reconcileCustomerPixRefund(
+        BankStatement $statement,
+        \App\Models\Payment $payment,
+        bool $cancelOrder = false,
+        ?string $note = null
+    ): void {
+        $order = $payment->order;
+        $orderLabel = $order ? "Pedido #{$order->id}" : "Pagamento #{$payment->id}";
+        $payer = $statement->counterparty_name ?: ($order?->customer_name ?: 'Cliente');
+        $desc = "Devolução PIX {$orderLabel} - {$payer}" . ($note ? " ({$note})" : '');
+
+        self::finalize($statement, $payment, null, $desc);
+
+        $payment->update([
+            'status'  => 'refunded',
+            'is_paid' => false,
+        ]);
+
+        if ($order) {
+            if ($cancelOrder && $order->status !== 'cancelled') {
+                app(\App\Services\Orders\OrderCancellationService::class)
+                    ->cancelOrderFromReconciliation($order, $note ?: 'Estorno PIX confirmado na conciliação bancária');
+            } else {
+                $hasRemainingPaid = $order->payments()->where('is_paid', true)->exists();
+                if (!$hasRemainingPaid) {
+                    $order->update([
+                        'payment_status' => 'refunded',
+                    ]);
+                }
+            }
+        }
     }
 }

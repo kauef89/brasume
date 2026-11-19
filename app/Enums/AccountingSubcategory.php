@@ -60,6 +60,10 @@ enum AccountingSubcategory: string implements HasLabel
     case PERSONAL    = 'personal';
     case DRAWINGS    = 'drawings';
 
+    // 10. Empréstimos & Encargos Financeiros
+    case LOAN_INTEREST     = 'loan_interest';
+    case LOAN_AMORTIZATION = 'loan_amortization';
+
     public function getLabel(): ?string
     {
         return match ($this) {
@@ -105,8 +109,11 @@ enum AccountingSubcategory: string implements HasLabel
             self::MACHINERY   => 'Máquinas Pesadas / Câmaras',
             self::FURNITURE   => 'Mesas, Cadeiras & Mobiliário',
 
-            self::PERSONAL    => 'Despesa Pessoal / Cartão Familiar',
-            self::DRAWINGS    => 'Retirada de Lucro / Pró-labore',
+            self::PERSONAL          => 'Despesa Pessoal / Cartão Familiar',
+            self::DRAWINGS          => 'Retirada de Lucro / Pró-labore',
+
+            self::LOAN_INTEREST     => 'Juros & Encargos de Empréstimo',
+            self::LOAN_AMORTIZATION => 'Amortização de Principal (Empréstimo)',
         };
     }
 
@@ -122,6 +129,7 @@ enum AccountingSubcategory: string implements HasLabel
             self::SOFTWARE, self::ACCOUNTING, self::BANK_FEES, self::TAXES, self::OFFICE => AccountingCategory::ADMINISTRATIVE,
             self::FACADE, self::MACHINERY, self::FURNITURE => AccountingCategory::CAPEX,
             self::PERSONAL, self::DRAWINGS => AccountingCategory::PARTNERS,
+            self::LOAN_INTEREST, self::LOAN_AMORTIZATION => AccountingCategory::FINANCIAL_EXPENSES,
         };
     }
 

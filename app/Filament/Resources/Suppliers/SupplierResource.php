@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Suppliers;
 
+
 use App\Filament\Resources\Suppliers\Pages;
 use App\Filament\Resources\Suppliers\RelationManagers;
 use App\Filament\Resources\Suppliers\Schemas\SupplierForm;
@@ -58,8 +59,9 @@ class SupplierResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\SuppliedProductsRelationManager::class, // 🚀 Painel de Insumos & Cotações
-            RelationManagers\FinancialRelationManager::class,        // Extrato Financeiro
+            RelationManagers\SuppliedProductsRelationManager::class,
+            RelationManagers\GoodsReceiptsRelationManager::class,
+            RelationManagers\FinancialRelationManager::class,
         ];
     }
 

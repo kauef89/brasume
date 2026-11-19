@@ -127,4 +127,9 @@ class AccountPayable extends Model
     {
         return $this->belongsTo(Transaction::class);
     }
+
+    public function loanInstallment()
+    {
+        return $this->belongsTo(LoanInstallment::class, 'loan_installment_id');
+    }
 }

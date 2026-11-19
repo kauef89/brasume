@@ -5,6 +5,8 @@ namespace App\Services\Accounting;
 use App\Models\BankStatement;
 use App\Models\AccountPayable;
 use App\Models\AccountReceivable;
+use App\Models\PaymentBatch;
+use App\Models\Payslip;
 use App\Models\Supplier;
 use Carbon\Carbon;
 
@@ -39,8 +41,77 @@ class BankMatchScoringService
             return $matches->sortByDesc('score')->values();
         }
 
+        // Busca Lotes de Pagamento (Folha) e Holerites individuais
+        $batchCandidates = PaymentBatch::whereIn('status', ['transmitted', 'pending', 'generated'])
+            ->whereBetween('payment_date', [
+                $statement->bank_date->copy()->subDays(15),
+                $statement->bank_date->copy()->addDays(15),
+            ])
+            ->get();
+
+        foreach ($batchCandidates as $batch) {
+            $diff = abs(abs((float) $statement->amount) - (float) $batch->total_amount);
+            if ($diff < 0.02) {
+                $score = 80; // Correspondência forte pelo valor exato do lote
+                $stmtText = preg_replace("/[^a-z0-9]/", "", strtolower((string) ($statement->description . ' ' . $statement->counterparty_name)));
+                if (str_contains($stmtText, 'folha') || str_contains($stmtText, 'pagto')) {
+                    $score += 15;
+                }
+                $matches->push([
+                    "candidate" => $batch,
+                    "score"     => $score,
+                    "type"      => "Lote de Folha de Pagamento",
+                ]);
+            }
+        }
+
+        $payslipCandidates = Payslip::with(['employee', 'payroll'])
+            ->where('status', 'pending')
+            ->whereHas('payroll', function ($q) use ($statement) {
+                $q->whereBetween('payment_date', [
+                    $statement->bank_date->copy()->subDays(15)->toDateString(),
+                    $statement->bank_date->copy()->addDays(15)->toDateString(),
+                ]);
+            })
+            ->get();
+
+        foreach ($payslipCandidates as $payslip) {
+            $diff = abs(abs((float) $statement->amount) - (float) $payslip->net_salary);
+            if ($diff < 0.05) {
+                $score = 45; // Base pelo valor
+                $empDoc = preg_replace("/[^0-9]/", "", (string) $payslip->employee?->cpf);
+                $bankDoc = preg_replace("/[^0-9]/", "", (string) $statement->document);
+                
+                if (!empty($empDoc) && !empty($bankDoc) && $empDoc === $bankDoc) {
+                    $score += 50; // Match exato de CPF
+                } else {
+                    $empName = preg_replace("/[^a-z0-9]/", "", strtolower((string) $payslip->employee?->name));
+                    $stmtText = preg_replace("/[^a-z0-9]/", "", strtolower((string) ($statement->description . ' ' . $statement->counterparty_name)));
+                    if (!empty($empName) && strlen($empName) >= 5 && (str_contains($stmtText, $empName) || str_contains($empName, $stmtText))) {
+                        $score += 40; // Match de nome
+                    }
+                }
+                
+                if ($score >= 50) {
+                    $matches->push([
+                        "candidate" => $payslip,
+                        "score"     => $score,
+                        "type"      => "Holerite / Pagamento Individual",
+                    ]);
+                }
+            }
+        }
+
         $candidates = AccountPayable::with(["supplier", "employee", "recurringExpense.supplier"])
-            ->where("status", "pending")
+            ->where(function ($q) {
+                $q->where("status", "pending")
+                  ->orWhere(function ($sub) {
+                      $sub->where("status", "paid")
+                          ->whereNull("transaction_id")
+                          ->whereNull("bank_account_id")
+                          ->whereNotNull("employee_id");
+                  });
+            })
             ->whereBetween("due_date", [
                 $statement->bank_date->copy()->subDays(45),
                 $statement->bank_date->copy()->addDays(15),
@@ -92,7 +163,7 @@ class BankMatchScoringService
             }
         }
 
-        if ($identityData['doc_exact'] && $effectiveDiff <= 3) {
+        if ($identityData['doc_exact'] && $effectiveDiff <= 5) {
             $rawScore = 100;
         }
 

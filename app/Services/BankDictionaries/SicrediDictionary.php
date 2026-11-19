@@ -132,16 +132,40 @@ class SicrediDictionary implements BankDictionaryInterface
         }
 
         // 7. Contas de Consumo / Faturas Recorrentes (CASAN, TIM, CELESC)
-        if (
-            preg_match(
-                "/DEBITO CONVENIOS-(.*?)\s+(?:ID.*?)?(?:([0-9]{11,14}))/i",
-                $memo,
-                $matches,
-            )
-        ) {
-            $result["name"] = trim($matches[1]);
-            $result["document"] = isset($matches[2]) ? $matches[2] : null;
-            $result["clean_description"] = "Convênio / Fatura - " . $result["name"];
+        if (preg_match("/^DEBITO CONVENIOS-(.+)$/i", trim($memo), $mConv)) {
+            $tail = trim($mConv[1]);
+
+            $doc = null;
+            if (preg_match("/\b([0-9]{11,14})\b/", $tail, $mDoc)) {
+                $doc = $mDoc[1];
+            }
+
+            $identifier = null;
+            if (preg_match("/\b(?:ID|UC)\s*[:\-]?\s*([A-Z0-9\-\/]{4,25})/i", $tail, $mId)) {
+                $identifier = strtoupper(trim($mId[1]));
+            }
+
+            $cleanName = $tail;
+            if ($doc !== null) {
+                $cleanName = str_replace($doc, ' ', $cleanName);
+            }
+            $cleanName = preg_replace("/\b(?:ID|UC)\s*[:\-]?\s*[A-Z0-9\-\/]{4,25}/i", ' ', $cleanName);
+            $cleanName = trim((string) preg_replace("/\s+/", " ", $cleanName));
+
+            // Remove duplicação do nome da concessionária antes e depois do CNPJ (ex: "CASAN CASAN")
+            $words = explode(' ', $cleanName);
+            if (count($words) >= 2 && count($words) % 2 === 0) {
+                $half = (int) (count($words) / 2);
+                if (array_slice($words, 0, $half) === array_slice($words, $half)) {
+                    $cleanName = implode(' ', array_slice($words, 0, $half));
+                }
+            }
+
+            $result["name"] = $cleanName ?: "Convênio / Débito Automático";
+            $result["document"] = $doc;
+            $result["statement_identifier"] = $identifier;
+            $result["clean_description"] = "Convênio / Fatura - " . $result["name"]
+                . ($identifier ? " (ID {$identifier})" : "");
             $result["movement_type"] = BankMovementType::FIXED_BILL->value;
             return $result;
         }
