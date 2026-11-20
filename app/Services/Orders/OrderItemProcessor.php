@@ -65,7 +65,7 @@ class OrderItemProcessor
         $resolvedName = trim((string) preg_replace('/\s*[\(\[](Viagem|Para Levar|Takeaway)[\)\]]/i', '', $resolvedName));
 
         // Pedidos de delivery, retirada ou balcão são sempre viagem; mesa respeita a marcação do item
-        $isTakeaway = in_array($order->type, ['counter', 'delivery', 'pickup', 'takeaway'], true)
+        $isTakeaway = in_array($order->type, [\App\Enums\OrderType::COUNTER, \App\Enums\OrderType::DELIVERY, \App\Enums\OrderType::PICKUP], true)
             || !empty($itemData["isTakeaway"])
             || !empty($itemData["is_takeaway"]);
 

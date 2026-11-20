@@ -97,6 +97,10 @@
                 :applied-coupon-code="appliedCheckoutCoupon"
                 :applied-coupon-discount="appliedCheckoutDiscount"
 
+                :employees-list="resolvedEmployeesList"
+                v-model:tip-amount="tipAmount"
+                v-model:tip-employee-id="tipEmployeeId"
+                v-model:tip-payout-mode="tipPayoutMode"
                 v-model:is-service-tax-enabled="isServiceTaxEnabled"
                 v-model:cashback-value="localCashbackAmountToSend"
                 v-model:customerDocument="customerDocument"
@@ -227,7 +231,7 @@ import { useCheckoutProcessor } from "@/Pages/Pos/Composables/useCheckoutProcess
 import { useCheckoutCoupon } from "@/Pages/Pos/Composables/useCheckoutCoupon";
 import { usePaymentRollback } from "@/Pages/Pos/Composables/usePaymentRollback";
 
-const props = defineProps({ order: Object, paymentMethods: Array, companySettings: Object });
+const props = defineProps({ order: Object, paymentMethods: Array, companySettings: Object, employeesList: { type: Array, default: () => [] } });
 const emit = defineEmits(['close']);
 const toast = useToast();
 const page = usePage();
@@ -435,13 +439,30 @@ const itemsPaidValue = computed(() => {
 
 const unallocatedPaid = computed(() => Math.max(0, totalAlreadyPaid.value - itemsPaidValue.value));
 
+const tipAmount = ref(Number(props.order?.tip_amount || 0));
+const tipEmployeeId = ref(props.order?.tip_employee_id || props.order?.attendant?.employee_id || props.order?.courier_id || null);
+const tipPayoutMode = ref(props.order?.tip_payout_mode || 'ledger_credit');
+
+const resolvedEmployeesList = computed(() => {
+    return props.employeesList
+        || page.props.cashierData?.employeesList
+        || page.props.employees
+        || [];
+});
+
+watch(() => props.order?.id, () => {
+    tipAmount.value = Number(props.order?.tip_amount || 0);
+    tipEmployeeId.value = props.order?.tip_employee_id || props.order?.attendant?.employee_id || props.order?.courier_id || null;
+    tipPayoutMode.value = props.order?.tip_payout_mode || 'ledger_credit';
+});
+
 const intendedPaymentTotal = computed(() => {
     const baseTotal = orderTotalItemsValue.value > 0
         ? (selectedItemsValue.value + (feesAndDiscounts.value * selectionRatio.value))
         : pendingOriginalBalance.value;
 
     const paidDeduction = unallocatedPaid.value * (orderTotalItemsValue.value > 0 ? selectionRatio.value : 1);
-    const finalAmount = baseTotal - paidDeduction - appliedCheckoutDiscount.value;
+    const finalAmount = baseTotal - paidDeduction - appliedCheckoutDiscount.value + Number(tipAmount.value || 0);
 
     return Math.max(0, Number(finalAmount.toFixed(2)));
 });
@@ -743,7 +764,10 @@ const {
     isPostPaymentPhase,
     appliedCheckoutCoupon,
     appliedCheckoutCouponName,
-    isZeroRevenueOrder
+    isZeroRevenueOrder,
+    tipAmount,
+    tipEmployeeId,
+    tipPayoutMode
 });
 
 onMounted(() => {

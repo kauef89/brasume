@@ -127,8 +127,9 @@ class CompanySetting extends Model
         };
     }
 
-    public function calculateServiceFee(float $subtotal, ?string $channel): float
+    public function calculateServiceFee(float $subtotal, string|\App\Enums\OrderType|null $channel): float
     {
+        $channel = $channel instanceof \BackedEnum ? $channel->value : $channel;
         if (!$this->isServiceTaxEnabledFor($channel)) {
             return 0.00;
         }

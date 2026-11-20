@@ -6,7 +6,7 @@ export function useCheckoutProcessor({
     order, props, toast, emitClose, isFiscalEmitter, checkoutPrintMode, customerDocument,
     stagedPayments, reactiveItems, serviceFeeAmount, localCashbackAmountToSend,
     authActionType, itemToProcess, authNeedsPin, initiateSecureAction, isReasonModalVisible, isPostPaymentPhase,
-    appliedCheckoutCoupon, isZeroRevenueOrder
+    appliedCheckoutCoupon, isZeroRevenueOrder, tipAmount, tipEmployeeId, tipPayoutMode
 }) {
     const isEmittingNfce = ref(false);
     const isFiscalSuccess = ref(false);
@@ -114,6 +114,9 @@ export function useCheckoutProcessor({
                     payments: standardPayments.map(p => ({ method_id: p.real_method_id || p.method_id, amount: Number(p.amount) })),
                     items: itemsToPay,
                     service_fee: Math.max(0, Number(unref(serviceFeeAmount) || 0)),
+                tip_amount: Math.max(0, Number(unref(tipAmount) || 0)),
+                tip_employee_id: unref(tipEmployeeId) || null,
+                tip_payout_mode: unref(tipPayoutMode) || 'ledger_credit',
                     cashback_used: Math.max(0, Number(unref(localCashbackAmountToSend) || 0)),
                     document: unref(customerDocument),
                     coupon_code: unref(appliedCheckoutCoupon)
@@ -185,6 +188,9 @@ export function useCheckoutProcessor({
                 payments: standardPayments.map(p => ({ method_id: p.real_method_id || p.method_id, amount: Number(p.amount) })),
                 items: itemsToPay,
                 service_fee: Math.max(0, Number(unref(serviceFeeAmount) || 0)),
+                tip_amount: Math.max(0, Number(unref(tipAmount) || 0)),
+                tip_employee_id: unref(tipEmployeeId) || null,
+                tip_payout_mode: unref(tipPayoutMode) || 'ledger_credit',
                 cashback_used: Math.max(0, Number(unref(localCashbackAmountToSend) || 0)),
                 document: unref(customerDocument),
                 coupon_code: unref(appliedCheckoutCoupon),

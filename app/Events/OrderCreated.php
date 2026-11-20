@@ -37,7 +37,7 @@ class OrderCreated implements ShouldBroadcastNow
         return [
             'id'       => $this->order->id,
             'orderId'  => $this->order->id,
-            'type'     => $this->order->type,
+            'type'     => $this->order->type?->value ?? $this->order->type,
             'status'   => $this->order->status,
             'tenantId' => $this->tenantId,
         ];

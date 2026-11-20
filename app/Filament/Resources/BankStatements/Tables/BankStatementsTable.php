@@ -69,23 +69,52 @@ class BankStatementsTable
                     ->weight("bold"),
 
                 Tables\Columns\TextColumn::make("related_name")
-                    ->label("Vínculo / Pedido")
+                    ->label("Vínculo / Pedido (360°)")
+                    ->html()
                     ->getStateUsing(function (BankStatement $record): string {
-                        if ($record->status === 'pending') return '-';
-                        return $record->related_name;
-                    })
-                    ->url(function (BankStatement $record): ?string {
-                        if ($record->conciliable_type === \App\Models\Payment::class && $record->conciliable?->order_id) {
-                            return \App\Filament\Resources\Orders\OrderResource::getUrl('edit', ['record' => $record->conciliable->order_id]);
+                        if ($record->status === 'pending') {
+                            return '<span class="text-gray-400">-</span>';
                         }
-                        if ($record->conciliable_type === \App\Models\Order::class && $record->conciliable_id) {
-                            return \App\Filament\Resources\Orders\OrderResource::getUrl('edit', ['record' => $record->conciliable_id]);
+
+                        $order = null;
+                        if ($record->conciliable_type === \App\Models\Payment::class) {
+                            $order = $record->conciliable?->order;
+                        } elseif ($record->conciliable_type === \App\Models\Order::class) {
+                            $order = $record->conciliable;
+                        } elseif ($record->conciliable_type === \App\Models\AccountReceivable::class) {
+                            $order = $record->conciliable?->order;
                         }
-                        return null;
-                    })
-                    ->openUrlInNewTab()
-                    ->color('info')
-                    ->weight('semibold'),
+
+                        if ($order) {
+                            $orderUrl = \App\Filament\Resources\Orders\OrderResource::getUrl('view', ['record' => $order->id]);
+                            $parts = [
+                                "<a href='{$orderUrl}' target='_blank' rel='noopener noreferrer' class='font-bold text-primary-600 dark:text-primary-400 hover:underline'>🧾 Pedido #{$order->id} ↗</a>",
+                            ];
+
+                            $custName = e($order->customer_name ?: ($order->customer?->name ?? 'Consumidor'));
+                            if ($order->customer_id) {
+                                $custUrl = \App\Filament\Resources\Customers\CustomerResource::getUrl('edit', ['record' => $order->customer_id]);
+                                $parts[] = "<a href='{$custUrl}' target='_blank' rel='noopener noreferrer' class='text-xs text-gray-700 dark:text-gray-300 hover:underline'>👤 {$custName} ↗</a>";
+                            } else {
+                                $parts[] = "<span class='text-xs text-gray-500'>👤 {$custName}</span>";
+                            }
+
+                            if ($record->transaction_id) {
+                                $txUrl = \App\Filament\Resources\Transactions\TransactionResource::getUrl('edit', ['record' => $record->transaction_id]);
+                                $parts[] = "<a href='{$txUrl}' target='_blank' rel='noopener noreferrer' class='text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline'>📒 Mov. #{$record->transaction_id} ↗</a>";
+                            }
+
+                            return '<div class="flex flex-col gap-0.5">' . implode('', $parts) . '</div>';
+                        }
+
+                        $label = e($record->related_name);
+                        if ($record->transaction_id) {
+                            $txUrl = \App\Filament\Resources\Transactions\TransactionResource::getUrl('edit', ['record' => $record->transaction_id]);
+                            return "<div class='flex flex-col gap-0.5'><span class='font-semibold'>{$label}</span><a href='{$txUrl}' target='_blank' rel='noopener noreferrer' class='text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline'>📒 Mov. #{$record->transaction_id} ↗</a></div>";
+                        }
+
+                        return "<span class='font-semibold'>{$label}</span>";
+                    }),
 
                 Tables\Columns\TextColumn::make("status")
                     ->label("Status / Origem")

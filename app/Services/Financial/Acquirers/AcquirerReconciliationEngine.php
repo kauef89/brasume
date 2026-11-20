@@ -247,7 +247,26 @@ class AcquirerReconciliationEngine
                 }
             }
 
-            // Se não encontrou nem 1:1 nem 1:N seguro
+            // FASE 3: Detecção de Falha de Operador (Mesmo horário ±5min, mesma modalidade, valor próximo até R$ 25,00)
+            $varianceCandidate = $this->findVarianceCandidateFor($acquirerTx, $matchedPaymentIdsThisRun);
+            if ($varianceCandidate) {
+                $vp = $varianceCandidate['payment'];
+                $diff = round((float) $acquirerTx->gross_amount - (float) $vp->amount, 2);
+                $diffFmt = ($diff >= 0 ? '+R$ ' : '-R$ ') . number_format(abs($diff), 2, ',', '.');
+                $diagNote = "Possível falha de caixa: Pedido #{$vp->order_id} (PDV R$ "
+                    . number_format((float) $vp->amount, 2, ',', '.')
+                    . " × Máquina R$ " . number_format((float) $acquirerTx->gross_amount, 2, ',', '.')
+                    . " | Dif: {$diffFmt})";
+
+                $acquirerTx->update([
+                    'status' => AcquirerMatchStatus::AMBIGUOUS,
+                    'notes'  => $diagNote,
+                ]);
+                $results['ambiguous']++;
+                continue;
+            }
+
+            // Se não encontrou nem 1:1, 1:N ou divergência próxima
             if ($scored->isNotEmpty()) {
                 $acquirerTx->update([
                     'status' => AcquirerMatchStatus::AMBIGUOUS,
@@ -381,6 +400,8 @@ class AcquirerReconciliationEngine
 
         $query = Payment::query()
             ->with(['order.deliveryAddress', 'order.customer', 'order.items.product', 'order.payments.paymentMethod', 'paymentMethod'])
+            ->where('is_paid', true)
+            ->where('status', '!=', 'cancelled')
             ->where('amount', $acquirerTx->gross_amount)
             ->whereBetween('created_at', [$windowStart, $windowEnd])
             ->whereNull('acquirer_transaction_id')
@@ -389,16 +410,28 @@ class AcquirerReconciliationEngine
 
         $candidates = $query->get();
 
-        if ($candidates->isEmpty()) {
-            $candidates = Payment::query()
-                ->with(['order.deliveryAddress', 'order.customer', 'order.items.product', 'order.payments.paymentMethod', 'paymentMethod'])
-                ->where('amount', $acquirerTx->gross_amount)
-                ->whereDate('created_at', $acquirerTx->transaction_date->toDateString())
-                ->whereNull('acquirer_transaction_id')
-                ->whereDoesntHave('paymentMethod', fn ($q) => $q->where('engine_type', \App\Enums\PaymentEngineType::PIX_STATIC->value)->orWhere('id', 13))
-                ->when(!empty($excludePaymentIds), fn ($q) => $q->whereNotIn('id', $excludePaymentIds))
-                ->get();
-        }
+        // Fallback no dia inteiro (cobre entregas cujo acerto do motoboy ocorreu horas depois do delivered_at)
+        $dayCandidates = Payment::query()
+            ->with(['order.deliveryAddress', 'order.customer', 'order.items.product', 'order.payments.paymentMethod', 'paymentMethod'])
+            ->where('is_paid', true)
+            ->where('status', '!=', 'cancelled')
+            ->where('amount', $acquirerTx->gross_amount)
+            ->whereDate('created_at', $acquirerTx->transaction_date->toDateString())
+            ->whereNull('acquirer_transaction_id')
+            ->whereDoesntHave('paymentMethod', fn ($q) => $q->where('engine_type', \App\Enums\PaymentEngineType::PIX_STATIC->value)->orWhere('id', 13))
+            ->when(!empty($excludePaymentIds), fn ($q) => $q->whereNotIn('id', $excludePaymentIds))
+            ->get();
+
+        $candidates = $candidates->merge($dayCandidates)->unique('id')->values();
+
+        // Guarda temporal: transação na maquininha não pode ter ocorrido mais de 5 min ANTES do pedido existir
+        $candidates = $candidates->filter(function ($payment) use ($acquirerTx) {
+            $orderCreated = $payment->order?->created_at;
+            if ($orderCreated && $acquirerTx->transaction_date->lt($orderCreated->copy()->subMinutes(5))) {
+                return false;
+            }
+            return true;
+        })->values();
 
         $device = $acquirerTx->device;
         $rawModality = str_replace(['?', ''], 'e', mb_strtolower($acquirerTx->modality ?? ''));
@@ -408,21 +441,49 @@ class AcquirerReconciliationEngine
             $score = 0;
             $order = $payment->order;
             $scope = $device?->assignment_scope;
+            $isDelivery = ($order?->type === \App\Enums\OrderType::DELIVERY);
 
             // Escopo
             if ($scope === 'counter') {
-                if (in_array($order?->type, ['counter', 'takeaway', 'table', 'pickup'])) $score += 30;
-                elseif ($order?->type === 'delivery') $score += 10;
-            } elseif ($scope === 'waiter' && $order?->type === 'table') {
+                if (!$isDelivery) $score += 30;
+                else $score += 10;
+            } elseif ($scope === 'waiter' && $order?->type === \App\Enums\OrderType::TABLE) {
                 $score += 30;
-            } elseif ($scope === 'delivery' && $order?->type === 'delivery') {
+            } elseif ($scope === 'delivery' && $isDelivery) {
                 $score += 30;
             } else {
                 $score += 20;
             }
 
-            // Proximidade temporal
-            $diffPay = $payment->created_at ? abs($acquirerTx->transaction_date->diffInSeconds($payment->created_at)) : 999999;
+            // Proximidade temporal: para Delivery avalia a janela da rota [dispatched_at .. delivered_at]
+            $referenceTime = $payment->created_at ? \Illuminate\Support\Carbon::parse($payment->created_at) : null;
+            if ($isDelivery && $order) {
+                $dispAt = $order->dispatched_at ? \Illuminate\Support\Carbon::parse($order->dispatched_at) : null;
+                $delivAt = $order->delivered_at ? \Illuminate\Support\Carbon::parse($order->delivered_at) : null;
+
+                if ($delivAt) {
+                    $referenceTime = $delivAt;
+                } elseif ($dispAt) {
+                    $referenceTime = $dispAt->copy()->addMinutes(12);
+                }
+
+                // Bônus decisivo se a passada ocorreu enquanto o pedido estava em rota com o motoboy
+                if ($dispAt && $delivAt) {
+                    $routeStart = $dispAt->copy()->subMinutes(2);
+                    $routeEnd   = $delivAt->copy()->addMinutes(10);
+                    if ($acquirerTx->transaction_date->between($routeStart, $routeEnd)) {
+                        $score += 35;
+                    }
+                } elseif ($dispAt) {
+                    $routeStart = $dispAt->copy()->subMinutes(2);
+                    $routeEnd   = $dispAt->copy()->addMinutes(60);
+                    if ($acquirerTx->transaction_date->between($routeStart, $routeEnd)) {
+                        $score += 25;
+                    }
+                }
+            }
+
+            $diffPay = $referenceTime ? abs($acquirerTx->transaction_date->diffInSeconds($referenceTime)) : 999999;
             if ($diffPay <= 180) $score += 30;
             elseif ($diffPay <= 600) $score += 25;
             elseif ($diffPay <= 1800) $score += 15;
@@ -463,6 +524,8 @@ class AcquirerReconciliationEngine
 
         // Busca pagamentos pendentes de cartão/pix máquina
         $pendingPayments = Payment::with('order')
+            ->where('is_paid', true)
+            ->where('status', '!=', 'cancelled')
             ->whereBetween('created_at', [$windowStart, $windowEnd])
             ->where('amount', '<', $target)
             ->whereNull('acquirer_transaction_id')
@@ -474,6 +537,8 @@ class AcquirerReconciliationEngine
         if ($pendingPayments->count() < 2) {
             // Fallback para o dia inteiro
             $pendingPayments = Payment::with('order')
+                ->where('is_paid', true)
+                ->where('status', '!=', 'cancelled')
                 ->whereDate('created_at', $acquirerTx->transaction_date->toDateString())
                 ->where('amount', '<', $target)
                 ->whereNull('acquirer_transaction_id')
@@ -518,15 +583,25 @@ class AcquirerReconciliationEngine
             }
         }
 
-        // 🎯 ESTRATÉGIA C: Agrupamento Geral por Janela Temporal (se não fechou em A ou B)
+        // 🎯 ESTRATÉGIA C: Agrupamento Geral Restrito (pedidos baixados juntos no balcão em <= 5 min)
         if ($bundles->isEmpty() && $pendingPayments->count() >= 2 && $pendingPayments->count() <= 20) {
             $generalSubsets = $this->findSubsetsMatchingSum($pendingPayments->values(), $target, 4);
             foreach ($generalSubsets as $subset) {
+                $times = $subset->pluck('created_at')->filter();
+                if ($times->count() < 2) continue;
+                $spreadSeconds = abs($times->max()->diffInSeconds($times->min()));
+                $txGapSeconds  = abs($acquirerTx->transaction_date->diffInSeconds($times->first()));
+
+                // Só agrupa pedidos distintos se foram pagos juntos (<= 5 min) e próximos à passada (<= 10 min)
+                if ($spreadSeconds > 300 || $txGapSeconds > 600) {
+                    continue;
+                }
+
                 $orderIds = $subset->pluck('order_id')->unique()->implode(', #');
                 $bundles->push([
                     'payments'   => $subset,
                     'confidence' => 75,
-                    'reason'     => "Subconjunto de {$subset->count()} pedidos (#{$orderIds}) baixados no mesmo intervalo somando R$ " . number_format($target, 2, ',', '.'),
+                    'reason'     => "Subconjunto de {$subset->count()} pedidos (#{$orderIds}) baixados simultaneamente somando R$ " . number_format($target, 2, ',', '.'),
                 ]);
             }
         }
@@ -876,5 +951,48 @@ class AcquirerReconciliationEngine
                 ]);
             }
         }
+    }
+
+    /**
+     * Detecta possível falha do operador: mesmo horário (±5 min), mesma modalidade e diferença <= R$ 25,00.
+     */
+    public function findVarianceCandidateFor(AcquirerTransaction $acquirerTx, array $excludePaymentIds = []): ?array
+    {
+        $windowStart = $acquirerTx->transaction_date->copy()->subMinutes(5);
+        $windowEnd   = $acquirerTx->transaction_date->copy()->addMinutes(5);
+        $target = (float) $acquirerTx->gross_amount;
+
+        $txMod = Str::ascii(mb_strtolower($acquirerTx->modality ?? ''));
+        $isCredit = str_contains($txMod, 'cred');
+        $isDebit  = str_contains($txMod, 'deb');
+        $isPix    = str_contains($txMod, 'pix') || str_contains($txMod, 'qrcode');
+
+        $candidates = Payment::with(['order', 'paymentMethod'])
+            ->whereBetween('created_at', [$windowStart, $windowEnd])
+            ->whereNull('acquirer_transaction_id')
+            ->where('is_paid', true)
+            ->whereRaw('ABS(amount - ?) > 0.01 AND ABS(amount - ?) <= 25.00', [$target, $target])
+            ->when(!empty($excludePaymentIds), fn ($q) => $q->whereNotIn('id', $excludePaymentIds))
+            ->get()
+            ->filter(function ($p) use ($isCredit, $isDebit, $isPix) {
+                $m = Str::ascii(mb_strtolower($p->method ?? ''));
+                if ($isCredit) return str_contains($m, 'cred');
+                if ($isDebit)  return str_contains($m, 'deb');
+                if ($isPix)    return str_contains($m, 'pix');
+                return false;
+            })
+            ->sortBy(fn ($p) => abs($acquirerTx->transaction_date->diffInSeconds($p->created_at)))
+            ->values();
+
+        if ($candidates->isEmpty()) {
+            return null;
+        }
+
+        $best = $candidates->first();
+        return [
+            'payment' => $best,
+            'order'   => $best->order,
+            'diff'    => round($target - (float) $best->amount, 2),
+        ];
     }
 }

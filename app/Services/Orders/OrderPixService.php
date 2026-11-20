@@ -233,7 +233,7 @@ class OrderPixService
             $updateData['notes'] = null;
         }
 
-        if (in_array($order->type, ['table', 'counter'], true)) {
+        if (in_array($order->type, [\App\Enums\OrderType::TABLE, \App\Enums\OrderType::COUNTER], true)) {
             $updateData['status'] = 'closed';
             $updateData['closed_at'] = now();
         } elseif (in_array($order->status, ['pending_payment', 'pending', 'cancelled'])) {

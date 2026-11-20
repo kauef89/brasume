@@ -30,7 +30,7 @@ class OrderCreationController extends Controller
             // Regras de Bloqueio para não anexar em comanda que já expirou
             $isFinished = $existingOrder && (
                 in_array($existingOrder->status, ['closed', 'cancelled', 'completed', 'merged'], true)
-                || ($existingOrder->type === 'table' && $existingOrder->payment_status === 'paid')
+                || ($existingOrder->type === \App\Enums\OrderType::TABLE && $existingOrder->payment_status === 'paid')
             );
 
             if ($isFinished) {

@@ -17,6 +17,8 @@ class InventoryLoss extends Model
     public const TYPE_EXPIRED          = 'expired';
     public const TYPE_SPOILAGE         = 'spoilage';
     public const TYPE_DAMAGED          = 'damaged';
+    public const TYPE_CASH_BREAKAGE    = 'cash_breakage';
+    public const TYPE_TAX_LOSS         = 'tax_loss';
 
     protected $guarded = [];
 
@@ -59,5 +61,15 @@ class InventoryLoss extends Model
     public function getFormattedTypeAttribute(): string
     {
         return $this->loss_type?->getLabel() ?? 'Desconhecido';
+    }
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
+    }
+
+    public function cashShift(): BelongsTo
+    {
+        return $this->belongsTo(CashShift::class);
     }
 }

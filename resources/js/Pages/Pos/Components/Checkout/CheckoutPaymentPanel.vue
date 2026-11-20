@@ -56,6 +56,89 @@
                 <span>- {{ formatCurrency(discount) }}</span>
             </div>
 
+            <!-- 🪙 GORJETA ESPONTÂNEA (FORA DA NFC-E / REPASSE À EQUIPE) -->
+            <div class="my-3 p-3 rounded-2xl bg-surface-1 border border-surface-border/70 flex flex-col gap-2.5">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <i class="pi pi-heart-fill text-xs text-amber-500"></i>
+                        <span class="text-xs font-black uppercase tracking-wider text-surface-text">Gorjeta Equipe</span>
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-surface-3 text-surface-muted">Fora da NFC-e</span>
+                    </div>
+
+                    <div class="flex items-center gap-1">
+                        <button
+                            type="button"
+                            @click="applyQuickTipPct(10)"
+                            class="px-2 py-0.5 rounded-lg bg-surface-2 hover:bg-primary-500/15 text-[10px] font-black text-primary-smart border border-surface-border cursor-pointer transition-colors"
+                        >
+                            +10%
+                        </button>
+                        <button
+                            v-if="Number(tipAmount) > 0"
+                            type="button"
+                            @click="$emit('update:tipAmount', 0)"
+                            class="px-2 py-0.5 rounded-lg bg-danger-500/10 text-[10px] font-black text-danger-500 border-none cursor-pointer"
+                        >
+                            Zerar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-12 gap-2 items-center">
+                    <div class="col-span-5 relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-surface-muted">R$</span>
+                        <input
+                            type="number"
+                            step="0.50"
+                            min="0"
+                            :value="tipAmount || ''"
+                            @input="$emit('update:tipAmount', Math.max(0, Number($event.target.value || 0)))"
+                            placeholder="0,00"
+                            class="w-full h-9 pl-8 pr-2 rounded-xl bg-surface-2 border border-surface-border text-xs font-black text-surface-text outline-none focus:border-primary-500"
+                        />
+                    </div>
+
+                    <div class="col-span-7">
+                        <select
+                            :value="tipEmployeeId || ''"
+                            @change="$emit('update:tipEmployeeId', $event.target.value ? Number($event.target.value) : null)"
+                            class="w-full h-9 px-2.5 rounded-xl bg-surface-2 border border-surface-border text-xs font-bold text-surface-text outline-none focus:border-primary-500"
+                        >
+                            <option value="">Colaborador (opcional p/ caixa)...</option>
+                            <option v-for="emp in employeesList" :key="emp.id" :value="emp.id">
+                                {{ emp.name }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+
+                <div v-if="Number(tipAmount) > 0" class="flex items-center gap-1.5 pt-0.5">
+                    <button
+                        type="button"
+                        @click="$emit('update:tipPayoutMode', 'ledger_credit')"
+                        class="flex-1 h-8 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border cursor-pointer flex items-center justify-center gap-1"
+                        :class="tipPayoutMode === 'ledger_credit'
+                            ? 'bg-primary-500 text-white border-primary-500 shadow-xs'
+                            : 'bg-surface-2 text-surface-muted border-surface-border hover:text-surface-text'"
+                    >
+                        <i class="pi pi-wallet text-[10px]"></i>
+                        <span>Crédito Carteira RH</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        @click="$emit('update:tipPayoutMode', 'cash_drawer')"
+                        class="flex-1 h-8 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border cursor-pointer flex items-center justify-center gap-1"
+                        :class="tipPayoutMode === 'cash_drawer'
+                            ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                            : 'bg-surface-2 text-surface-muted border-surface-border hover:text-surface-text'"
+                    >
+                        <i class="pi pi-money-bill text-[10px]"></i>
+                        <span>Abater na Hora (Gaveta)</span>
+                    </button>
+                </div>
+            </div>
+
             <div class="flex justify-between items-center mt-2 pt-2 border-t-2 border-surface-border/50">
                 <span class="text-3xl font-black text-surface-text">Total</span>
                 <span class="text-3xl font-black">{{ formatCurrency(dynamicTotal) }}</span>
@@ -100,11 +183,18 @@ const props = defineProps({
     companySettings: Object,
     isServiceTaxEnabled: Boolean,
     order: Object,
-    cashbackValue: Number
+    cashbackValue: Number,
+    tipAmount: { type: Number, default: 0 },
+    tipEmployeeId: { type: [Number, String, null], default: null },
+    tipPayoutMode: { type: String, default: 'ledger_credit' },
+    employeesList: { type: Array, default: () => [] }
 });
 
 const emit = defineEmits([
     "update:isServiceTaxEnabled",
+    "update:tipAmount",
+    "update:tipEmployeeId",
+    "update:tipPayoutMode",
     "divide",
     "clear-divisor",
     "add-payment",
@@ -113,6 +203,13 @@ const emit = defineEmits([
     "go-to-cashier",
     "view-pix"
 ]);
+
+const applyQuickTipPct = (pct) => {
+    const base = Number(props.orderSubtotal || 0);
+    if (base <= 0) return;
+    const val = Math.round((base * (pct / 100)) * 100) / 100;
+    emit('update:tipAmount', val);
+};
 
 const page = usePage();
 const { getPaymentIcon } = usePaymentFormatting();

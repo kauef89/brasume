@@ -2,9 +2,11 @@
 
 namespace App\Services\Financial\Acquirers\Parsers;
 
+use App\Services\Accounting\BankingCalendarService;
 use App\Services\Financial\Acquirers\AcquirerTransactionDTO;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Str;
 
 class SicrediAposParser
 {
@@ -31,11 +33,31 @@ class SicrediAposParser
             throw new Exception('Não foi possível abrir o arquivo CSV para leitura.');
         }
 
-        $header = fgetcsv($file, 10000, ';');
-        if (!$header || count($header) < 15) {
+        $rawHeader = fgetcsv($file, 10000, ';');
+        if (!$rawHeader || count($rawHeader) < 15) {
             fclose($file);
-            throw new Exception('Cabeçalho inválido ou delimitador diferente de ponto e vírgula (;). Verifique se o arquivo é o Relatório Detalhado de Vendas da adquirente.');
+            throw new Exception('Cabeçalho inválido ou delimitador diferente de ponto e vírgula (;). Verifique se o arquivo é o Relatório Detalhado/Simplificado de Vendas da adquirente.');
         }
+
+        $header = array_map(function ($val) {
+            $utf8 = mb_convert_encoding(trim((string) $val), 'UTF-8', 'ISO-8859-1, Windows-1252, UTF-8');
+            return Str::ascii(mb_strtolower($utf8));
+        }, $rawHeader);
+
+        // Mapeamento dinâmico por cabeçalho com fallback para o layout padrão Sicredi APOS (22 colunas)
+        $idxDate       = $this->findColumnIndex($header, ['data da venda', 'data'], 0);
+        $idxTime       = $this->findColumnIndex($header, ['hora da venda', 'hora'], 1);
+        $idxAuth       = $this->findColumnIndex($header, ['cod. de autorizacao', 'autorizacao'], 2);
+        $idxModality   = $this->findColumnIndex($header, ['modalidade'], 4);
+        $idxProduct    = $this->findColumnIndex($header, ['produto'], 5);
+        $idxBrand      = $this->findColumnIndex($header, ['bandeira'], 7);
+        $idxGross      = $this->findColumnIndex($header, ['valor bruto'], 9);
+        $idxFee        = $this->findColumnIndex($header, ['valor taxa', 'taxa (mdr)', 'mdr'], 10);
+        $idxNet        = $this->findColumnIndex($header, ['valor liquido'], 11);
+        $idxStatus     = $this->findColumnIndex($header, ['status'], 13);
+        $idxTerminal   = $this->findColumnIndex($header, ['numero do terminal', 'terminal'], 14);
+        $idxNsu        = $this->findColumnIndex($header, ['comprovante da venda', 'comprovante', 'nsu'], 15);
+        $idxSettlement = $this->findColumnIndex($header, ['previsao de pagamento', 'data prevista', 'data liquidacao'], -1);
 
         $transactions = [];
         $ignoredByStatus = [];
@@ -80,8 +102,8 @@ class SicrediAposParser
             }
 
             // Valida data e hora
-            $datePart = trim($row[0] ?? '');
-            $timePart = trim($row[1] ?? '');
+            $datePart = trim($row[$idxDate] ?? '');
+            $timePart = trim($row[$idxTime] ?? '');
             $dateTimeStr = trim("{$datePart} {$timePart}");
 
             $txDate = null;
@@ -104,15 +126,39 @@ class SicrediAposParser
                 continue;
             }
 
-            $grossAmount = $this->parseAmount($row[9] ?? '0');
-            $feeAmount   = $this->parseAmount($row[11] ?? '0');
-            $netAmount   = $this->parseAmount($row[12] ?? '0');
-            $nsu         = trim($row[15] ?? '');
-            $terminal    = trim($row[14] ?? '');
-            $modality    = mb_convert_case(trim($row[4] ?? ''), MB_CASE_TITLE, 'UTF-8');
-            $brand       = mb_convert_case(trim($row[7] ?? ''), MB_CASE_TITLE, 'UTF-8');
+            $grossAmount = $this->parseAmount($row[$idxGross] ?? '0');
+            $feeAmount   = $this->parseAmount($row[$idxFee] ?? '0');
+            $rawNetStr   = trim($row[$idxNet] ?? '');
+            $netAmount   = ($rawNetStr === '' || $rawNetStr === '-')
+                ? round($grossAmount - $feeAmount, 2)
+                : $this->parseAmount($rawNetStr);
 
-            $rawStatus = trim($row[13] ?? '');
+            // Garante consistência caso taxa venha zerada mas líquido venha preenchido (ou vice-versa)
+            if ($netAmount <= 0 && $grossAmount > 0) {
+                $netAmount = round($grossAmount - $feeAmount, 2);
+            } elseif ($feeAmount <= 0 && $grossAmount > $netAmount) {
+                $feeAmount = round($grossAmount - $netAmount, 2);
+            }
+
+            $nsu      = trim($row[$idxNsu] ?? '');
+            $terminal = trim($row[$idxTerminal] ?? '');
+
+            $rawModality = trim($row[$idxModality] ?? '');
+            $rawProduct  = trim($row[$idxProduct] ?? '');
+            $rawBrand    = trim($row[$idxBrand] ?? '');
+
+            $isPix = str_contains(mb_strtolower($rawModality), 'qrcode')
+                || str_contains(mb_strtolower($rawProduct), 'pix')
+                || str_contains(mb_strtolower($rawBrand), 'pix');
+
+            $modality = $isPix
+                ? 'Pix'
+                : mb_convert_case($rawModality ?: $rawProduct, MB_CASE_TITLE, 'UTF-8');
+            $brand = $isPix
+                ? 'Pix'
+                : mb_convert_case($rawBrand, MB_CASE_TITLE, 'UTF-8');
+
+            $rawStatus  = trim($row[$idxStatus] ?? '');
             $statusNorm = mb_strtolower($rawStatus);
 
             $knownRejected = ['cancelada', 'negada', 'estornada', 'desfeita', 'recusada', 'nao aprovada', 'não aprovada'];
@@ -146,27 +192,35 @@ class SicrediAposParser
             if ($grossAmount <= 0) {
                 $malformedRows[] = [
                     'line'    => $lineNumber,
-                    'reason'  => "Venda aprovada com valor bruto zerado ou negativo ('" . ($row[9] ?? '') . "').",
+                    'reason'  => "Venda aprovada com valor bruto zerado ou negativo ('" . ($row[$idxGross] ?? '') . "').",
                     'preview' => mb_substr(implode(' ; ', array_slice($row, 0, 16)), 0, 180),
                 ];
                 continue;
             }
 
-            $expectedDateStr = trim($row[21] ?? '');
-            $expectedDate = $txDate->copy()->addDay();
-            if ($expectedDateStr !== '' && $expectedDateStr !== '-') {
-                try {
-                    $parsedExp = Carbon::createFromFormat('d/m/Y', $expectedDateStr);
-                    if ($parsedExp) {
-                        $expectedDate = $parsedExp;
+            // Data prevista de liquidação:
+            // 1) Se o CSV trouxer coluna explícita de previsão de pagamento válida (d/m/Y), usa ela;
+            // 2) PIX liquida em D+0;
+            // 3) Cartões seguem próximo dia útil bancário (D+1).
+            $expectedDate = null;
+            if ($idxSettlement >= 0 && isset($row[$idxSettlement])) {
+                $expStr = trim($row[$idxSettlement]);
+                if ($expStr !== '' && $expStr !== '-' && preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $expStr)) {
+                    try {
+                        $expectedDate = Carbon::createFromFormat('d/m/Y', $expStr)->startOfDay();
+                    } catch (\Throwable $e) {
+                        $expectedDate = null;
                     }
-                } catch (\Throwable $e) {
-                    $malformedRows[] = [
-                        'line'    => $lineNumber,
-                        'reason'  => "Data prevista de liquidação inválida ('{$expectedDateStr}').",
-                        'preview' => mb_substr(implode(' ; ', array_slice($row, 0, 22)), 0, 180),
-                    ];
-                    continue;
+                }
+            }
+
+            if (!$expectedDate) {
+                if ($isPix) {
+                    $expectedDate = $txDate->copy()->startOfDay();
+                } elseif (class_exists(BankingCalendarService::class)) {
+                    $expectedDate = app(BankingCalendarService::class)->nextBankingBusinessDay(\Illuminate\Support\Carbon::instance($txDate));
+                } else {
+                    $expectedDate = $txDate->copy()->addDay()->startOfDay();
                 }
             }
 
@@ -179,7 +233,7 @@ class SicrediAposParser
                 grossAmount: $grossAmount,
                 feeAmount: $feeAmount,
                 netAmount: $netAmount,
-                authorizationCode: trim($row[2] ?? ''),
+                authorizationCode: trim($row[$idxAuth] ?? ''),
                 nsu: $nsu,
                 expectedSettlementDate: $expectedDate
             );
@@ -199,9 +253,31 @@ class SicrediAposParser
         ];
     }
 
+    private function findColumnIndex(array $normalizedHeader, array $needles, int $fallback): int
+    {
+        foreach ($normalizedHeader as $idx => $colName) {
+            foreach ($needles as $needle) {
+                if ($colName === $needle || str_contains($colName, $needle)) {
+                    return (int) $idx;
+                }
+            }
+        }
+
+        return $fallback;
+    }
+
     private function parseAmount(string $val): float
     {
-        $clean = preg_replace('/[^0-9,-]/', '', $val);
+        $trimmed = trim($val);
+        if ($trimmed === '' || $trimmed === '-') {
+            return 0.0;
+        }
+
+        $clean = preg_replace('/[^0-9,-]/', '', $trimmed);
+        if ($clean === '' || $clean === '-') {
+            return 0.0;
+        }
+
         return round((float) str_replace(',', '.', $clean), 2);
     }
 }

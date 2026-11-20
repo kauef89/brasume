@@ -24,7 +24,7 @@ class OrderAppendHandler
         $order = Order::find($orderId);
         if (!$order) return false;
 
-        if ($order->type === 'table' && $order->payment_status === 'paid') {
+        if ($order->type === \App\Enums\OrderType::TABLE && $order->payment_status === 'paid') {
             return false;
         }
 
@@ -40,7 +40,7 @@ class OrderAppendHandler
                 throw new \Exception("Ação recusada: O Pedido #{$order->id} já se encontra encerrado ou cancelado.");
             }
 
-            if ($order->type === 'table' && $order->payment_status === 'paid') {
+            if ($order->type === \App\Enums\OrderType::TABLE && $order->payment_status === 'paid') {
                 throw new \Exception("Ação recusada: A comanda da Mesa #{$order->table_number} já foi quitada. Abra uma nova conta.");
             }
 
@@ -117,7 +117,7 @@ class OrderAppendHandler
                 : json_decode($routing['payment_intent_methods'], true);
         }
         // 3. Fallback Seguro: Se o modal não abriu ou mandou vazio, tenta esticar a última regra guardada na comanda
-        elseif (!empty($order->payment_intent_methods) && is_array($order->payment_intent_methods) && in_array($order->type, ['delivery', 'counter'])) {
+        elseif (!empty($order->payment_intent_methods) && is_array($order->payment_intent_methods) && in_array($order->type, [\App\Enums\OrderType::DELIVERY, \App\Enums\OrderType::COUNTER], true)) {
             $methods = $order->payment_intent_methods;
             if (count($methods) > 0) {
                 // Modifica apenas a última forma registrada para cobrir o buraco de saldo

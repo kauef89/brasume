@@ -123,7 +123,16 @@ class OrderPaymentService
             $appliedDiscount = min((float) $order->discount, $baseSubAndDelivery);
             $baseTotal = $baseSubAndDelivery - $appliedDiscount;
             $requestedServiceFee = isset($data['service_fee']) ? (float) $data['service_fee'] : (float) $order->service_fee;
-            $expectedTotal = max(0, round($baseTotal + $requestedServiceFee, 2));
+            $requestedTipAmount = isset($data['tip_amount']) ? max(0, round((float) $data['tip_amount'], 2)) : round((float) ($order->tip_amount ?? 0), 2);
+            $tipEmployeeId = !empty($data['tip_employee_id']) ? (int) $data['tip_employee_id'] : ($order->tip_employee_id ?: null);
+            $tipPayoutMode = $data['tip_payout_mode'] ?? $order->tip_payout_mode ?? 'ledger_credit';
+
+            if ($requestedTipAmount > 0 && $tipPayoutMode === 'ledger_credit' && !$tipEmployeeId) {
+                throw new Exception('Selecione o colaborador que receberá o crédito da gorjeta em carteira.');
+            }
+
+            $expectedCommercialTotal = max(0, round($baseTotal + $requestedServiceFee, 2));
+            $expectedTotal = round($expectedCommercialTotal + $requestedTipAmount, 2);
 
             $cashPaidThisRun = 0;
             $createdPayments = [];
@@ -258,10 +267,46 @@ class OrderPaymentService
                 return in_array($engine, ['loss', 'allowance', 'internal'], true);
             });
 
-            // Atualização do status financeiro do pedido
+            // Repasse da Gorjeta (Crédito em Carteira do Colaborador ou Abatimento Imediato na Gaveta)
+            if ($requestedTipAmount > 0 && empty($order->tip_settled_at)) {
+                $tipEmp = $tipEmployeeId ? Employee::find($tipEmployeeId) : null;
+                $empLabel = $tipEmp ? " ({$tipEmp->name})" : '';
+
+                if ($tipPayoutMode === 'ledger_credit' && $tipEmp) {
+                    $latestLedger = $tipEmp->ledgers()->latest('id')->first();
+                    $currentBalance = $latestLedger ? (float) $latestLedger->balance : 0.0;
+
+                    $tipEmp->ledgers()->create([
+                        'order_id'    => $order->id,
+                        'type'        => 'credit',
+                        'description' => "Gorjeta Recebida - Pedido #{$order->id}",
+                        'amount'      => $requestedTipAmount,
+                        'balance'     => round($currentBalance + $requestedTipAmount, 2),
+                    ]);
+                } elseif ($tipPayoutMode === 'cash_drawer') {
+                    Transaction::create([
+                        'bank_account_id'  => 1,
+                        'cash_shift_id'    => $shift->id,
+                        'order_id'         => $order->id,
+                        'type'             => 'out',
+                        'category'         => 'tip_payout',
+                        'amount'           => $requestedTipAmount,
+                        'description'      => "Repasse Gorjeta na Hora - Pedido #{$order->id}{$empLabel}",
+                        'operator_name'    => auth()->user()->name ?? 'Sistema',
+                        'transaction_date' => now(),
+                    ]);
+                }
+
+                $order->tip_amount = $requestedTipAmount;
+                $order->tip_employee_id = $tipEmployeeId;
+                $order->tip_payout_mode = $tipPayoutMode;
+                $order->tip_settled_at = now();
+            }
+
+            // Atualização do status financeiro do pedido (orders.total NÃO inclui tip_amount para blindar fiscal/faturamento)
             if ($totalPaid >= ($expectedTotal - 0.05) || $areAllItemsPaid || $excess > 0.02) {
                 $order->service_fee = $requestedServiceFee;
-                $order->total = $expectedTotal;
+                $order->total = $expectedCommercialTotal;
                 $order->payment_status = ($commercialPaid <= 0.01 && $hasNonRevenueEngine)
                     ? 'settled_internal'
                     : 'paid';
@@ -276,7 +321,7 @@ class OrderPaymentService
                     ->update(['paid_qty' => DB::raw('quantity')]);
 
                 // Mesa e Balcão quitados encerram imediatamente como 'closed'
-                if (in_array($order->type, ['table', 'counter'], true)) {
+                if (in_array($order->type, [\App\Enums\OrderType::TABLE, \App\Enums\OrderType::COUNTER], true)) {
                     $order->status = 'closed';
                     $order->closed_at = now();
                 } elseif (in_array($order->status, ['pending', 'pending_payment'])) {
@@ -284,7 +329,7 @@ class OrderPaymentService
                 }
             } else {
                 $order->service_fee = $requestedServiceFee;
-                $order->total = $expectedTotal;
+                $order->total = $expectedCommercialTotal;
                 $order->payment_status = 'partial';
 
                 if ($hasNonRevenueEngine) {
@@ -336,7 +381,7 @@ class OrderPaymentService
                 $order->recalculatePaymentStatus();
 
         // 🚀 FECHAMENTO AUTOMÁTICO (Balcão)
-        if ($order->type === 'counter' && in_array($order->payment_status, ['paid', 'settled_internal'], true)) {
+        if ($order->type === \App\Enums\OrderType::COUNTER && in_array($order->payment_status, ['paid', 'settled_internal'], true)) {
             $order->status = 'closed';
         }
 
@@ -366,8 +411,8 @@ class OrderPaymentService
      */
     public function resolveOrderCompletion(Order $order): bool
     {
-        $shouldClose = ($order->type === 'delivery' && in_array($order->status, ['dispatched', 'delivered']) && in_array($order->payment_status, ['paid', 'settled_internal'], true))
-            || (in_array($order->type, ['table', 'counter'], true) && in_array($order->payment_status, ['paid', 'settled_internal'], true));
+        $shouldClose = ($order->type === \App\Enums\OrderType::DELIVERY && in_array($order->status, ['dispatched', 'delivered']) && in_array($order->payment_status, ['paid', 'settled_internal'], true))
+            || (in_array($order->type, [\App\Enums\OrderType::TABLE, \App\Enums\OrderType::COUNTER], true) && in_array($order->payment_status, ['paid', 'settled_internal'], true));
 
         if (!$shouldClose) {
             return false;
@@ -380,7 +425,7 @@ class OrderPaymentService
         }
 
         // Libera a mesa física preservando o layout de junção (sem auto-split)
-        if ($order->type === 'table') {
+        if ($order->type === \App\Enums\OrderType::TABLE) {
             $table = $order->diningTable
                 ?? ($order->dining_table_id ? DiningTable::find($order->dining_table_id) : null)
                 ?? (!empty($order->table_number) ? DiningTable::where('name', $order->table_number)->first() : null);

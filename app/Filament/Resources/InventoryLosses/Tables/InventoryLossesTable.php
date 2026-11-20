@@ -20,7 +20,8 @@ class InventoryLossesTable
                     ->sortable(),
 
                 Columns\TextColumn::make('product.name')
-                    ->label('Item Perdido')
+                    ->label('Item / Origem')
+                    ->default(fn (InventoryLoss $record) => $record->order_id ? "Pedido #{$record->order_id} (Financeiro)" : 'Perda Financeira')
                     ->searchable()
                     ->sortable()
                     ->weight('bold')
@@ -34,7 +35,7 @@ class InventoryLossesTable
                 Columns\TextColumn::make('quantity')
                     ->label('Qtd.')
                     ->numeric(3)
-                    ->formatStateUsing(fn ($state, $record) => number_format((float)$state, 2, ',', '.') . ' ' . strtoupper($record->product?->unit_of_measure ?? 'UN')),
+                    ->formatStateUsing(fn ($state, $record) => empty($record->product_id) ? '—' : number_format((float)$state, 2, ',', '.') . ' ' . strtoupper($record->product?->unit_of_measure ?? 'UN')),
 
                 Columns\TextColumn::make('total_cost')
                     ->label('Prejuízo Total')

@@ -65,7 +65,7 @@ class ProcessAbandonedCarts extends Command
         foreach ($abandonedOrders as $order) {
             try {
                 $cancellationService->cancelBySystem($order, $cancelReason);
-                Log::info("✅ [ShiftClose-Cleanup] Pedido #{$order->id} (Origem: {$order->source}, Tipo: {$order->type}) cancelado e estoque estornado.");
+                Log::info("✅ [ShiftClose-Cleanup] Pedido #{$order->id} (Origem: {$order->source}, Tipo: {$order->type?->value}) cancelado e estoque estornado.");
             } catch (\Throwable $e) {
                 Log::error("❌ [ShiftClose-Cleanup] Falha ao cancelar Pedido #{$order->id}: " . $e->getMessage());
             }

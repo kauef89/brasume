@@ -48,7 +48,7 @@ class AuditCashShift extends Page
         $this->record = $this->resolveRecord($record);
         $this->managerNotes = $this->record->notes;
 
-        if (($this->record->status instanceof \BackedEnum ? $this->record->status->value : $this->record->status) !== 'open') {
+        if (!$this->isAuditLocked() && ($this->record->status instanceof \BackedEnum ? $this->record->status->value : $this->record->status) !== 'open') {
             $diag = app(ShiftAuditService::class)->diagnose(
                 $this->record,
                 (float) ($this->record->closing_balance_actual ?? 0),
@@ -94,8 +94,66 @@ class AuditCashShift extends Page
         ];
     }
 
+
+    public function isAuditLocked(): bool
+    {
+        $status = $this->record->status instanceof \BackedEnum
+            ? $this->record->status->value
+            : (string) $this->record->status;
+
+        return in_array($status, [
+            \App\Enums\ShiftStatus::HOMOLOGATED->value,
+            \App\Enums\ShiftStatus::RECONCILED->value,
+        ], true);
+    }
+
+    protected function ensureAuditUnlocked(): bool
+    {
+        if ($this->isAuditLocked()) {
+            Notification::make()
+                ->title('Auditoria Bloqueada')
+                ->body('Este turno já foi homologado e está em modo somente leitura. Clique em "Reabrir Auditoria" para fazer alterações.')
+                ->warning()
+                ->send();
+
+            return false;
+        }
+
+        return true;
+    }
+
+    public function reabrirAuditoria(): void
+    {
+        $user = auth()->user();
+        if ($user && method_exists($user, 'hasAnyRole') && !$user->hasAnyRole(['admin', 'manager'])) {
+            Notification::make()
+                ->title('Acesso Negado')
+                ->body('Apenas administradores ou gerentes podem reabrir uma auditoria homologada.')
+                ->danger()
+                ->send();
+            return;
+        }
+
+        $operatorName = $user?->name ?? 'Gestor';
+        $auditLog = "[Auditoria reaberta por {$operatorName} em " . now()->format('d/m/Y H:i') . "]";
+        $updatedNotes = trim(($this->record->notes ? $this->record->notes . "\n" : '') . $auditLog);
+
+        $this->record->update([
+            'status' => \App\Enums\ShiftStatus::CLOSED,
+            'notes'  => $updatedNotes,
+        ]);
+        $this->managerNotes = $updatedNotes;
+
+        Notification::make()
+            ->title("Auditoria do Turno #{$this->record->id} Reaberta")
+            ->body('Os controles de conciliação e ajuste foram liberados novamente.')
+            ->info()
+            ->send();
+    }
+
     public function saveNotes(): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         $this->record->update(['notes' => trim((string) $this->managerNotes)]);
 
         Notification::make()->title('Parecer Salvo com Sucesso!')->success()->send();
@@ -103,6 +161,7 @@ class AuditCashShift extends Page
 
     public function homologarAuditoria(): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         $shift = $this->record;
         $diag = app(ShiftAuditService::class)->diagnose($shift, (float) $shift->closing_balance_actual, $shift->terminal_settlements ?? []);
         $hasRealBreakage = abs($diag['cash_difference']) >= 0.05 || abs($diag['electronic_difference']) >= 0.05;
@@ -138,6 +197,7 @@ class AuditCashShift extends Page
 
     public function retificarFormaPagamento(int $paymentId, int $novoMetodoId): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         $operatorName = auth()->user()?->name ?? 'Gestor Administrativo';
         app(ShiftAuditService::class)->applyCorrection($this->record, $paymentId, $novoMetodoId, $operatorName);
         $this->recalcularTurno();
@@ -151,6 +211,7 @@ class AuditCashShift extends Page
 
     public function abrirModalVendaAvulsa(int $acquirerTxId): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         $acqTx = AcquirerTransaction::find($acquirerTxId);
         if (!$acqTx) return;
 
@@ -213,6 +274,7 @@ class AuditCashShift extends Page
 
     public function confirmarVendaAvulsa(): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         if (!$this->selectedAcqTxId) return;
         $acqTx = AcquirerTransaction::find($this->selectedAcqTxId);
         if (!$acqTx) return;
@@ -252,6 +314,7 @@ class AuditCashShift extends Page
 
     public function ignorarTransacaoMaquininha(int $acquirerTxId): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         $acqTx = AcquirerTransaction::find($acquirerTxId);
         if (!$acqTx) return;
 
@@ -274,6 +337,7 @@ class AuditCashShift extends Page
 
     public function registrarSangriaEsquecida(): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         if (!$this->sangriaAmount || $this->sangriaAmount <= 0) {
             Notification::make()->title('Informe um valor válido')->danger()->send();
             return;
@@ -299,6 +363,7 @@ class AuditCashShift extends Page
 
     public function abrirModalCandidatosPagamento(int $paymentId): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         $payment = Payment::with('order')->find($paymentId);
         if (!$payment) return;
 
@@ -309,7 +374,7 @@ class AuditCashShift extends Page
             'order_id'      => $payment->order_id,
             'customer_id'   => $payment->order?->customer_id,
             'customer_name' => $payment->order?->customer_name ?? 'Consumidor Final',
-            'channel'       => $payment->order?->type ?? 'counter',
+            'channel'       => $payment->order?->type?->value ?? 'counter',
             'method_name'   => $payment->method,
             'amount'        => (float) $payment->amount,
             'time'          => $payment->created_at?->format('d/m H:i') ?? '--:--',
@@ -321,6 +386,7 @@ class AuditCashShift extends Page
 
     public function abrirModalCandidatosPedido(int $orderId): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         $order = Order::find($orderId);
         if (!$order) return;
 
@@ -331,7 +397,7 @@ class AuditCashShift extends Page
             'order_id'      => $order->id,
             'customer_id'   => $order->customer_id,
             'customer_name' => $order->customer_name ?? 'Consumidor Final',
-            'channel'       => $order->type ?? 'counter',
+            'channel'       => $order->type?->value ?? 'counter',
             'method_name'   => 'Sem Pagamento',
             'amount'        => (float) $order->total,
             'time'          => $order->created_at?->format('d/m H:i') ?? '--:--',
@@ -360,6 +426,7 @@ class AuditCashShift extends Page
 
     public function vincularCandidatoAoAlvo(string $source, int $sourceId): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         if (!$this->candidateTargetId || !$this->candidateTargetType) return;
 
         $service = app(PixBankReconciliationService::class);
@@ -387,6 +454,7 @@ class AuditCashShift extends Page
 
     public function removerPagamentoDuplicado(int $paymentId): void
     {
+        if (!$this->ensureAuditUnlocked()) return;
         $payment = Payment::with('order')->findOrFail($paymentId);
         $order = $payment->order;
 
@@ -482,7 +550,7 @@ class AuditCashShift extends Page
         $closedAt = $shift->closed_at ?? now();
         $orphanAcq = AcquirerTransaction::query()
             ->whereBetween('transaction_date', [$shift->opened_at->copy()->subMinutes(30), $closedAt->copy()->addMinutes(30)])
-            ->where('status', \App\Enums\AcquirerMatchStatus::ORPHAN)
+            ->whereIn('status', [\App\Enums\AcquirerMatchStatus::ORPHAN, \App\Enums\AcquirerMatchStatus::AMBIGUOUS])
             ->get();
 
         $documentalConflicts = [];
@@ -546,7 +614,48 @@ class AuditCashShift extends Page
             ->orderBy('created_at', 'asc')
             ->get();
 
+                // Detecta pares automáticos de falha de caixa (mesma modalidade, <= 10 min, diff <= R$ 25,00)
+        $variancePairs = [];
+        $unmatchedCardPayments = $payments->filter(function ($p) use ($acqTransactions) {
+            $engine = $p->paymentMethod?->engine_type;
+            $engineVal = $engine instanceof \BackedEnum ? $engine->value : (string) $engine;
+            $m = mb_strtolower($p->method ?? '');
+            $isCard = in_array($engineVal, ['manual', 'smart_pos', 'tef', 'pix_machine'])
+                || str_contains($m, 'créd') || str_contains($m, 'cred') || str_contains($m, 'déb') || str_contains($m, 'deb');
+            $acq = $p->acquirerTransaction ?? $acqTransactions->get($p->id) ?? $acqTransactions->get("order_{$p->order_id}");
+            return $isCard && (!$acq || ($acq->status instanceof \BackedEnum ? $acq->status->value : $acq->status) !== 'matched');
+        });
+
+        foreach ($unmatchedCardPayments as $up) {
+            $upMod = \Illuminate\Support\Str::ascii(mb_strtolower($up->method ?? ''));
+            $isDeb = str_contains($upMod, 'deb');
+            $isCred = str_contains($upMod, 'cred');
+
+            $matchAcq = $orphanAcq->first(function ($tx) use ($up, $isDeb, $isCred) {
+                if (!$tx->transaction_date || !$up->created_at) return false;
+                if (abs($tx->transaction_date->diffInSeconds($up->created_at)) > 600) return false;
+                $diff = round((float) $tx->gross_amount - (float) $up->amount, 2);
+                if (abs($diff) < 0.01 || abs($diff) > 25.00) return false;
+                $tMod = \Illuminate\Support\Str::ascii(mb_strtolower($tx->modality ?? ''));
+                if ($isDeb) return str_contains($tMod, 'deb');
+                if ($isCred) return str_contains($tMod, 'cred');
+                return false;
+            });
+
+            if ($matchAcq) {
+                $diff = round((float) $matchAcq->gross_amount - (float) $up->amount, 2);
+                $variancePairs[] = [
+                    'payment'   => $up,
+                    'acq'       => $matchAcq,
+                    'diff'      => $diff,
+                    'abs_diff'  => abs($diff),
+                ];
+            }
+        }
+
         return [
+            'isLocked'                 => $this->isAuditLocked(),
+            'variancePairs'            => $variancePairs,
             'shift'                    => $shift,
             'diag'                     => $diag,
             'payments'                 => $payments,
@@ -570,5 +679,84 @@ class AuditCashShift extends Page
             'pixMaqMethod'             => $pixMaqMethod,
             'paymentCountByOrder'      => $paymentCountByOrder,
         ];
+    }
+
+    public function conciliarComAjuste(string $source, int $sourceId, string $adjustmentType, ?int $paymentId = null): void
+    {
+        if (!$this->ensureAuditUnlocked()) return;
+        $targetPaymentId = $paymentId ?: $this->candidateTargetId;
+        if (!$targetPaymentId) return;
+
+        $payment = Payment::with('order')->find($targetPaymentId);
+        if (!$payment) return;
+
+        $operatorName = auth()->user()?->name ?? 'Gestor';
+        $msg = app(PixBankReconciliationService::class)->reconcileWithDiscrepancyAdjustment(
+            $payment,
+            $source,
+            $sourceId,
+            $adjustmentType,
+            $operatorName,
+            $payment->order?->tip_employee_id ?? $payment->order?->attendant?->employee_id,
+            'ledger_credit'
+        );
+
+        $this->showCandidateModal = false;
+        $this->recalcularTurno();
+
+        Notification::make()
+            ->title('Auditoria & Perda Registradas!')
+            ->body($msg)
+            ->success()
+            ->send();
+    }
+
+    public function vincularAcquirerAoPagamentoDireto(int $acquirerTxId, int $paymentId): void
+    {
+        if (!$this->ensureAuditUnlocked()) return;
+
+        $payment = Payment::with('order')->find($paymentId);
+        if (!$payment) return;
+
+        $operatorName = auth()->user()?->name ?? 'Gestor';
+        $msg = app(PixBankReconciliationService::class)->linkCandidateToPayment(
+            $payment,
+            'acquirer',
+            $acquirerTxId,
+            $operatorName
+        );
+
+        $this->recalcularTurno();
+
+        Notification::make()
+            ->title('Transação Conciliada!')
+            ->body($msg)
+            ->success()
+            ->send();
+    }
+
+    public function vincularAcquirerAoPedidoDireto(int $acquirerTxId, int $orderId): void
+    {
+        if (!$this->ensureAuditUnlocked()) return;
+
+        $order = Order::find($orderId);
+        if (!$order) return;
+
+        $operatorName = auth()->user()?->name ?? 'Gestor';
+        $msg = app(PixBankReconciliationService::class)->linkCandidateToOrder(
+            $this->record,
+            $order,
+            'acquirer',
+            $acquirerTxId,
+            $operatorName
+        );
+
+        $this->recalcularTurno();
+
+        Notification::make()
+            ->title('Pedido Baixado & Conciliado!')
+            ->body($msg)
+            ->success()
+            ->send();
     }
 }

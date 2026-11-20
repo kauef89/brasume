@@ -109,7 +109,7 @@ class OrderLogisticsService
 
     public function changeAddress(Order $order, int|string|null $addressId, ?float $deliveryFee = null, ?array $rawAddress = null): void
     {
-        if ($order->type !== 'delivery') {
+        if ($order->type !== \App\Enums\OrderType::DELIVERY) {
             $order->type = 'delivery';
         }
 
@@ -153,7 +153,7 @@ class OrderLogisticsService
 
     public function assignCourier(Order $order, int $driverId): void
     {
-        if ($order->type !== 'delivery') {
+        if ($order->type !== \App\Enums\OrderType::DELIVERY) {
             throw new Exception('Apenas pedidos de delivery podem receber entregadores.');
         }
 

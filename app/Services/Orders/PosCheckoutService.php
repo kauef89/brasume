@@ -87,6 +87,7 @@ class PosCheckoutService
             'paymentMethods'    => $paymentMethods,
             'companySettings'   => $companySettings,
             'hasFiscalDocument' => $hasFiscalDocument,
+            'employeesList'     => \App\Models\Employee::where('is_active', true)->orderBy('name')->get(['id', 'name', 'role']),
         ];
     }
 
@@ -112,7 +113,7 @@ class PosCheckoutService
                 $product = $originalItem->product_id ? Product::find($originalItem->product_id) : null;
 
                 // 1. Resolução do preço real do produto fora do combo
-                $isDelivery = in_array($order->type, ['delivery', 'takeaway', 'pickup'], true);
+                $isDelivery = in_array($order->type, [\App\Enums\OrderType::DELIVERY, \App\Enums\OrderType::PICKUP], true);
                 $catalogPrice = 0.00;
                 if ($product) {
                     $catalogPrice = ($isDelivery && ($product->delivery_price > 0))

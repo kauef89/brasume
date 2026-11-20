@@ -89,9 +89,9 @@ class AcquirerTransactionsTable
 
                 TextColumn::make('order_id')
                     ->label('Pedido Vinculado')
-                    ->formatStateUsing(fn (?int $state) => $state ? "#{$state}" : '-')
+                    ->formatStateUsing(fn ($state) => $state ? "#{$state}" : '-')
                     ->description(fn (AcquirerTransaction $r) => $r->order?->customer_name ?: null)
-                    ->url(fn (AcquirerTransaction $r) => $r->order_id ? OrderResource::getUrl('edit', ['record' => $r->order_id]) : null)
+                    ->url(fn (AcquirerTransaction $r) => $r->order_id ? OrderResource::getUrl('view', ['record' => $r->order_id]) : null)
                     ->openUrlInNewTab()
                     ->color('info')
                     ->weight('bold'),
@@ -148,9 +148,10 @@ class AcquirerTransactionsTable
                             $time = $order->created_at ? $order->created_at->format('H:i:s') : '--:--';
                             $customer = $order->customer_name ?: ($order->customer?->name ?? 'Consumidor Balcão');
                             $typeLabel = match ($order->type) {
-                                'delivery' => '🛵 Delivery',
-                                'table'    => "🍽️ Mesa {$order->table_number}",
-                                default    => '🏪 Balcão',
+                                \App\Enums\OrderType::DELIVERY => '🛵 Entrega',
+                                \App\Enums\OrderType::PICKUP   => '🛍️ Retirada',
+                                \App\Enums\OrderType::TABLE    => "🍽️ Mesa {$order->table_number}",
+                                default                         => '🏪 Balcão',
                             };
 
                             // Desvio temporal

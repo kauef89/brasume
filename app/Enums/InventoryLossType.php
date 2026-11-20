@@ -13,6 +13,8 @@ enum InventoryLossType: string implements HasLabel, HasColor, HasIcon
     case EXPIRED          = 'expired';
     case SPOILAGE         = 'spoilage';
     case DAMAGED          = 'damaged';
+    case CASH_BREAKAGE    = 'cash_breakage';
+    case TAX_LOSS         = 'tax_loss';
 
     public function getLabel(): ?string
     {
@@ -22,6 +24,8 @@ enum InventoryLossType: string implements HasLabel, HasColor, HasIcon
             self::EXPIRED         => 'Validade Vencida',
             self::SPOILAGE        => 'Deterioração / Azedou',
             self::DAMAGED         => 'Avaria Física / Queda',
+            self::CASH_BREAKAGE   => 'Perda por Quebra de Caixa',
+            self::TAX_LOSS        => 'Perda por Imposto Indevido',
         };
     }
 
@@ -30,7 +34,11 @@ enum InventoryLossType: string implements HasLabel, HasColor, HasIcon
         return match ($this) {
             self::OPERATIONAL     => 'warning',
             self::INVENTORY_AUDIT => 'info',
-            self::EXPIRED, self::SPOILAGE, self::DAMAGED => 'danger',
+            self::CASH_BREAKAGE,
+            self::TAX_LOSS,
+            self::EXPIRED,
+            self::SPOILAGE,
+            self::DAMAGED         => 'danger',
         };
     }
 
@@ -42,6 +50,13 @@ enum InventoryLossType: string implements HasLabel, HasColor, HasIcon
             self::EXPIRED         => 'heroicon-o-calendar-days',
             self::SPOILAGE        => 'heroicon-o-trash',
             self::DAMAGED         => 'heroicon-o-exclamation-triangle',
+            self::CASH_BREAKAGE   => 'heroicon-o-banknotes',
+            self::TAX_LOSS        => 'heroicon-o-receipt-percent',
         };
+    }
+
+    public function isFinancial(): bool
+    {
+        return in_array($this, [self::CASH_BREAKAGE, self::TAX_LOSS], true);
     }
 }

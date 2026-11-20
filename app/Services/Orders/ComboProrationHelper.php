@@ -44,8 +44,9 @@ class ComboProrationHelper
     /**
      * Calcula o rateio proporcional do valor do combo pai entre todos os subitens.
      */
-    public static function calculateProration(OrderItem $parent, ?Collection $children = null, string $orderType = 'table'): array
+    public static function calculateProration(OrderItem $parent, ?Collection $children = null, string|\App\Enums\OrderType $orderType = 'table'): array
     {
+        $orderType = $orderType instanceof \BackedEnum ? $orderType->value : $orderType;
         if ($children === null) {
             $children = $parent->relationLoaded('subItems') && $parent->subItems->isNotEmpty()
                 ? $parent->subItems

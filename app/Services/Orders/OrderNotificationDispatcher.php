@@ -25,7 +25,7 @@ class OrderNotificationDispatcher
         $cashierStaff = $this->attendanceService->getActiveShiftStaffByRoles(['caixa', 'pos', 'manager', 'admin', 'gerente']);
 
         if ($cashierStaff->isNotEmpty()) {
-            $msgCaixa = "🔔 Novo Pedido #{$order->id} na fila! (Tipo: {$order->type})";
+            $msgCaixa = "🔔 Novo Pedido #{$order->id} na fila! (Tipo: {$order->type?->getLabel()})";
             Notification::send($cashierStaff, new NewB2COrderNotification($order, $msgCaixa));
         }
 

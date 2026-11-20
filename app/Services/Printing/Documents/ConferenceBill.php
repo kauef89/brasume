@@ -60,9 +60,9 @@ class ConferenceBill
         $b->text(' ', false, '1x');
 
         $typeTitle = 'BALCAO';
-        if ($order->type === 'delivery') $typeTitle = 'ENTREGA';
-        if ($order->type === 'pickup' || $order->type === 'takeaway') $typeTitle = 'RETIRADA';
-        if ($order->type === 'table') $typeTitle = 'MESA ' . ($order->table_number ?: '?');
+        if ($order->type === \App\Enums\OrderType::DELIVERY) $typeTitle = 'ENTREGA';
+        if ($order->type === \App\Enums\OrderType::PICKUP) $typeTitle = 'RETIRADA';
+        if ($order->type === \App\Enums\OrderType::TABLE) $typeTitle = 'MESA ' . ($order->table_number ?: '?');
 
         $b->text("*** {$typeTitle} ***", true, '2x');
         if ($this->partialData !== null) {
@@ -82,7 +82,7 @@ class ConferenceBill
 
         $b->text('DATA: ' . now()->format('d/m/Y H:i'));
 
-        if ($order->type === 'delivery' && $order->address) {
+        if ($order->type === \App\Enums\OrderType::DELIVERY && $order->address) {
             $b->divider()->text('ENDERECO DE ENTREGA:', true);
             $addr = $order->address;
             $streetLine = "{$addr['street']}, {$addr['number']}";
@@ -100,7 +100,7 @@ class ConferenceBill
             : ($order->items ?? collect());
 
         $activeItems = $sourceItems->where('status', '!=', 'cancelled');
-        OrderTableBuilder::buildConference($b, $activeItems, 'A', 80, $order->type === 'table');
+        OrderTableBuilder::buildConference($b, $activeItems, 'A', 80, $order->type === \App\Enums\OrderType::TABLE);
 
         if ($order->notes) {
             $b->divider()->text('OBSERVACOES:', true)->text($this->cleanText($order->notes));
@@ -160,7 +160,7 @@ class ConferenceBill
         if ($isPaidStatus || $toCollect <= 0.02) {
             $b->text('PAGO', true, '2x')->text('NAO COBRAR DO CLIENTE.');
         } else {
-            if ($order->type !== 'table') {
+            if ($order->type !== \App\Enums\OrderType::TABLE) {
                 $b->text('*** A COBRAR R$: ' . $this->money($toCollect) . ' ***', true, '2x')->space();
             } elseif ($paidAmount > 0.02) {
                 $b->text('RESTANTE R$: ' . $this->money($toCollect), true, '1x')->space();

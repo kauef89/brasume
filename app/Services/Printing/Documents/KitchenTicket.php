@@ -155,18 +155,18 @@ class KitchenTicket
         $this->blueprint[] = ['cmd' => 'align', 'val' => 'ct'];
 
         $headerText = 'CLIENTE';
-        if ($this->order->type === 'counter') {
+        if ($this->order->type === \App\Enums\OrderType::COUNTER) {
             $headerText = 'BALCAO';
         } elseif ($this->order->source === 'team_app' && !empty($this->order->customer_name)) {
             $headerText = $this->order->customer_name;
-        } elseif ($this->order->type === 'table') {
+        } elseif ($this->order->type === \App\Enums\OrderType::TABLE) {
             $headerText = 'MESA ' . ($this->order->table_number ?: '?');
         } elseif ($this->order->customer_id && $this->order->customer) {
             $headerText = $this->abbreviateName($this->order->customer->name);
         } elseif ($this->order->customer_name) {
             $headerText = $this->order->customer_name;
         } else {
-            $headerText = $this->order->type === 'delivery' ? 'DELIVERY' : 'BALCAO';
+            $headerText = $this->order->type === \App\Enums\OrderType::DELIVERY ? 'DELIVERY' : 'BALCAO';
         }
 
         if ($this->isReprint) {
@@ -332,7 +332,7 @@ class KitchenTicket
 
         $this->blueprint[] = ['cmd' => 'text', 'val' => ' ', 'size' => '1x'];
 
-        $isTakeout = in_array($this->order->type, ['delivery', 'pickup', 'takeaway', 'counter']);
+        $isTakeout = in_array($this->order->type, [\App\Enums\OrderType::DELIVERY, \App\Enums\OrderType::PICKUP, \App\Enums\OrderType::COUNTER], true);
         if (!$isTakeout && isset($item->is_takeaway) && $item->is_takeaway) {
             $isTakeout = true;
         }

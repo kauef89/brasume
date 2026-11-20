@@ -42,13 +42,13 @@ class OrderPrintService
 
     public function isEligibleChannel(Order $order): bool
     {
-        return in_array($order->type, ['delivery', 'counter', 'takeaway', 'pickup']);
+        return in_array($order->type, [\App\Enums\OrderType::DELIVERY, \App\Enums\OrderType::COUNTER, \App\Enums\OrderType::PICKUP], true);
     }
 
     public function isClaimFlyerEligible(Order $order): bool
     {
         return empty($order->customer_id)
-            && in_array($order->type, ['table', 'counter', 'takeaway', 'pickup', 'delivery']);
+            && in_array($order->type, [\App\Enums\OrderType::TABLE, \App\Enums\OrderType::COUNTER, \App\Enums\OrderType::PICKUP, \App\Enums\OrderType::DELIVERY], true);
     }
 
     public function isFromCustomerApp(Order $order): bool

@@ -85,12 +85,12 @@ class OrderReactivationService
             }
 
             // 4. Reversão do status operacional
-            $order->status = ($order->type === 'counter') ? 'ready' : 'pending';
+            $order->status = ($order->type === \App\Enums\OrderType::COUNTER) ? 'ready' : 'pending';
             $order->closed_at = null;
             $order->save();
 
             // 5. Reocupação física da mesa
-            if ($order->type === 'table') {
+            if ($order->type === \App\Enums\OrderType::TABLE) {
                 $table = $order->diningTable ?? ($order->dining_table_id ? DiningTable::find($order->dining_table_id) : null);
                 if ($table) {
                     $table->update(['status' => 'occupied']);

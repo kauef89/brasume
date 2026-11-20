@@ -106,7 +106,7 @@ class BridgeService
                         ?? $order->table?->number
                         ?? null;
 
-                    $orderTitle = $order->type === 'table'
+                    $orderTitle = $order->type === \App\Enums\OrderType::TABLE
                         ? ($tableName ? "Mesa {$tableName}" : "Mesa (Pedido #{$order->id})")
                         : ($order->customer_name ?? "Pedido #{$order->id}");
 
@@ -116,7 +116,7 @@ class BridgeService
                     } elseif (in_array($rawSource, ['team_app', 'team', 'waiter', 'garcom', 'pos'], true)) {
                         $source = 'team_app';
                     } else {
-                        $source = in_array($order->type, ['delivery'], true) ? 'customer_app' : 'team_app';
+                        $source = $order->type === \App\Enums\OrderType::DELIVERY ? 'customer_app' : 'team_app';
                     }
 
                     event(new PrintAlertTriggered([

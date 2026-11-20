@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\CashShifts\Tables;
 
+use App\Enums\AuditDiagnosticStatus;
 use App\Enums\ShiftStatus;
 use App\Models\CashShift;
 use App\Models\PaymentMethod;
@@ -55,59 +56,20 @@ class CashShiftsTable
                     ->badge()
                     ->sortable(),
 
-                // DIAGNÓSTICO INTELIGENTE DE AUDITORIA
+                // DIAGNÓSTICO INTELIGENTE DE AUDITORIA (ENUM UNIFICADO)
                 TextColumn::make('audit_diagnostic')
                     ->label('Auditoria / Integridade')
                     ->badge()
-                    ->state(function (CashShift $record): string {
-                        $statusVal = $record->status instanceof \BackedEnum ? $record->status->value : $record->status;
-                        if ($statusVal === 'open') {
-                            return 'Em Operação';
-                        }
+                    ->state(function (CashShift $record): AuditDiagnosticStatus {
+                        $statusVal = $record->status instanceof \BackedEnum ? $record->status->value : (string) $record->status;
 
-                        if ($statusVal === 'homologated') {
-                            return 'Ressalva Homologada';
-                        }
-
-                        if ($statusVal === 'reconciled') {
-                            return $record->corrected_errors_count > 0 ? 'Conciliado (Com Correção)' : '100% Conciliado';
-                        }
-
-                        $cashDiff = (float) $record->difference;
-                        $aposDiff = (float) ($record->apos_breakage_amount ?? 0);
-                        $hasCash = abs($cashDiff) >= 0.05;
-                        $hasApos = abs($aposDiff) >= 0.05;
-
-                        if (! $hasCash && ! $hasApos) {
-                            return $record->corrected_errors_count > 0 ? 'Conciliado (Com Correção)' : '100% Conciliado';
-                        }
-
-                        // Se falta num lado e sobra no outro no mesmo valor = Troca de lançamento
-                        if ($hasCash && $hasApos && abs($cashDiff + $aposDiff) <= 0.05) {
-                            return 'Troca de Meio Detectada';
-                        }
-
-                        if ($hasCash && ! $hasApos) {
-                            return $cashDiff < 0 ? 'Quebra de Cofre (Falta)' : 'Sobra no Cofre';
-                        }
-
-                        if ($hasApos && ! $hasCash) {
-                            return 'Divergência Adquirente';
-                        }
-
-                        return 'Divergência Múltipla';
-                    })
-                    ->color(function (string $state): string {
-                        return match ($state) {
-                            '100% Conciliado'              => 'success',
-                            'Conciliado (Com Correção)'    => 'info',
-                            'Troca de Meio Detectada'      => 'warning',
-                            'Divergência Adquirente'       => 'warning',
-                            'Quebra de Cofre (Falta)'      => 'danger',
-                            'Sobra no Cofre'               => 'info',
-                            'Divergência Múltipla'         => 'danger',
-                            default                        => 'gray',
-                        };
+                        return AuditDiagnosticStatus::fromShiftSummary(
+                            shiftStatus: $statusVal,
+                            cashDiff: (float) $record->difference,
+                            electronicDiff: (float) ($record->apos_breakage_amount ?? 0),
+                            hasElectronicProof: true,
+                            correctedCount: (int) ($record->corrected_errors_count ?? 0)
+                        );
                     })
                     ->description(function (CashShift $record): ?string {
                         if (($record->status instanceof \BackedEnum ? $record->status->value : $record->status) === 'open') {
@@ -119,10 +81,12 @@ class CashShiftsTable
 
                         $parts = [];
                         if (abs($cashDiff) >= 0.05) {
-                            $parts[] = 'Cofre: R$ ' . number_format($cashDiff, 2, ',', '.');
+                            $cashSign = $cashDiff > 0 ? '+' : '-';
+                            $parts[] = 'Cofre: ' . $cashSign . 'R$ ' . number_format(abs($cashDiff), 2, ',', '.');
                         }
                         if (abs($aposDiff) >= 0.05) {
-                            $parts[] = 'POS: R$ ' . number_format($aposDiff, 2, ',', '.');
+                            $aposSign = $aposDiff > 0 ? '+' : '-';
+                            $parts[] = 'Dif. POS: ' . $aposSign . 'R$ ' . number_format(abs($aposDiff), 2, ',', '.');
                         }
 
                         return ! empty($parts) ? implode(' | ', $parts) : null;

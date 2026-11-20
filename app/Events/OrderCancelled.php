@@ -27,7 +27,7 @@ class OrderCancelled implements ShouldBroadcastNow
             'customer_id'     => $this->customerId,
             'status'          => 'cancelled',
             'payment_status'  => $order->payment_status,
-            'type'            => $order->type,
+            'type'            => $order->type?->value ?? $order->type,
             'dining_table_id' => $order->dining_table_id,
             'table_number'    => $order->table_number,
             'total'           => (float) $order->total,

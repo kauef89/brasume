@@ -27,7 +27,7 @@ class NewB2COrderNotification extends Notification implements ShouldQueue
     {
         \Illuminate\Support\Facades\Log::info("📍 [SONDA PUSH BACK] Construindo payload WebPush para o usuário ID: {$notifiable->id}");
 
-        $typeText = $this->order->type === 'delivery' ? 'entrega' : 'retirada';
+        $typeText = $this->order->type === \App\Enums\OrderType::DELIVERY ? 'entrega' : 'retirada';
         $customerName = $this->order->customer_name ?? 'Cliente';
 
         $body = $this->customMessage ?: "{$customerName} fez um pedido de {$typeText}.";

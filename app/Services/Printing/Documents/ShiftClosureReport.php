@@ -152,6 +152,10 @@ class ShiftClosureReport
         if ($trocos > 0) {
             $this->blueprint[] = ['cmd' => 'text', 'val' => $this->moneyRow('(-) Trocos Devolvidos:', $trocos), 'bold' => false];
         }
+        $tipCashPayouts = (float) Transaction::where('cash_shift_id', $this->shift->id)->where('category', 'tip_payout')->sum('amount');
+        if ($tipCashPayouts > 0) {
+            $this->blueprint[] = ['cmd' => 'text', 'val' => $this->moneyRow('(-) Gorjetas Pagas Gaveta:', $tipCashPayouts), 'bold' => false];
+        }
 
         $this->blueprint[] = ['cmd' => 'text', 'val' => ' . . . . . . . . . . . . . . . . . . . . . . . .', 'bold' => false];
         $this->blueprint[] = ['cmd' => 'text', 'val' => $this->moneyRow('(=) Saldo Esperado:', $expected), 'bold' => true];
@@ -259,9 +263,11 @@ class ShiftClosureReport
 
     private function buildGrandTotalSection(): void
     {
-        $totalSales = (float) Payment::forShift($this->shift)
+        $grossPaidSales = (float) Payment::forShift($this->shift)
             ->commercialRevenue()
             ->sum('amount');
+        $shiftTips = (float) Order::forShift($this->shift)->sum('tip_amount');
+        $totalSales = max(0, round($grossPaidSales - $shiftTips, 2));
 
         $this->blueprint[] = ['cmd' => 'align', 'val' => 'ct'];
         $this->blueprint[] = ['cmd' => 'text', 'val' => 'TOTAL FATURADO NO TURNO', 'bold' => true, 'size' => '1x'];

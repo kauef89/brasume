@@ -525,7 +525,7 @@ class PixBankReconciliationService
         // 1. Transações Órfãs da Maquininha na janela do turno
         $orphanAcq = AcquirerTransaction::query()
             ->whereBetween('transaction_date', [$shift->opened_at->copy()->subHours(2), $closedAt->copy()->addHours(2)])
-            ->where('status', AcquirerMatchStatus::ORPHAN)
+            ->whereIn('status', [AcquirerMatchStatus::ORPHAN, AcquirerMatchStatus::AMBIGUOUS])
             ->orderBy('transaction_date', 'asc')
             ->get();
 
@@ -848,5 +848,214 @@ class PixBankReconciliationService
         });
 
         return "Crédito de {$stmt->description} associado ao Pedido #{$order->id}.";
+    }
+
+    /**
+     * Concilia um pagamento com uma transação de maquininha/extrato de valor divergente,
+     * registrando a diferença como Perda por Quebra de Caixa, Perda por Imposto Indevido ou Gorjeta.
+     */
+    public function reconcileWithDiscrepancyAdjustment(
+        Payment $payment,
+        string $source,
+        int $sourceId,
+        string $adjustmentType, // 'cash_breakage' | 'tax_loss' | 'tip'
+        string $operatorName,
+        ?int $employeeId = null,
+        string $payoutMode = 'ledger_credit'
+    ): string {
+        $payment->loadMissing(['order', 'paymentMethod']);
+        $order = $payment->order;
+        $oldAmount = round((float) $payment->amount, 2);
+
+        if ($source === 'acquirer') {
+            $acqTx = AcquirerTransaction::findOrFail($sourceId);
+            $receivedAmount = round((float) ($acqTx->gross_amount ?: ($acqTx->amount ?? 0)), 2);
+        } else {
+            $stmt = BankStatement::findOrFail($sourceId);
+            $receivedAmount = round(abs((float) $stmt->amount), 2);
+        }
+
+        $diff = round($receivedAmount - $oldAmount, 2);
+        $absDiff = abs($diff);
+
+        if ($absDiff < 0.01) {
+            return $this->linkCandidateToPayment($payment, $source, $sourceId, $operatorName);
+        }
+
+        return DB::transaction(function () use (
+            $payment, $order, $source, $sourceId, $receivedAmount, $oldAmount,
+            $diff, $absDiff, $adjustmentType, $operatorName, $employeeId, $payoutMode
+        ) {
+            // 1. Garante método de pagamento do tipo 'loss' (Perda / Quebra de Caixa)
+            $lossMethod = PaymentMethod::where('engine_type', \App\Enums\PaymentEngineType::LOSS->value)->first();
+            if (!$lossMethod) {
+                $lossMethod = PaymentMethod::create([
+                    'name'                 => 'Perda / Quebra de Caixa',
+                    'engine_type'          => \App\Enums\PaymentEngineType::LOSS->value,
+                    'is_active'            => true,
+                    'show_on_pos'          => true,
+                    'auto_fiscal_emission' => false,
+                ]);
+            }
+
+            // 2. Caso A: Máquina < PDV (ex: PDV R$ 55,00 x Máquina R$ 49,00 => Quebra de Caixa de R$ 6,00)
+            if ($diff < 0) {
+                $payment->update([
+                    'amount' => $receivedAmount,
+                ]);
+
+                if ($payment->transaction) {
+                    $payment->transaction->update([
+                        'amount' => $receivedAmount,
+                    ]);
+                }
+
+                // Cria lançamento complementar de Perda no pedido para fechar o saldo contábil
+                $order?->payments()->create([
+                    'payment_method_id' => $lossMethod->id,
+                    'cash_shift_id'     => $payment->cash_shift_id,
+                    'cashier_id'        => auth()->id(),
+                    'method'            => $lossMethod->name,
+                    'amount'            => $absDiff,
+                    'status'            => 'completed',
+                    'is_paid'           => true,
+                    'created_at'        => $payment->created_at,
+                ]);
+
+                // Registra na tabela oficial de Perdas (inventory_losses) sem tocar no estoque físico
+                $lossRecord = new \App\Models\InventoryLoss([
+                    'product_id'  => null,
+                    'order_id'    => $order?->id,
+                    'cash_shift_id' => $payment->cash_shift_id,
+                    'user_id'     => auth()->id(),
+                    'loss_type'   => \App\Enums\InventoryLossType::CASH_BREAKAGE,
+                    'quantity'    => 1,
+                    'unit_cost'   => $absDiff,
+                    'total_cost'  => $absDiff,
+                    'reason'      => "Quebra de caixa Pedido #{$order?->id} (PDV R$ " . number_format($oldAmount, 2, ',', '.') . " × Recebido R$ " . number_format($receivedAmount, 2, ',', '.') . ")",
+                    'notes'       => "Falha de operador identificada na auditoria por {$operatorName}. Cupom fiscal emitido a maior.",
+                ]);
+                $lossRecord->skipInventoryDeduction = true;
+                $lossRecord->save();
+
+                if ($order) {
+                    $order->recalculatePaymentStatus();
+                    $order->updateQuietly([
+                        'notes' => trim(($order->notes ? $order->notes . ' | ' : '') . "Auditoria: R$ " . number_format($absDiff, 2, ',', '.') . " registrado como Perda por Quebra de Caixa."),
+                    ]);
+                }
+
+                $summary = "Conciliado R$ " . number_format($receivedAmount, 2, ',', '.') . " e registrado R$ " . number_format($absDiff, 2, ',', '.') . " como Perda por Quebra de Caixa.";
+            } else {
+                // 3. Caso B: Máquina > PDV (ex: PDV R$ 49,00 x Máquina R$ 55,00)
+                $payment->update([
+                    'amount' => $receivedAmount,
+                ]);
+
+                if ($payment->transaction) {
+                    $payment->transaction->update([
+                        'amount' => $receivedAmount,
+                    ]);
+                }
+
+                if ($adjustmentType === 'tip' && $order) {
+                    $newTip = round((float) ($order->tip_amount ?? 0) + $absDiff, 2);
+                    $tipEmp = $employeeId ? \App\Models\Employee::find($employeeId) : null;
+
+                    if ($payoutMode === 'ledger_credit' && $tipEmp) {
+                        $latestLedger = $tipEmp->ledgers()->latest('id')->first();
+                        $curBal = $latestLedger ? (float) $latestLedger->balance : 0.0;
+                        $tipEmp->ledgers()->create([
+                            'order_id'    => $order->id,
+                            'type'        => 'credit',
+                            'description' => "Gorjeta (Auditoria) - Pedido #{$order->id}",
+                            'amount'      => $absDiff,
+                            'balance'     => round($curBal + $absDiff, 2),
+                        ]);
+                    } elseif ($payoutMode === 'cash_drawer' && $payment->cash_shift_id) {
+                        \App\Models\Transaction::create([
+                            'bank_account_id'  => 1,
+                            'cash_shift_id'    => $payment->cash_shift_id,
+                            'order_id'         => $order->id,
+                            'type'             => 'out',
+                            'category'         => 'tip_payout',
+                            'amount'           => $absDiff,
+                            'description'      => "Repasse Gorjeta (Auditoria) - Pedido #{$order->id}" . ($tipEmp ? " ({$tipEmp->name})" : ''),
+                            'operator_name'    => $operatorName,
+                            'transaction_date' => now(),
+                        ]);
+                    }
+
+                    $order->updateQuietly([
+                        'tip_amount'      => $newTip,
+                        'tip_employee_id' => $employeeId ?: $order->tip_employee_id,
+                        'tip_payout_mode' => $payoutMode,
+                        'tip_settled_at'  => now(),
+                        'notes'           => trim(($order->notes ? $order->notes . ' | ' : '') . "Auditoria: +R$ " . number_format($absDiff, 2, ',', '.') . " classificado como Gorjeta."),
+                    ]);
+
+                    $summary = "Conciliado R$ " . number_format($receivedAmount, 2, ',', '.') . " com +R$ " . number_format($absDiff, 2, ',', '.') . " registrado como Gorjeta.";
+                } else {
+                    // Perda por Imposto Indevido / Divergência a Maior
+                    $lossRecord = new \App\Models\InventoryLoss([
+                        'product_id'    => null,
+                        'order_id'      => $order?->id,
+                        'cash_shift_id' => $payment->cash_shift_id,
+                        'user_id'       => auth()->id(),
+                        'loss_type'     => \App\Enums\InventoryLossType::TAX_LOSS,
+                        'quantity'      => 1,
+                        'unit_cost'     => $absDiff,
+                        'total_cost'    => $absDiff,
+                        'reason'        => "Perda por Imposto Indevido Pedido #{$order?->id} (PDV R$ " . number_format($oldAmount, 2, ',', '.') . " × Recebido R$ " . number_format($receivedAmount, 2, ',', '.') . ")",
+                        'notes'         => "Diferença a maior identificada na auditoria por {$operatorName}.",
+                    ]);
+                    $lossRecord->skipInventoryDeduction = true;
+                    $lossRecord->save();
+
+                    if ($order) {
+                        $order->updateQuietly([
+                            'notes' => trim(($order->notes ? $order->notes . ' | ' : '') . "Auditoria: R$ " . number_format($absDiff, 2, ',', '.') . " registrado como Perda por Imposto Indevido."),
+                        ]);
+                    }
+
+                    $summary = "Conciliado R$ " . number_format($receivedAmount, 2, ',', '.') . " e registrado R$ " . number_format($absDiff, 2, ',', '.') . " como Perda por Imposto Indevido.";
+                }
+            }
+
+            // 4. Vincula formalmente o comprovante documental (criando AccountReceivable no valor real da máquina!)
+            if ($source === 'acquirer') {
+                $acqTx = AcquirerTransaction::findOrFail($sourceId);
+                $modality = mb_strtolower($acqTx->modality ?? '');
+                if (str_contains($modality, 'pix') || str_contains($modality, 'qrcode')) {
+                    $method = PaymentMethod::where('engine_type', 'pix_machine')->first();
+                } elseif (str_contains($modality, 'créd') || str_contains($modality, 'cred')) {
+                    $method = PaymentMethod::where('name', 'like', '%Crédito%')->first();
+                } else {
+                    $method = PaymentMethod::where('name', 'like', '%Débito%')->first();
+                }
+
+                if ($method) {
+                    $payment->update([
+                        'payment_method_id' => $method->id,
+                        'method'            => $method->name,
+                    ]);
+                }
+
+                app(\App\Services\Financial\Acquirers\AcquirerReconciliationEngine::class)
+                    ->linkSingle($acqTx, $order, $payment->fresh(['paymentMethod', 'transaction']));
+            } else {
+                $stmt = BankStatement::findOrFail($sourceId);
+                $stmt->update([
+                    'status'                => 'reconciled',
+                    'reconciliation_source' => 'manual',
+                    'reconciled_by_name'    => $operatorName,
+                    'reconciled_at'         => now(),
+                    'conciliable_type'      => Payment::class,
+                    'conciliable_id'        => $payment->id,
+                ]);
+            }
+
+            return $summary;
+        });
     }
 }

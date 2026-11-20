@@ -25,8 +25,12 @@ class OrderInfolist
         };
     }
 
-    public static function formatType(?string $state): string
+    public static function formatType(\App\Enums\OrderType|string|null $state): string
     {
+        if ($state instanceof \App\Enums\OrderType) {
+            return $state->getLabel() ?? $state->value;
+        }
+
         return match ($state) {
             'delivery' => 'Entrega (Delivery)',
             'pickup'   => 'Retirada no Balcão',
@@ -81,6 +85,7 @@ class OrderInfolist
     {
         return match ($state) {
             'paid'            => 'Liquidado',
+            'pay_now'         => 'Pagamento Imediato (Checkout)',
             'pix_waiting', 'pending_pix' => 'Aguardando PIX (API)',
             'pay_on_delivery' => 'Promessa: Pagar na Entrega',
             'pay_on_pickup'   => 'Promessa: Pagar na Retirada',
@@ -154,9 +159,7 @@ class OrderInfolist
 
                         TextEntry::make('type')
                             ->label('Modalidade')
-                            ->badge()
-                            ->color('primary')
-                            ->formatStateUsing(fn ($state) => self::formatType((string) $state)),
+                            ->badge(),
 
                         TextEntry::make('status')
                             ->label('Status do Pedido')
@@ -291,12 +294,12 @@ class OrderInfolist
                 Section::make('Logística & Local de Atendimento')
                     ->columns(3)
                     ->columnSpanFull()
-                    ->visible(fn (Order $record) => in_array($record->type, ['delivery', 'table'], true) || filled($record->table_number) || filled($record->dining_table_id))
+                    ->visible(fn (Order $record) => in_array($record->type, [\App\Enums\OrderType::DELIVERY, \App\Enums\OrderType::TABLE], true) || filled($record->table_number) || filled($record->dining_table_id))
                     ->schema([
                         TextEntry::make('formatted_address')
                             ->label('Endereço de Entrega (Snapshot)')
                             ->columnSpan(2)
-                            ->visible(fn (Order $record) => $record->type === 'delivery')
+                            ->visible(fn (Order $record) => $record->type === \App\Enums\OrderType::DELIVERY)
                             ->state(function (Order $record) {
                                 $addr = $record->address ?? $record->address_snapshot;
                                 if (is_array($addr) && !empty($addr)) {
@@ -315,30 +318,30 @@ class OrderInfolist
 
                         TextEntry::make('delivery_distance_km')
                             ->label('Distância Estimada')
-                            ->visible(fn (Order $record) => $record->type === 'delivery')
+                            ->visible(fn (Order $record) => $record->type === \App\Enums\OrderType::DELIVERY)
                             ->formatStateUsing(fn ($state) => $state ? number_format((float) $state, 2, ',', '.') . ' km' : 'Não calculada')
                             ->placeholder('Não calculada'),
 
                         TextEntry::make('courier.name')
                             ->label('Entregador Atribuído')
-                            ->visible(fn (Order $record) => $record->type === 'delivery')
+                            ->visible(fn (Order $record) => $record->type === \App\Enums\OrderType::DELIVERY)
                             ->placeholder('Nenhum entregador atribuído'),
 
                         TextEntry::make('courier_fee')
                             ->label('Taxa do Motoboy')
-                            ->visible(fn (Order $record) => $record->type === 'delivery')
+                            ->visible(fn (Order $record) => $record->type === \App\Enums\OrderType::DELIVERY)
                             ->money('BRL'),
 
                         TextEntry::make('courier_settled_at')
                             ->label('Acerto com Motoboy')
-                            ->visible(fn (Order $record) => $record->type === 'delivery')
+                            ->visible(fn (Order $record) => $record->type === \App\Enums\OrderType::DELIVERY)
                             ->state(fn (Order $record) => $record->courier_settled_at
                                 ? 'Liquidado em ' . $record->courier_settled_at->format('d/m/Y H:i')
                                 : ($record->courier_id ? 'Pendente de acerto' : 'N/A')),
 
                         TextEntry::make('table_info')
                             ->label('Mesa')
-                            ->visible(fn (Order $record) => $record->type === 'table' || filled($record->table_number) || filled($record->dining_table_id))
+                            ->visible(fn (Order $record) => $record->type === \App\Enums\OrderType::TABLE || filled($record->table_number) || filled($record->dining_table_id))
                             ->state(fn (Order $record) => $record->diningTable?->name ?? ($record->table_number ? "Mesa {$record->table_number}" : 'N/A')),
                     ]),
 
@@ -499,7 +502,7 @@ class OrderInfolist
                                 RepeatableEntry::make('payments')
                                     ->label('Pagamentos Efetivamente Registrados no Sistema')
                                     ->placeholder('Nenhum pagamento liquidado ou lançado neste pedido.')
-                                    ->columns(5)
+                                    ->columns(6)
                                     ->schema([
                                         TextEntry::make('method')
                                             ->label('Método')
@@ -515,10 +518,60 @@ class OrderInfolist
                                             ->state(fn ($record) => $record->is_paid ? 'Liquidado' : ($record->status === 'cancelled' ? 'Cancelado' : 'Pendente'))
                                             ->color(fn ($record) => $record->is_paid ? 'success' : ($record->status === 'cancelled' ? 'danger' : 'warning')),
 
-                                        TextEntry::make('end_to_end_id')
-                                            ->label('Comprovante / E2E / TXID')
-                                            ->state(fn ($record) => $record->end_to_end_id ?: ($record->txid ?: '—'))
-                                            ->copyable(),
+                                        TextEntry::make('documentary_proof')
+                                            ->label('Comprovante Documental (360°)')
+                                            ->html()
+                                            ->state(function ($record): string {
+                                                $acq = $record->acquirerTransaction
+                                                    ?? \App\Models\AcquirerTransaction::where('payment_id', $record->id)
+                                                        ->where('status', \App\Enums\AcquirerMatchStatus::MATCHED->value)
+                                                        ->first();
+
+                                                if ($acq) {
+                                                    $url = \App\Filament\Resources\AcquirerTransactions\AcquirerTransactionResource::getUrl('index', [
+                                                        'tableSearch' => $acq->nsu,
+                                                    ]);
+                                                    $nsu = e($acq->nsu);
+                                                    $tid = e($acq->terminal_code);
+                                                    return "<a href='{$url}' target='_blank' rel='noopener noreferrer' class='inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400 hover:underline'>💳 Maquininha NSU {$nsu} (TID {$tid}) ↗</a>";
+                                                }
+
+                                                $stmt = \App\Models\BankStatement::where('conciliable_type', \App\Models\Payment::class)
+                                                    ->where('conciliable_id', $record->id)
+                                                    ->where('status', 'reconciled')
+                                                    ->first();
+
+                                                if ($stmt) {
+                                                    $searchKey = $stmt->document ?: ($stmt->counterparty_name ?: (string) $stmt->id);
+                                                    $url = \App\Filament\Resources\BankStatements\BankStatementResource::getUrl('index', [
+                                                        'tableSearch' => $searchKey,
+                                                    ]);
+                                                    $payer = e($stmt->counterparty_name ?: $stmt->description);
+                                                    $date = $stmt->bank_date?->format('d/m/Y') ?? '';
+                                                    return "<a href='{$url}' target='_blank' rel='noopener noreferrer' class='inline-flex items-center gap-1 font-semibold text-sky-700 dark:text-sky-400 hover:underline'>💠 Extrato #{$stmt->id} ({$date} • {$payer}) ↗</a>";
+                                                }
+
+                                                $engine = $record->paymentMethod?->engine_type;
+                                                $engineVal = $engine instanceof \BackedEnum ? $engine->value : (string) $engine;
+                                                if (in_array($engineVal, ['money', 'cash', 'internal_credit', 'convenio'], true)) {
+                                                    return "<span class='text-xs text-gray-500'>💵 Conferência Interna / Gaveta</span>";
+                                                }
+
+                                                return "<span class='text-xs font-semibold text-amber-600 dark:text-amber-400'>⚠️ Sem vínculo documental</span>";
+                                            }),
+
+                                        TextEntry::make('ledger_transaction')
+                                            ->label('Mov. Financeira / E2E')
+                                            ->html()
+                                            ->state(function ($record): string {
+                                                $tx = $record->transaction ?? ($record->transaction_id ? \App\Models\Transaction::find($record->transaction_id) : null);
+                                                if ($tx) {
+                                                    $url = \App\Filament\Resources\Transactions\TransactionResource::getUrl('edit', ['record' => $tx->id]);
+                                                    return "<a href='{$url}' target='_blank' rel='noopener noreferrer' class='font-semibold text-indigo-600 dark:text-indigo-400 hover:underline'>📒 Transação #{$tx->id} ↗</a>";
+                                                }
+                                                $ref = $record->end_to_end_id ?: ($record->txid ?: '—');
+                                                return "<span class='font-mono text-xs'>" . e($ref) . "</span>";
+                                            }),
 
                                         TextEntry::make('created_at')
                                             ->label('Data/Hora')

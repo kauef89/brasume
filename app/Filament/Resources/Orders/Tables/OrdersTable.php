@@ -48,15 +48,7 @@ class OrdersTable
 
                 Tables\Columns\TextColumn::make('type')
                     ->label('Modalidade')
-                    ->badge()
-                    ->color('primary')
-                    ->formatStateUsing(fn ($state) => match ((string) $state) {
-                        'delivery' => 'Delivery',
-                        'pickup'   => 'Retirada',
-                        'counter'  => 'Balcão',
-                        'table'    => 'Mesa',
-                        default    => (string) ($state ?: '—'),
-                    }),
+                    ->badge(),
 
                 Tables\Columns\TextColumn::make('customer_info')
                     ->label('Cliente & Perfil')

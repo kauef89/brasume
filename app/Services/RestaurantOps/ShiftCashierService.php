@@ -115,8 +115,9 @@ class ShiftCashierService
 
         // 3. Trocos devolvidos
         $changeReturned = (float) Order::where('cash_shift_id', $shift->id)->sum('change_returned');
+        $tipCashPayouts = (float) Transaction::where('cash_shift_id', $shift->id)->where('category', 'tip_payout')->sum('amount');
 
-        return round($opening + $cashSales + $supplies - $sangrias - $changeReturned, 2);
+        return round($opening + $cashSales + $supplies - $sangrias - $changeReturned - $tipCashPayouts, 2);
     }
 
     /**

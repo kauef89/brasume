@@ -104,9 +104,9 @@ class DeliveryDispatch
         }
 
         $typeTitle = 'ENTREGA';
-        if (in_array($order->type, ['pickup', 'takeaway'])) $typeTitle = 'RETIRADA';
-        if ($order->type === 'counter') $typeTitle = 'BALCAO';
-        if ($order->type === 'table') $typeTitle = 'MESA ' . $order->table_number;
+        if ($order->type === \App\Enums\OrderType::PICKUP) $typeTitle = 'RETIRADA';
+        if ($order->type === \App\Enums\OrderType::COUNTER) $typeTitle = 'BALCAO';
+        if ($order->type === \App\Enums\OrderType::TABLE) $typeTitle = 'MESA ' . $order->table_number;
 
         // 🎯 2. Tipo do Pedido (Centralizado)
         $b->alignCenter()
@@ -132,7 +132,7 @@ class DeliveryDispatch
         // 🎯 5. Endereço de Entrega (Sem cabeçalho, direto na rota)
         $addr = $order->address;
 
-        if ($order->type === 'delivery' && !empty($addr)) {
+        if ($order->type === \App\Enums\OrderType::DELIVERY && !empty($addr)) {
             $b->divider()
               ->alignCenter();
 

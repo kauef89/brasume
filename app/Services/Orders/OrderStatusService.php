@@ -17,7 +17,7 @@ class OrderStatusService
 {
     public function updateStatus(Order $order, string $newStatus): void
     {
-        if ($order->type === 'delivery' && in_array($newStatus, ['dispatched', 'out_for_delivery'], true) && empty($order->courier_id) && empty($order->driver_id)) {
+        if ($order->type === \App\Enums\OrderType::DELIVERY && in_array($newStatus, ['dispatched', 'out_for_delivery'], true) && empty($order->courier_id) && empty($order->driver_id)) {
             $courierService = app(CourierSettlementService::class);
             if (!$courierService->tryAutoAssign($order)) {
                 throw new \DomainException('Não é possível despachar um pedido de delivery sem um motoboy associado.');
@@ -127,14 +127,14 @@ class OrderStatusService
     private function resolvePushMessage(Order $order, string $newStatus): ?string
     {
         if ($newStatus === 'preparing') return "👨‍🍳 O seu pedido #{$order->id} começou a ser preparado!";
-        if ($newStatus === 'dispatched' && $order->type === 'delivery') return "🛵 O entregador está a caminho. Fique de olho!";
-        if ($newStatus === 'delivered' && $order->type === 'delivery') return '🎉 Pedido entregue! Bom apetite!';
+        if ($newStatus === 'dispatched' && $order->type === \App\Enums\OrderType::DELIVERY) return "🛵 O entregador está a caminho. Fique de olho!";
+        if ($newStatus === 'delivered' && $order->type === \App\Enums\OrderType::DELIVERY) return '🎉 Pedido entregue! Bom apetite!';
         if ($newStatus === 'closed') return "✨ Pedido concluído. Muito obrigado pela preferência!";
 
         if ($newStatus === 'ready') {
-            if (in_array($order->type, ['counter', 'pickup'], true)) {
+            if (in_array($order->type, [\App\Enums\OrderType::COUNTER, \App\Enums\OrderType::PICKUP], true)) {
                 return "✅ Tudo pronto! Já pode vir retirar o seu pedido no balcão.";
-            } elseif ($order->type === 'delivery' && ($order->courier_id || $order->driver_id)) {
+            } elseif ($order->type === \App\Enums\OrderType::DELIVERY && ($order->courier_id || $order->driver_id)) {
                 $driver = $order->courier?->user ?? User::find($order->driver_id);
                 if ($driver) {
                     $driver->notify(new OrderStatusUpdated($order, "🛵 O pedido de {$order->customer_name} está pronto no balcão para entregar!"));

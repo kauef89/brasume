@@ -143,6 +143,7 @@
                     :order="checkoutData.order"
                     :payment-methods="checkoutData.paymentMethods"
                     :company-settings="checkoutData.companySettings"
+                    :employees-list="checkoutData.employeesList || $page.props.cashierData?.employeesList || []"
                     @close="closeCheckout"
                 />
                 <div v-else class="flex-1 flex flex-col items-center justify-center h-full text-surface-muted gap-4">

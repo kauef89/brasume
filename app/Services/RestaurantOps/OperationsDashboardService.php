@@ -51,7 +51,7 @@ class OperationsDashboardService
             $fullAddress = null;
             $neighborhoodName = null;
 
-            if ($order->type === "delivery" && ($order->address_id || $order->address || $order->address_snapshot)) {
+            if ($order->type === \App\Enums\OrderType::DELIVERY && ($order->address_id || $order->address || $order->address_snapshot)) {
                 $addr = $order->address_snapshot ?? $order->address ?? $order->getRelationValue('address') ?? $order->addressModel;
 
                 if (is_array($addr)) {
@@ -106,7 +106,7 @@ class OperationsDashboardService
                 "customer"              => $this->customerMapper->mapOrderCustomer($order->customer),
                 "dining_table_id"       => $order->dining_table_id,
                 "table_number"          => $order->table_number,
-                "type"                  => $order->type,
+                "type"                  => $order->type?->value ?? $order->type,
                 "status"                => $order->status,
                 "payment_status"        => $order->payment_status,
                 "payment_intent_status" => $order->payment_intent_status,
@@ -221,7 +221,7 @@ class OperationsDashboardService
                 $order->items()->whereIn('production_status', ['pending', 'preparing'])->update(['production_status' => 'ready']);
 
                 // 🛵 DISPARO PUSH: Notifica todos os motoboys que há entrega pronta no balcão
-                if ($order->type === 'delivery') {
+                if ($order->type === \App\Enums\OrderType::DELIVERY) {
                     try {
                         $drivers = User::whereHas('roles', fn($q) => $q->whereIn('name', [EmployeeRole::COURIER->value]))->get();
                         if ($drivers->isNotEmpty()) {
@@ -234,7 +234,7 @@ class OperationsDashboardService
             }
 
             if (in_array($newStatus, ['dispatched', 'out_for_delivery'])) {
-                if ($order->type === 'delivery' && empty($order->courier_id)) {
+                if ($order->type === \App\Enums\OrderType::DELIVERY && empty($order->courier_id)) {
                     $courierService = app(\App\Services\Orders\CourierSettlementService::class);
                     $activeCouriers = $courierService->getActiveCouriersOnShift();
 
@@ -255,7 +255,7 @@ class OperationsDashboardService
                 }
 
                 // 🚀 Libera a mesa automaticamente se não houver outros pedidos ativos nela
-                if ($order->type === 'table' && $order->dining_table_id) {
+                if ($order->type === \App\Enums\OrderType::TABLE && $order->dining_table_id) {
                     $otherActive = Order::where('dining_table_id', $order->dining_table_id)
                         ->where('id', '!=', $order->id)
                         ->whereNotIn('status', ['closed', 'cancelled'])

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\OrderStatus;
+use App\Enums\OrderType;
 use App\Enums\PaymentStatus;
 use App\Models\AcquirerTransaction;
 use App\Models\Address;
@@ -40,9 +41,21 @@ class Order extends Model
     }
 
 
+    public function setTypeAttribute(mixed $value): void
+    {
+        if ($value instanceof OrderType) {
+            $this->attributes['type'] = $value->value;
+            return;
+        }
+
+        $resolved = OrderType::resolve($value);
+        $this->attributes['type'] = $resolved ? $resolved->value : ($value ?: OrderType::COUNTER->value);
+    }
+
     protected $guarded = [];
 
     protected $casts = [
+        'type'                   => OrderType::class,
         'pix_expires_at'         => 'datetime',
         'address_snapshot'       => 'array',
         'address'                => 'array',
@@ -51,9 +64,16 @@ class Order extends Model
         'subtotal'               => 'decimal:2',
         'delivery_fee'           => 'decimal:2',
         'service_fee'            => 'decimal:2',
+        'tip_amount'             => 'decimal:2',
+        'tip_settled_at'         => 'datetime',
         'discount'               => 'decimal:2',
         'total'                  => 'decimal:2',
         'created_at'             => 'datetime',
+        'closed_at'              => 'datetime',
+        'started_preparing_at'   => 'datetime',
+        'ready_at'               => 'datetime',
+        'dispatched_at'          => 'datetime',
+        'delivered_at'           => 'datetime',
         'updated_at'             => 'datetime',
 
         // Snapshot e controle financeiro do entregador
@@ -397,5 +417,10 @@ class Order extends Model
                       ->whereBetween('created_at', [$openedAt, $closedAt]);
               });
         });
+    }
+
+    public function tipEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'tip_employee_id');
     }
 }

@@ -9,7 +9,7 @@ class InventoryLossObserver
 {
     public function created(InventoryLoss $loss): void
     {
-        if ($loss->skipInventoryDeduction || (float) $loss->quantity <= 0) {
+        if ($loss->skipInventoryDeduction || empty($loss->product_id) || (float) $loss->quantity <= 0) {
             return;
         }
 
@@ -18,7 +18,7 @@ class InventoryLossObserver
 
     public function deleted(InventoryLoss $loss): void
     {
-        if ($loss->skipInventoryDeduction || (float) $loss->quantity <= 0) {
+        if ($loss->skipInventoryDeduction || empty($loss->product_id) || (float) $loss->quantity <= 0) {
             return;
         }
 

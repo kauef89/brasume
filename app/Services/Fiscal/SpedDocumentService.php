@@ -134,7 +134,7 @@ class SpedDocumentService
         $stdIde->indFinal = 1;
 
         // 🚀 SEFAZ (Regra 787): Delivery exige <dest>. Se não houver CPF, força indPres = 1
-        $stdIde->indPres = ($order->type === 'delivery' && $hasValidDoc) ? 4 : 1;
+        $stdIde->indPres = ($order->type === \App\Enums\OrderType::DELIVERY && $hasValidDoc) ? 4 : 1;
         $stdIde->indIntermed = 0;
         $stdIde->procEmi = 0;
         $stdIde->verProc = '1.0.0';
@@ -172,7 +172,7 @@ class SpedDocumentService
             $stdDest->indIEDest = 9;
             $nfe->tagdest($stdDest);
 
-            if ($order->type === 'delivery' && ($order->address || $order->address_id)) {
+            if ($order->type === \App\Enums\OrderType::DELIVERY && ($order->address || $order->address_id)) {
                 $addr = $order->address;
 
                 $street = is_array($addr) ? ($addr['street'] ?? '') : ($addr->street->name ?? $addr->street ?? '');
@@ -298,15 +298,29 @@ class SpedDocumentService
         if ($vNF <= 0) {
             $sefazPayments[] = ['tPag' => '90', 'vPag' => 0.00];
         } else {
+            // Gorjetas não compõem o documento fiscal (vNF) e são abatidas da soma de pagamentos SEFAZ
+            $remainingTipToDeduct = round((float) ($order->tip_amount ?? 0), 2);
+
             foreach ($nonCashbackPayments as $payment) {
+                $rawPayAmt = round((float) $payment->amount, 2);
+                if ($remainingTipToDeduct > 0 && $rawPayAmt > 0) {
+                    $deduct = min($rawPayAmt, $remainingTipToDeduct);
+                    $rawPayAmt = round($rawPayAmt - $deduct, 2);
+                    $remainingTipToDeduct = round($remainingTipToDeduct - $deduct, 2);
+                }
+
+                if ($rawPayAmt <= 0.009) {
+                    continue;
+                }
+
                 $code = $this->resolveSefazPaymentCode($payment);
                 $sefazPayments[] = [
                     'tPag' => $code,
-                    'vPag' => (float) $payment->amount,
+                    'vPag' => $rawPayAmt,
                     'xPag' => $payment->method
                 ];
-                $vPag += (float) $payment->amount;
-                $pagamentosAudit[] = "{$payment->method} [{$code}] (R$ {$payment->amount})";
+                $vPag += $rawPayAmt;
+                $pagamentosAudit[] = "{$payment->method} [{$code}] (R$ {$rawPayAmt})";
             }
 
             if ($vPag < $vNF && !empty($order->payment_intent_methods)) {
@@ -383,7 +397,7 @@ class SpedDocumentService
         if ($cashbackDiscount > 0) {
             $infCplParts[] = "Desconto Fidelidade (Cashback): R$ " . number_format($cashbackDiscount, 2, ',', '.');
         }
-        if ($order->type === 'delivery' && $order->address) {
+        if ($order->type === \App\Enums\OrderType::DELIVERY && $order->address) {
             $fullAddr = is_array($order->address) ? ($order->address['full_address'] ?? '') : ($order->address->full_address ?? '');
             if ($fullAddr) {
                 $infCplParts[] = "Entrega: {$fullAddr}";

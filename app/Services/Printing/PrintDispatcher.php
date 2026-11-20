@@ -129,11 +129,11 @@ class PrintDispatcher
             ?? $order->table?->number
             ?? null;
 
-        $orderTitle = $order->type === 'table'
+        $orderTitle = $order->type === \App\Enums\OrderType::TABLE
             ? ($tableName ? "Mesa {$tableName}" : "Mesa (Pedido #{$order->id})")
             : ($order->customer_name ?? "Pedido #{$order->id}");
 
-        $source = $order->source ?? ($order->type === 'delivery' ? 'customer_app' : 'team_app');
+        $source = $order->source ?? ($order->type === \App\Enums\OrderType::DELIVERY ? 'customer_app' : 'team_app');
 
         event(new PrintAlertTriggered([
             'id'           => (string) Str::uuid(),

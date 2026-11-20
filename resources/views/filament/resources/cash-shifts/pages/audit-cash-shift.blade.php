@@ -1,27 +1,94 @@
 <x-filament-panels::page>
     <div class="space-y-6">
 
-        {{-- 1. CARDS DE RESUMO DA AUDITORIA --}}
+        @if(!empty($isLocked))
+            <div class="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                        <x-filament::icon icon="heroicon-m-lock-closed" class="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-bold text-emerald-900 dark:text-emerald-200">
+                            Auditoria Homologada e Somente Leitura
+                        </h4>
+                        <p class="text-xs text-emerald-800 dark:text-emerald-300">
+                            Os números, conciliações e parecer deste turno estão travados para preservar a integridade contábil.
+                        </p>
+                    </div>
+                </div>
+
+                <button
+                    wire:click="reabrirAuditoria"
+                    wire:confirm="Deseja reabrir esta auditoria para permitir edições?"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-800 dark:text-gray-200 border border-emerald-300 dark:border-emerald-700 text-xs font-bold transition shadow-xs shrink-0 self-start sm:self-center"
+                >
+                    <x-filament::icon icon="heroicon-m-lock-open" class="w-4 h-4 text-amber-500" />
+                    <span>Reabrir Auditoria</span>
+                </button>
+            </div>
+        @endif
+
+        {{-- 1. CARDS DE RESUMO DA AUDITORIA (ENUM UNIFICADO) --}}
+        @php
+            $hasElecProof = $hasSettlementsDeclared || $hasAcquirerImported;
+            $hasPixProof  = $bankStatements->isNotEmpty();
+
+            $cashStatus = \App\Enums\AuditDiagnosticStatus::fromChannelDiff(
+                (float) $diag['cash_difference'],
+                true
+            );
+
+            $posStatus = \App\Enums\AuditDiagnosticStatus::fromChannelDiff(
+                (float) ($diag['electronic_difference'] ?? 0),
+                $hasElecProof
+            );
+
+            $pixStatus = \App\Enums\AuditDiagnosticStatus::fromChannelDiff(
+                (float) $pixDiff,
+                $hasPixProof,
+                $directPixPayments->count() === $pixMatches->count()
+            );
+
+            $shiftStatusVal = $shift->status instanceof \BackedEnum ? $shift->status->value : (string) $shift->status;
+            $overallStatus = \App\Enums\AuditDiagnosticStatus::fromShiftSummary(
+                shiftStatus: $shiftStatusVal,
+                cashDiff: (float) $diag['cash_difference'],
+                electronicDiff: (float) ($diag['electronic_difference'] ?? 0),
+                hasElectronicProof: $hasElecProof,
+                correctedCount: (int) ($shift->corrected_errors_count ?? 0),
+                pixDiff: (float) $pixDiff,
+                hasPixProof: $hasPixProof
+            );
+
+            $summaryParts = [];
+            if (abs((float) $diag['cash_difference']) >= 0.05) {
+                $summaryParts[] = 'Gaveta: ' . \App\Enums\AuditDiagnosticStatus::formatSignedDiff((float) $diag['cash_difference']);
+            }
+            if ($hasElecProof && abs((float) ($diag['electronic_difference'] ?? 0)) >= 0.05) {
+                $summaryParts[] = 'POS: ' . \App\Enums\AuditDiagnosticStatus::formatSignedDiff((float) $diag['electronic_difference']);
+            }
+            if ($hasPixProof && abs((float) $pixDiff) >= 0.05) {
+                $summaryParts[] = 'Pix: ' . \App\Enums\AuditDiagnosticStatus::formatSignedDiff((float) $pixDiff);
+            }
+        @endphp
+
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             {{-- Gaveta Física --}}
             <div class="p-4 rounded-xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
                 <div class="flex items-center justify-between text-xs font-semibold text-gray-500 uppercase">
                     <span>💵 Gaveta (Dinheiro)</span>
-                    @if(abs($diag['cash_difference']) < 0.05)
-                        <span class="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Exato</span>
-                    @elseif($diag['cash_difference'] > 0)
-                        <span class="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">Sobra</span>
-                    @else
-                        <span class="px-2 py-0.5 rounded text-xs bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">Falta</span>
-                    @endif
+                    <span class="px-2 py-0.5 rounded text-xs font-bold {{ $cashStatus->badgeClasses() }}">
+                        {{ $cashStatus->getLabel() }}
+                    </span>
                 </div>
-                <div class="mt-2 text-2xl font-bold {{ $diag['cash_difference'] < -0.05 ? 'text-rose-600' : ($diag['cash_difference'] > 0.05 ? 'text-blue-600' : 'text-gray-900 dark:text-white') }}">
+                <div class="mt-2 text-2xl font-bold {{ $cashStatus === \App\Enums\AuditDiagnosticStatus::RECONCILED ? 'text-gray-900 dark:text-white' : $cashStatus->valueTextClasses() }}">
                     R$ {{ number_format($shift->closing_balance_actual, 2, ',', '.') }}
                 </div>
                 <div class="mt-1 text-xs text-gray-500">
                     Esperado: R$ {{ number_format($shift->closing_balance_expected, 2, ',', '.') }} |
-                    Dif: <strong class="{{ $diag['cash_difference'] < -0.05 ? 'text-rose-600' : ($diag['cash_difference'] > 0.05 ? 'text-blue-600' : 'text-emerald-600') }}">
-                        R$ {{ number_format($diag['cash_difference'], 2, ',', '.') }}
+                    Dif: <strong class="{{ $cashStatus->valueTextClasses() }}">
+                        {{ \App\Enums\AuditDiagnosticStatus::formatSignedDiff((float) $diag['cash_difference']) }}
                     </strong>
                 </div>
             </div>
@@ -30,28 +97,24 @@
             <div class="p-4 rounded-xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
                 <div class="flex items-center justify-between text-xs font-semibold text-gray-500 uppercase">
                     <span>💳 Maquininhas (POS/TEF)</span>
-                    @if(!$hasSettlementsDeclared && !$hasAcquirerImported)
-                        <span class="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">Sem Fita</span>
-                    @elseif(abs($diag['electronic_difference']) < 0.05)
-                        <span class="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">100% Batido</span>
-                    @else
-                        <span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Divergente</span>
-                    @endif
+                    <span class="px-2 py-0.5 rounded text-xs font-bold {{ $posStatus->badgeClasses() }}">
+                        {{ $posStatus->getLabel() }}
+                    </span>
                 </div>
-                <div class="mt-2 text-2xl font-bold {{ (!$hasSettlementsDeclared && !$hasAcquirerImported) ? 'text-gray-500' : (abs($diag['electronic_difference']) >= 0.05 ? 'text-amber-600' : 'text-gray-900 dark:text-white') }}">
-                    @if(!$hasSettlementsDeclared && !$hasAcquirerImported)
+                <div class="mt-2 text-2xl font-bold {{ !$hasElecProof ? 'text-gray-500' : ($posStatus === \App\Enums\AuditDiagnosticStatus::RECONCILED ? 'text-gray-900 dark:text-white' : $posStatus->valueTextClasses()) }}">
+                    @if(!$hasElecProof)
                         <span class="text-base font-medium text-gray-400">Não Auditável</span>
                     @else
                         R$ {{ number_format($diag['sys_electronic_total'] ?? 0, 2, ',', '.') }}
                     @endif
                 </div>
                 <div class="mt-1 text-xs text-gray-500">
-                    @if(!$hasSettlementsDeclared && !$hasAcquirerImported)
+                    @if(!$hasElecProof)
                         Turno antigo sem fita digitada e sem CSV
                     @else
                         Adquirente: R$ {{ number_format($diag['declared_electronic_total'] ?? 0, 2, ',', '.') }} |
-                        Dif: <strong class="{{ abs($diag['electronic_difference']) < 0.05 ? 'text-emerald-600' : 'text-amber-600' }}">
-                            R$ {{ number_format($diag['electronic_difference'], 2, ',', '.') }}
+                        Dif: <strong class="{{ $posStatus->valueTextClasses() }}">
+                            {{ \App\Enums\AuditDiagnosticStatus::formatSignedDiff((float) ($diag['electronic_difference'] ?? 0)) }}
                         </strong>
                         ({{ $acqTransactions->count() }} transações)
                     @endif
@@ -62,68 +125,118 @@
             <div class="p-4 rounded-xl border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
                 <div class="flex items-center justify-between text-xs font-semibold text-gray-500 uppercase">
                     <span>💠 Pix Bancário (Chave/API)</span>
-                    @if($bankStatements->isEmpty())
-                        <span class="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">Sem Extrato</span>
-                    @elseif(abs($pixDiff) < 0.05 && $directPixPayments->count() === $pixMatches->count())
-                        <span class="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">100% Batido</span>
-                    @else
-                        <span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Divergente</span>
-                    @endif
+                    <span class="px-2 py-0.5 rounded text-xs font-bold {{ $pixStatus->badgeClasses() }}">
+                        {{ $pixStatus->getLabel() }}
+                    </span>
                 </div>
 
-                <div class="mt-2 text-2xl font-bold {{ $bankStatements->isEmpty() ? 'text-gray-500' : (abs($pixDiff) >= 0.05 ? 'text-amber-600' : 'text-gray-900 dark:text-white') }}">
+                <div class="mt-2 text-2xl font-bold {{ !$hasPixProof ? 'text-gray-500' : ($pixStatus === \App\Enums\AuditDiagnosticStatus::RECONCILED ? 'text-gray-900 dark:text-white' : $pixStatus->valueTextClasses()) }}">
                     R$ {{ number_format($pixSystemTotal, 2, ',', '.') }}
                 </div>
 
                 <div class="mt-1 text-xs text-gray-500">
-                    @if($bankStatements->isEmpty())
+                    @if(!$hasPixProof)
                         Aguardando importação de extrato
                     @else
-                        Extrato: R$ {{ number_format($pixStatementTotal, 2, ',', '.') }} | 
-                        Dif: <strong class="{{ abs($pixDiff) < 0.05 ? 'text-emerald-600' : 'text-amber-600' }}">
-                            R$ {{ number_format($pixDiff, 2, ',', '.') }}
+                        Extrato: R$ {{ number_format($pixStatementTotal, 2, ',', '.') }} |
+                        Dif: <strong class="{{ $pixStatus->valueTextClasses() }}">
+                            {{ \App\Enums\AuditDiagnosticStatus::formatSignedDiff((float) $pixDiff) }}
                         </strong>
                         ({{ $pixMatches->count() }} de {{ $directPixPayments->count() }} conciliados)
                     @endif
                 </div>
             </div>
 
-            {{-- Quebra Líquida Final --}}
+            {{-- Integridade Geral do Turno --}}
             @php
-                $hasRealDiscrepancy = abs($diag['cash_difference']) >= 0.05;
-                if ($hasSettlementsDeclared || $hasAcquirerImported) {
-                    $hasRealDiscrepancy = $hasRealDiscrepancy || abs($diag['electronic_difference']) >= 0.05;
-                }
+                $cardBorderClass = match ($overallStatus->getColor()) {
+                    'danger'  => 'bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-900',
+                    'warning' => 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900',
+                    'info'    => 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-900',
+                    'success' => 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900',
+                    default   => 'bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-800',
+                };
             @endphp
-            <div class="p-4 rounded-xl border {{ $hasRealDiscrepancy ? 'bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-900' : 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900' }} shadow-sm">
+            <div class="p-4 rounded-xl border {{ $cardBorderClass }} shadow-sm">
                 <div class="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">
                     ⚖ Integridade Geral do Turno
                 </div>
-                <div class="mt-2 text-2xl font-bold {{ $hasRealDiscrepancy ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400' }}">
-                    @if($hasRealDiscrepancy)
-                        @if(abs($diag['cash_difference']) >= 0.05 && ($hasSettlementsDeclared || $hasAcquirerImported) && abs($diag['electronic_difference']) >= 0.05)
-                            Divergência Gaveta + POS
-                        @elseif(abs($diag['cash_difference']) >= 0.05)
-                            Divergência na Gaveta
-                        @else
-                            Divergência na Maquininha
-                        @endif
-                    @else
-                        100% Conciliado
-                    @endif
+                <div class="mt-2 text-2xl font-bold {{ $overallStatus->valueTextClasses() }}">
+                    {{ $overallStatus->getLabel() }}
                 </div>
-                <div class="mt-1 text-xs text-gray-600 dark:text-gray-400">
-                    @if($hasSettlementsDeclared || $hasAcquirerImported)
-                        Quebra Adquirente: R$ {{ number_format($diag['electronic_difference'], 2, ',', '.') }}
-                    @else
+                <div class="mt-1 text-xs text-gray-600 dark:text-gray-400 font-medium">
+                    @if(!empty($summaryParts))
+                        {{ implode(' | ', $summaryParts) }}
+                    @elseif(!$hasElecProof)
                         Maquininhas não auditadas neste turno
+                    @else
+                        Todos os canais conferidos sem divergência
                     @endif
                 </div>
             </div>
         </div>
 
+        {{-- 2A. ALERTA INTELIGENTE: FALHA DO OPERADOR (MESMO HORÁRIO / MODALIDADE, VALOR DIVERGENTE) --}}
+        @if(empty($isLocked) && !empty($variancePairs))
+            <div class="space-y-3">
+                @foreach($variancePairs as $vp)
+                    @php
+                        $pObj = $vp['payment'];
+                        $aObj = $vp['acq'];
+                        $isShort = $vp['diff'] < 0;
+                    @endphp
+                    <div class="p-5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-700 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div class="space-y-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="px-2 py-0.5 rounded text-xs font-bold bg-rose-200 text-rose-900 dark:bg-rose-900 dark:text-rose-200">
+                                    ⚠️ Falha do Operador de Caixa Detectada
+                                </span>
+                                <span class="text-xs font-bold text-gray-900 dark:text-white">
+                                    Pedido #{{ $pObj->order_id }} ({{ $pObj->order?->customer_name ?? 'Cliente' }}) • {{ $pObj->created_at?->format('H:i:s') }}
+                                </span>
+                            </div>
+                            <p class="text-xs text-rose-900 dark:text-rose-200 leading-relaxed">
+                                Registrado no PDV como <strong>{{ $pObj->method }} R$ {{ number_format($pObj->amount, 2, ',', '.') }}</strong>,
+                                mas no mesmo horário ({{ $aObj->transaction_date?->format('H:i:s') }}) passou na maquininha
+                                <strong>{{ $aObj->modality }} {{ $aObj->brand }} (NSU {{ $aObj->nsu }})</strong> no valor de
+                                <strong>R$ {{ number_format($aObj->gross_amount, 2, ',', '.') }}</strong>
+                                (Diferença: <strong>{{ $isShort ? '-' : '+' }}R$ {{ number_format($vp['abs_diff'], 2, ',', '.') }}</strong>).
+                            </p>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2 shrink-0">
+                            @if($isShort)
+                                <button
+                                    wire:click="conciliarComAjuste('acquirer', {{ $aObj->id }}, 'cash_breakage', {{ $pObj->id }})"
+                                    type="button"
+                                    class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                >
+                                    Conciliar + Perda Quebra de Caixa (R$ {{ number_format($vp['abs_diff'], 2, ',', '.') }})
+                                </button>
+                            @else
+                                <button
+                                    wire:click="conciliarComAjuste('acquirer', {{ $aObj->id }}, 'tip', {{ $pObj->id }})"
+                                    type="button"
+                                    class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                >
+                                    Conciliar + Gorjeta (R$ {{ number_format($vp['abs_diff'], 2, ',', '.') }})
+                                </button>
+                                <button
+                                    wire:click="conciliarComAjuste('acquirer', {{ $aObj->id }}, 'tax_loss', {{ $pObj->id }})"
+                                    type="button"
+                                    class="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                >
+                                    Perda Imposto Indevido
+                                </button>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+
         {{-- 2B. TRANSAÇÕES ÓRFÃS DA MAQUININHA --}}
-        @if($orphanAcq->isNotEmpty())
+        @if(empty($isLocked) && $orphanAcq->isNotEmpty())
             <div class="p-5 rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-800 shadow-sm space-y-4">
                 <div class="flex items-center justify-between">
                     <div>
@@ -174,7 +287,7 @@
         @endif
 
         {{-- 3. ALERTA DE CONFLITO DOCUMENTAL --}}
-        @if(!empty($documentalConflicts))
+        @if(empty($isLocked) && !empty($documentalConflicts))
             <div class="space-y-3">
                 @foreach($documentalConflicts as $conflict)
                     <div class="p-5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -207,7 +320,7 @@
         @endif
 
         {{-- 4. AJUSTE DE GAVETA: LANÇAMENTO DE SANGRIA/DESPESA NÃO REGISTRADA --}}
-        @if($diag['cash_difference'] < -0.05)
+        @if(empty($isLocked) && $diag['cash_difference'] < -0.05)
             <div class="p-5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-800 shadow-sm space-y-3">
                 <h4 class="font-bold text-rose-900 dark:text-rose-200 text-sm flex items-center gap-2">
                     <span>💵</span> Falta de Dinheiro na Gaveta (R$ {{ number_format(abs($diag['cash_difference']), 2, ',', '.') }})
@@ -305,22 +418,48 @@
                             @endphp
                             <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition {{ $hasConflict ? 'bg-amber-50/40 dark:bg-amber-950/20' : '' }}">
                                 <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">
-                                    #{{ $p->order_id }}
-                                    @if($order?->type === 'delivery')
-                                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">Delivery</span>
-                                    @elseif($order?->type === 'table')
-                                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Mesa {{ $order->table_number }}</span>
-                                    @elseif($order?->type === 'pickup')
-                                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">Balcão/Retirada</span>
+                                    @if($p->order_id)
+                                        <a
+                                            href="{{ \App\Filament\Resources\Orders\OrderResource::getUrl('view', ['record' => $p->order_id]) }}"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title="Abrir pedido #{{ $p->order_id }} em nova aba"
+                                            class="inline-flex items-center gap-1 text-primary-600 dark:text-primary-400 hover:underline"
+                                        >
+                                            <span>#{{ $p->order_id }}</span>
+                                            <x-filament::icon icon="heroicon-m-arrow-top-right-on-square" class="w-3 h-3 opacity-75" />
+                                        </a>
                                     @else
-                                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">Balcão</span>
+                                        <span>-</span>
                                     @endif
+                                    @php
+                                        $orderType = $order?->type ?? \App\Enums\OrderType::COUNTER;
+                                        $orderTypeLabel = $orderType === \App\Enums\OrderType::TABLE
+                                            ? trim('Mesa ' . ($order?->table_number ?? ''))
+                                            : $orderType->getLabel();
+                                    @endphp
+                                    <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold {{ $orderType->badgeClasses() }}">
+                                        {{ $orderTypeLabel }}
+                                    </span>
                                 </td>
                                 <td class="px-4 py-3 text-xs text-gray-500">
                                     {{ $p->created_at?->format('H:i') }}
                                 </td>
                                 <td class="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
-                                    {{ $order?->customer_name ?? 'Consumidor Final' }}
+                                    @if($order?->customer_id)
+                                        <a
+                                            href="{{ \App\Filament\Resources\Customers\CustomerResource::getUrl('edit', ['record' => $order->customer_id]) }}"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title="Abrir cadastro do cliente em nova aba"
+                                            class="inline-flex items-center gap-1 font-medium text-primary-600 dark:text-primary-400 hover:underline"
+                                        >
+                                            <span>{{ $order->customer_name ?? $order->customer?->name ?? 'Cliente #' . $order->customer_id }}</span>
+                                            <x-filament::icon icon="heroicon-m-arrow-top-right-on-square" class="w-3 h-3 opacity-75" />
+                                        </a>
+                                    @else
+                                        {{ $order?->customer_name ?? 'Consumidor Final' }}
+                                    @endif
                                 </td>
                                 <td class="px-4 py-3 font-medium">
                                     <span class="{{ $hasConflict ? 'line-through text-gray-400' : '' }}">
@@ -444,6 +583,9 @@
 
                                 {{-- COLUNA DE AÇÃO --}}
                                 <td class="px-4 py-3 text-center">
+                                    @if(!empty($isLocked))
+                                        <span class="text-gray-400 text-xs">—</span>
+                                    @else
                                     @if($hasConflict && $targetMethodToSuggest)
                                         <button 
                                             wire:click="retificarFormaPagamento({{ $p->id }}, {{ $targetMethodToSuggest->id }})"
@@ -490,6 +632,7 @@
                                     @else
                                         <span class="text-gray-400 text-xs">-</span>
                                     @endif
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach
@@ -498,20 +641,44 @@
                         @foreach($unpaidOrders as $uOrder)
                             <tr class="bg-rose-50/30 dark:bg-rose-950/10 hover:bg-rose-50/60 dark:hover:bg-rose-950/20 transition">
                                 <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">
-                                    #{{ $uOrder->id }}
-                                    @if($uOrder->type === 'delivery')
-                                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">Delivery</span>
-                                    @elseif($uOrder->type === 'table')
-                                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Mesa {{ $uOrder->table_number }}</span>
-                                    @else
-                                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">Balcão</span>
-                                    @endif
+                                    <a
+                                        href="{{ \App\Filament\Resources\Orders\OrderResource::getUrl('view', ['record' => $uOrder->id]) }}"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="Abrir pedido #{{ $uOrder->id }} em nova aba"
+                                        class="inline-flex items-center gap-1 text-primary-600 dark:text-primary-400 hover:underline"
+                                    >
+                                        <span>#{{ $uOrder->id }}</span>
+                                        <x-filament::icon icon="heroicon-m-arrow-top-right-on-square" class="w-3 h-3 opacity-75" />
+                                    </a>
+                                    @php
+                                        $uOrderType = $uOrder->type ?? \App\Enums\OrderType::COUNTER;
+                                        $uOrderTypeLabel = $uOrderType === \App\Enums\OrderType::TABLE
+                                            ? trim('Mesa ' . ($uOrder->table_number ?? ''))
+                                            : $uOrderType->getLabel();
+                                    @endphp
+                                    <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold {{ $uOrderType->badgeClasses() }}">
+                                        {{ $uOrderTypeLabel }}
+                                    </span>
                                 </td>
                                 <td class="px-4 py-3 text-xs text-gray-500">
                                     {{ $uOrder->created_at?->format('H:i') }}
                                 </td>
                                 <td class="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
-                                    {{ $uOrder->customer_name ?? 'Consumidor Final' }}
+                                    @if($uOrder->customer_id)
+                                        <a
+                                            href="{{ \App\Filament\Resources\Customers\CustomerResource::getUrl('edit', ['record' => $uOrder->customer_id]) }}"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title="Abrir cadastro do cliente em nova aba"
+                                            class="inline-flex items-center gap-1 font-medium text-primary-600 dark:text-primary-400 hover:underline"
+                                        >
+                                            <span>{{ $uOrder->customer_name ?? $uOrder->customer?->name ?? 'Cliente #' . $uOrder->customer_id }}</span>
+                                            <x-filament::icon icon="heroicon-m-arrow-top-right-on-square" class="w-3 h-3 opacity-75" />
+                                        </a>
+                                    @else
+                                        {{ $uOrder->customer_name ?? 'Consumidor Final' }}
+                                    @endif
                                 </td>
                                 <td class="px-4 py-3 text-xs">
                                     <span class="px-2 py-0.5 rounded-full font-bold {{ $uOrder->status === 'cancelled' ? 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300' }}">
@@ -530,6 +697,9 @@
                                     {{ $uOrder->has_fiscal_document ? 'NFC-e emitida sem pagamento no PDV' : 'Pedido sem lançamento financeiro' }}
                                 </td>
                                 <td class="px-4 py-3 text-center">
+                                    @if(!empty($isLocked))
+                                        <span class="text-gray-400 text-xs">—</span>
+                                    @else
                                     <button
                                         wire:click="abrirModalCandidatosPedido({{ $uOrder->id }})"
                                         type="button"
@@ -539,6 +709,7 @@
                                         <x-filament::icon icon="heroicon-m-magnifying-glass" class="w-3.5 h-3.5" />
                                         Conciliar
                                     </button>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach
@@ -825,13 +996,41 @@
                                             @endif
                                         </td>
                                         <td class="px-3.5 py-2.5 text-right whitespace-nowrap">
-                                            <button
-                                                type="button"
-                                                wire:click="vincularCandidatoAoAlvo('{{ $cand['source'] }}', {{ $cand['id'] }})"
-                                                class="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
-                                            >
-                                                Vincular
-                                            </button>
+                                            @if($isExact)
+                                                <button
+                                                    type="button"
+                                                    wire:click="vincularCandidatoAoAlvo('{{ $cand['source'] }}', {{ $cand['id'] }})"
+                                                    class="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                                >
+                                                    Vincular
+                                                </button>
+                                            @elseif($diffVal < 0)
+                                                <button
+                                                    type="button"
+                                                    wire:click="conciliarComAjuste('{{ $cand['source'] }}', {{ $cand['id'] }}, 'cash_breakage')"
+                                                    class="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                                    title="Ajusta o pagamento para R$ {{ number_format($cand['amount'], 2, ',', '.') }} e registra R$ {{ number_format(abs($diffVal), 2, ',', '.') }} como Perda por Quebra de Caixa"
+                                                >
+                                                    Conciliar + Quebra Caixa
+                                                </button>
+                                            @else
+                                                <div class="inline-flex items-center gap-1.5">
+                                                    <button
+                                                        type="button"
+                                                        wire:click="conciliarComAjuste('{{ $cand['source'] }}', {{ $cand['id'] }}, 'tip')"
+                                                        class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                                    >
+                                                        + Gorjeta
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        wire:click="conciliarComAjuste('{{ $cand['source'] }}', {{ $cand['id'] }}, 'tax_loss')"
+                                                        class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                                    >
+                                                        + Perda Imposto
+                                                    </button>
+                                                </div>
+                                            @endif
                                         </td>
                                     </tr>
                                 @endforeach

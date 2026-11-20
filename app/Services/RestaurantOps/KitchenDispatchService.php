@@ -59,7 +59,7 @@ class KitchenDispatchService
         $settings = CompanySetting::getCached();
 
         // 🍸 REGRA DE NEGÓCIO: Suprime impressão de itens de bar/copa quando o pedido for de mesa
-        if ($order->type === 'table' && (bool) ($settings?->suppress_bar_print_tables)) {
+        if ($order->type === \App\Enums\OrderType::TABLE && (bool) ($settings?->suppress_bar_print_tables)) {
             $items = $items->reject(function ($item) {
                 $kitchen = $item->kitchen ?? $item->product?->kitchen;
 

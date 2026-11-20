@@ -154,7 +154,7 @@ class OrderTransferService
         $hasServiceTax = (bool) ($setting?->has_service_tax ?? false);
         $serviceTaxTable = (bool) ($setting?->service_tax_table ?? true);
 
-        if ($hasServiceTax && $order->type === 'table' && $serviceTaxTable && $subtotal > 0) {
+        if ($hasServiceTax && $order->type === \App\Enums\OrderType::TABLE && $serviceTaxTable && $subtotal > 0) {
             $taxRate = ((float) ($setting?->service_tax_percentage ?? 10.0)) / 100;
             $serviceFee = round($subtotal * $taxRate, 2);
         } elseif ((float) $order->service_fee > 0 && $subtotal > 0) {
@@ -289,7 +289,7 @@ class OrderTransferService
 
     private function occupyDestinationTable(Order $destOrder): void
     {
-        if ($destOrder->type !== 'table') return;
+        if ($destOrder->type !== \App\Enums\OrderType::TABLE) return;
 
         $table = $destOrder->diningTable
             ?? ($destOrder->dining_table_id ? DiningTable::find($destOrder->dining_table_id) : null)

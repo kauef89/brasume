@@ -44,10 +44,15 @@ class TransactionsTable
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
-                Tables\Columns\TextColumn::make('order.id')
-                    ->label('Pedido #')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('order_id')
+                    ->label('Pedido / Cliente')
+                    ->formatStateUsing(fn ($state) => $state ? "#{$state}" : '-')
+                    ->description(fn ($record) => $record->order?->customer_name ?: null)
+                    ->url(fn ($record) => $record->order_id ? \App\Filament\Resources\Orders\OrderResource::getUrl('view', ['record' => $record->order_id]) : null)
+                    ->openUrlInNewTab()
+                    ->color('primary')
+                    ->weight('bold')
+                    ->searchable(),
             ])
             ->defaultSort('transaction_date', 'desc')
             ->filters([

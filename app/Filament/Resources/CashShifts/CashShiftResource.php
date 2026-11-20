@@ -42,4 +42,9 @@ class CashShiftResource extends Resource
             'audit' => Pages\AuditCashShift::route('/{record}/auditoria'),
         ];
     }
+
+    public static function canCreate(): bool
+    {
+        return false;
+    }
 }

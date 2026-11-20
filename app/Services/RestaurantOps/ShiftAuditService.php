@@ -67,12 +67,27 @@ class ShiftAuditService
                     $declaredCards += $amt;
                 }
             }
-        } elseif (!empty($terminalSettlements)) {
-            $electronicSource = 'terminal_settlements';
+        } elseif (!empty($terminalSettlements) && is_array($terminalSettlements)) {
             foreach ($terminalSettlements as $tid => $term) {
-                $declaredCards   += (float) ($term['cards'] ?? 0);
-                $declaredPix     += (float) ($term['pix'] ?? 0);
-                $declaredVoucher += (float) ($term['voucher'] ?? 0);
+                if (!is_array($term)) {
+                    continue;
+                }
+                $tCards   = (float) ($term['cards'] ?? 0);
+                $tPix     = (float) ($term['pix'] ?? 0);
+                $tVoucher = (float) ($term['voucher'] ?? 0);
+                $tSum     = $tCards + $tPix + $tVoucher;
+                $tTotal   = (float) ($term['total'] ?? 0);
+
+                if ($tSum <= 0 && $tTotal > 0) {
+                    $declaredCards += $tTotal;
+                } else {
+                    $declaredCards   += $tCards;
+                    $declaredPix     += $tPix;
+                    $declaredVoucher += $tVoucher;
+                }
+            }
+            if (($declaredCards + $declaredPix + $declaredVoucher) > 0) {
+                $electronicSource = 'terminal_settlements';
             }
         }
         $declaredElectronicTotal = round($declaredCards + $declaredPix + $declaredVoucher, 2);
@@ -123,10 +138,17 @@ class ShiftAuditService
 
         $sysElectronicTotal = $sysCards + $sysPix + $sysVoucher;
 
-        $cardsDiff = round($declaredCards - $sysCards, 2);
-        $pixDiff = round($declaredPix - $sysPix, 2);
-        $voucherDiff = round($declaredVoucher - $sysVoucher, 2);
-        $electronicDiff = round($declaredElectronicTotal - $sysElectronicTotal, 2);
+        if ($electronicSource === 'none') {
+            $cardsDiff = 0.0;
+            $pixDiff = 0.0;
+            $voucherDiff = 0.0;
+            $electronicDiff = 0.0;
+        } else {
+            $cardsDiff = round($declaredCards - $sysCards, 2);
+            $pixDiff = round($declaredPix - $sysPix, 2);
+            $voucherDiff = round($declaredVoucher - $sysVoucher, 2);
+            $electronicDiff = round($declaredElectronicTotal - $sysElectronicTotal, 2);
+        }
 
         $hasCashDiscrepancy = abs($cashDiff) >= 0.05;
         $hasElecDiscrepancy = abs($electronicDiff) >= 0.05;
@@ -314,9 +336,9 @@ class ShiftAuditService
             $order = $p->order;
             $origin = 'Balcão';
             if ($order) {
-                if ($order->type === 'table') {
+                if ($order->type === \App\Enums\OrderType::TABLE) {
                     $origin = "Mesa #{$order->table_number}";
-                } elseif ($order->type === 'delivery') {
+                } elseif ($order->type === \App\Enums\OrderType::DELIVERY) {
                     $origin = "Delivery";
                 }
             }
