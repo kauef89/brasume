@@ -18,7 +18,7 @@ class OperationalShiftClosureService
 
     public function closeShift(?int $shiftId = null, bool $closeStore = true): array
     {
-        Log::info("🛑 [OperationalShiftClosure] Iniciando encerramento operacional do turno #" . ($shiftId ?? 'ativo') . "...");
+        Log::channel('pos')->info("🛑 [OperationalShiftClosure] Iniciando encerramento operacional do turno #" . ($shiftId ?? 'ativo') . "...");
 
         $results = [
             'store_closed'      => false,
@@ -84,10 +84,10 @@ class OperationalShiftClosureService
                         ]);
                     }
                     
-                    \Illuminate\Support\Facades\Log::info("💰 Diária do garçom {$user->name} (R$ {$grossRate}) acumulada no extrato.");
+                    Log::channel('pos')->info("💰 Diária do garçom {$user->name} (R$ {$grossRate}) acumulada no extrato.");
                 }
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error("Erro ao acumular dívidas no fechamento do turno: " . $e->getMessage());
+                Log::channel('pos')->error("Erro ao acumular dívidas no fechamento do turno: " . $e->getMessage());
             }
         }
 
@@ -110,25 +110,25 @@ class OperationalShiftClosureService
             }
 
             $results['store_closed'] = true;
-            Log::info("🚪 [OperationalShiftClosure] Loja fechada no app do cliente.");
+            Log::channel('pos')->info("🚪 [OperationalShiftClosure] Loja fechada no app do cliente.");
         }
 
         // 2. CONSOLIDAÇÃO DO WMS (Baixa de Prateleira por Consumo)
         try {
             $affected = $this->wmsService->syncPendingConsumptionToShelf($shift?->id);
             $results['wms_rules_synced'] = $affected;
-            Log::info("📦 [OperationalShiftClosure] Consumo de prateleira consolidado ({$affected} regras).");
+            Log::channel('pos')->info("📦 [OperationalShiftClosure] Consumo de prateleira consolidado ({$affected} regras).");
         } catch (\Throwable $e) {
-            Log::error("🚨 [OperationalShiftClosure] Falha ao sincronizar WMS: " . $e->getMessage());
+            Log::channel('pos')->error("🚨 [OperationalShiftClosure] Falha ao sincronizar WMS: " . $e->getMessage());
         }
 
         // 🚀 3. EXPURGO DO SPOOLER DE IMPRESSÃO (Remove impressões antigas do turno que fechou)
         try {
             $purged = PrintJob::where('created_at', '<=', now())->delete();
             $results['print_jobs_purged'] = $purged;
-            Log::info("🖨️ [OperationalShiftClosure] Spooler limpo ({$purged} trabalhos de impressão removidos).");
+            Log::channel('pos')->info("🖨️ [OperationalShiftClosure] Spooler limpo ({$purged} trabalhos de impressão removidos).");
         } catch (\Throwable $e) {
-            Log::error("🚨 [OperationalShiftClosure] Falha ao limpar spooler de impressão: " . $e->getMessage());
+            Log::channel('pos')->error("🚨 [OperationalShiftClosure] Falha ao limpar spooler de impressão: " . $e->getMessage());
         }
 
         // 🚀 4. AVISO EM TEMPO REAL PARA LIMPEZA DE RASCUNHOS NOS APPS
@@ -137,7 +137,7 @@ class OperationalShiftClosureService
             broadcast(new \App\Events\ShiftClosed($shift));
         }
 
-        Log::info("🏁 [OperationalShiftClosure] Turno finalizado com sucesso.", $results);
+        Log::channel('pos')->info("🏁 [OperationalShiftClosure] Turno finalizado com sucesso.", $results);
 
         return $results;
     }

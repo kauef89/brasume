@@ -19,14 +19,14 @@ class SicrediWebhookController extends Controller
     {
         $payload = $request->all();
 
-        Log::info('📍 [WEBHOOK] Notificação Pix recebida do Sicredi.', [
+        Log::channel('pos')->info('📍 [WEBHOOK] Notificação Pix recebida do Sicredi.', [
             'ip'        => $request->ip(),
             'query'     => $request->query(),
             'total_pix' => isset($payload['pix']) && is_array($payload['pix']) ? count($payload['pix']) : 0,
         ]);
 
         if (!$gateway->validateWebhookToken($request->query('token', ''))) {
-            Log::warning('🚨 [WEBHOOK] Falha na validação do Token de segurança!', [
+            Log::channel('pos')->warning('🚨 [WEBHOOK] Falha na validação do Token de segurança!', [
                 'ip'             => $request->ip(),
                 'token_recebido' => $request->query('token'),
             ]);
@@ -34,7 +34,7 @@ class SicrediWebhookController extends Controller
         }
 
         if (!isset($payload['pix']) || !is_array($payload['pix'])) {
-            Log::warning('🚨 [WEBHOOK] Payload recebido não contém o array "pix". Ignorando.');
+            Log::channel('pos')->warning('🚨 [WEBHOOK] Payload recebido não contém o array "pix". Ignorando.');
             return response()->json(['message' => 'Payload ignorado'], 400);
         }
 
@@ -48,7 +48,7 @@ class SicrediWebhookController extends Controller
             $txid = $pix['txid'] ?? null;
 
             if (empty($txid)) {
-                Log::warning('🚨 [WEBHOOK] Transação Pix recebida sem TXID.', $pix);
+                Log::channel('pos')->warning('🚨 [WEBHOOK] Transação Pix recebida sem TXID.', $pix);
                 continue;
             }
 
@@ -60,36 +60,36 @@ class SicrediWebhookController extends Controller
 
             if ($isBrasumeTxid) {
                 // 🍔 Transação interna (Cardápio / PDV / Garçom)
-                Log::info("📍 [WEBHOOK BRASUME] TXID identificado no sistema: {$txid}");
+                Log::channel('pos')->info("📍 [WEBHOOK BRASUME] TXID identificado no sistema: {$txid}");
 
                 $lock = Cache::lock("webhook_pix_processing_{$txid}", 300);
 
                 if ($lock->get()) {
                     try {
                         $paymentService->processWebhookPayment($txid, (float) $pix['valor'], $pix['endToEndId'] ?? null);
-                        Log::info("✅ [WEBHOOK BRASUME] TXID {$txid} liquidado com sucesso!");
+                        Log::channel('pos')->info("✅ [WEBHOOK BRASUME] TXID {$txid} liquidado com sucesso!");
                     } catch (\Throwable $e) {
-                        Log::error("🚨 [WEBHOOK BRASUME ERRO] Falha ao processar TXID {$txid}: " . $e->getMessage());
+                        Log::channel('pos')->error("🚨 [WEBHOOK BRASUME ERRO] Falha ao processar TXID {$txid}: " . $e->getMessage());
                     } finally {
                         $lock->release();
                     }
                 } else {
-                    Log::warning("⚠️ [WEBHOOK BRASUME] TXID {$txid} em processamento concorrente.");
+                    Log::channel('pos')->warning("⚠️ [WEBHOOK BRASUME] TXID {$txid} em processamento concorrente.");
                 }
             } else {
                 // 💳 Transação externa (Maquininha APOS / SiTef)
                 if ($isRelayEnabled && !empty($relayUrl)) {
-                    Log::info("🔄 [WEBHOOK RELAY] TXID {$txid} marcado para repasse à adquirente/SiTef.");
+                    Log::channel('pos')->info("🔄 [WEBHOOK RELAY] TXID {$txid} marcado para repasse à adquirente/SiTef.");
                     $relayPix[] = $pix;
                 } else {
-                    Log::info("ℹ️ [WEBHOOK] TXID {$txid} não pertence ao ERP e o Relay está inativo. Ignorado.");
+                    Log::channel('pos')->info("ℹ️ [WEBHOOK] TXID {$txid} não pertence ao ERP e o Relay está inativo. Ignorado.");
                 }
             }
         }
 
         // 🚀 Executa o Relay se houver transações externas e o recurso estiver ativado
         if (!empty($relayPix) && !empty($relayUrl)) {
-            Log::info('🔄 [WEBHOOK RELAY] Encaminhando ' . count($relayPix) . ' transação(ões) para a Software Express...', [
+            Log::channel('pos')->info('🔄 [WEBHOOK RELAY] Encaminhando ' . count($relayPix) . ' transação(ões) para a Software Express...', [
                 'url'   => $relayUrl,
                 'txids' => array_column($relayPix, 'txid'),
             ]);
@@ -105,12 +105,12 @@ class SicrediWebhookController extends Controller
                     ])
                     ->post($relayUrl, $relayPayload);
 
-                Log::info('🔄 [WEBHOOK RELAY] Resposta da Software Express:', [
+                Log::channel('pos')->info('🔄 [WEBHOOK RELAY] Resposta da Software Express:', [
                     'status' => $response->status(),
                     'body'   => substr($response->body(), 0, 300),
                 ]);
             } catch (\Throwable $e) {
-                Log::error('🚨 [WEBHOOK RELAY ERRO] Falha ao retransmitir para Software Express: ' . $e->getMessage());
+                Log::channel('pos')->error('🚨 [WEBHOOK RELAY ERRO] Falha ao retransmitir para Software Express: ' . $e->getMessage());
             }
         }
 

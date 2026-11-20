@@ -7,6 +7,7 @@ use App\Models\CompanySetting;
 use App\Models\FiscalDocument;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use NFePHP\DA\NFe\Danfe;
 use NFePHP\NFe\Make;
 use NFePHP\NFe\Tools;
@@ -471,6 +472,15 @@ class SpedDocumentService
             'fiscal_error'  => null,
         ]);
 
+        Log::channel('fiscal')->info('NFC-e autorizada pela SEFAZ', [
+            'order_id'   => $order->id,
+            'series'     => $stdIde->serie,
+            'number'     => $stdIde->nNF,
+            'access_key' => (string) $protNFe->infProt->chNFe,
+            'protocol'   => (string) $protNFe->infProt->nProt,
+            'total'      => $vNF,
+        ]);
+
         $settings->last_nfce_number = $stdIde->nNF;
         $settings->save();
 
@@ -539,6 +549,13 @@ class SpedDocumentService
             // 135: Homologado | 155: Homologado fora do prazo | 573: Evento duplicado já processado
             if (in_array($cStatEvento, [135, 155, 573], true)) {
                 $document->update(['status' => 'canceled']);
+                Log::channel('fiscal')->info('NFC-e cancelada na SEFAZ', [
+                    'order_id'      => $document->order_id,
+                    'number'        => $document->number,
+                    'access_key'    => $document->access_key,
+                    'cstat_evento'  => $cStatEvento,
+                    'justification' => $cleanJustification,
+                ]);
                 return true;
             }
 

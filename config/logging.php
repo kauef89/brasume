@@ -54,7 +54,7 @@ return [
 
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', (string) env('LOG_STACK', 'single')),
+            'channels' => explode(',', (string) env('LOG_STACK', 'daily,critical_errors')),
             'ignore_exceptions' => false,
         ],
 
@@ -71,6 +71,51 @@ return [
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DAILY_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'critical_errors' => [
+            'driver' => 'daily',
+            'permission' => 0666,
+            'path' => storage_path('logs/critical/critical.log'),
+            'level' => 'error',
+            'days' => 60,
+            'replace_placeholders' => true,
+        ],
+
+        'financial' => [
+            'driver' => 'daily',
+            'permission' => 0666,
+            'path' => storage_path('logs/financial/financial.log'),
+            'level' => 'info',
+            'days' => 90,
+            'replace_placeholders' => true,
+        ],
+
+        'fiscal' => [
+            'driver' => 'daily',
+            'permission' => 0666,
+            'path' => storage_path('logs/fiscal/fiscal.log'),
+            'level' => 'info',
+            'days' => 90,
+            'replace_placeholders' => true,
+        ],
+
+        'pos' => [
+            'driver' => 'daily',
+            'permission' => 0666,
+            'path' => storage_path('logs/pos/pos.log'),
+            'level' => 'info',
+            'days' => 30,
+            'replace_placeholders' => true,
+        ],
+
+        'security' => [
+            'driver' => 'daily',
+            'permission' => 0666,
+            'path' => storage_path('logs/security/security.log'),
+            'level' => 'info',
+            'days' => 60,
             'replace_placeholders' => true,
         ],
 

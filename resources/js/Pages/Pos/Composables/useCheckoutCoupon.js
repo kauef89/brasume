@@ -18,7 +18,7 @@ export function useCheckoutCoupon({ selectedItemsValue, effectiveDeliveryFee, ef
                 code: code.trim(),
                 subtotal: selectedItemsValue.value,
                 is_pos: true,
-                customer_id: liveOrder.value?.customer_id
+                customer_id: liveOrder.value?.customer_id || liveOrder.value?.customer?.id || null
             });
 
             appliedCheckoutCoupon.value = response.data.code;

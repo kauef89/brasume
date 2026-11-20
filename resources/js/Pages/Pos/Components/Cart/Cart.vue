@@ -153,9 +153,11 @@
                 :is-routing-valid="isRoutingValid"
                 :can-submit="canSubmit"
                 :applied-coupon-name="appliedCouponName"
+                :customer-id="selectedCustomerId"
+                :customer="orderMetadata?.customer || props.editOrderData?.customer || null"
                 :is-customer-mode="false"
                 @add-address="openDeliveryRouting"
-                @apply-coupon="applyCoupon($event, cartSubtotal)"
+                @apply-coupon="applyCoupon($event, cartSubtotal, selectedCustomerId)"
                 @remove-coupon="removeCoupon"
                 @checkout="processCheckout"
             />
@@ -251,7 +253,26 @@ const availableStreets = computed(() => {
     return page.props.initialStreets || page.props.streets || [];
 });
 
-const selectedCustomerId = computed(() => orderMetadata.value?.customer?.id || null);
+const selectedCustomerId = computed(() =>
+    orderMetadata.value?.customer?.id
+    || orderMetadata.value?.customer_id
+    || props.editOrderData?.customer_id
+    || props.editOrderData?.customer?.id
+    || null
+);
+
+watch(selectedCustomerId, (newCustomerId) => {
+    const boundCustomerId = activeCoupon.value?.customer_id;
+    if (boundCustomerId && Number(boundCustomerId) !== Number(newCustomerId || 0)) {
+        removeCoupon();
+        toast.add({
+            severity: 'warn',
+            summary: 'Cupom Removido',
+            detail: 'O cupom exclusivo foi removido porque o cliente do pedido foi alterado.',
+            life: 4000
+        });
+    }
+});
 const selectedCustomerName = computed(() => orderMetadata.value?.customer?.name || 'Cliente');
 
 watch(
@@ -516,7 +537,7 @@ onMounted(() => {
     if (magicCoupon) {
         const unwatch = watch(() => props.cartSubtotal, (newTotal) => {
             if (newTotal > 0 && !activeCoupon.value) {
-                applyCoupon(magicCoupon, newTotal).then((success) => {
+                applyCoupon(magicCoupon, newTotal, selectedCustomerId.value).then((success) => {
                     if (success) {
                         localStorage.removeItem('pos_magic_coupon');
                         unwatch();

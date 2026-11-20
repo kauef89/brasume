@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ['middleware' => ['web', 'auth:web,team']]
     )
     ->withMiddleware(function (Middleware $middleware) {
+        $middleware->append(\App\Http\Middleware\InjectLogContext::class);
 
         $middleware->append(\App\Http\Middleware\TracePwaAuthScope::class);
 

@@ -495,7 +495,9 @@ class OfxImportService
             $autoCardBatches    += $reproc['auto_card_batches'];
         }
 
-        return [
+        $summary = [
+            'account_id'           => $account->id,
+            'account_name'         => $account->name,
             'imported_count'       => $importedCount,
             'auto_fees_count'      => $autoFeesCount,
             'auto_matches_count'   => $autoMatchesCount + $autoRecurringCount,
@@ -506,6 +508,11 @@ class OfxImportService
             'duplicates_count'     => count($analysis['duplicates']),
             'malformed_count'      => count($analysis['malformed_blocks']),
         ];
+
+        \Illuminate\Support\Facades\Log::channel('financial')->info('Importação OFX concluída', $summary);
+        unset($summary['account_id'], $summary['account_name']);
+
+        return $summary;
     }
 
     /**

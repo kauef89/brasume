@@ -3,94 +3,90 @@
         class="h-full flex flex-col overflow-y-auto hide-scrollbar pb-32 px-4 space-y-6"
         :style="{ paddingTop: 'calc(var(--app-header-height, 6rem) + 1rem)' }"
     >
-        <!-- 🧭 CONTROLO DE ABAS VIA TELEPORT PARA O TOPO (SegmentedControl) -->
-        <Teleport to="#team-header-actions" :disabled="!hasTeleportTarget">
-            <SegmentedControl
-                v-model="activeTab"
-                :options="tabOptions"
-            />
-        </Teleport>
-
-        <!-- 🗺️ ROTA OTIMIZADA NO GOOGLE MAPS -->
-        <div v-if="myDeliveries.length > 0 && (activeTab === 'all' || activeTab === 'route')" class="shrink-0">
-            <button
-                @click="openGoogleMaps"
-                type="button"
-                class="w-full bg-surface-1 text-primary-600 dark:text-primary-400 font-black text-xs uppercase tracking-wider py-3.5 px-4 rounded-2xl shadow-sm border border-surface-border flex items-center justify-center gap-2.5 active:scale-98 transition-all outline-none cursor-pointer hover:border-primary-500/40"
-            >
-                <i class="pi fa-location-dot text-base text-primary-500"></i>
-                <span>Gerar Rota Otimizada no Google Maps ({{ myDeliveries.length }})</span>
-            </button>
-            <p v-if="myDeliveries.length > 1" class="text-center text-[10px] text-surface-muted mt-1.5 font-medium">
-                Os pontos com GPS e moradas serão ordenados para o menor trajeto.
-            </p>
-        </div>
-
-        <!-- 🛵 SECÇÃO 1: COMIGO (EM ROTA) -->
-        <div v-if="activeTab === 'all' || activeTab === 'route'" class="space-y-3">
+        <!-- 1️⃣ SECÇÃO 1: EM ROTA (COMIGO) -->
+        <section class="space-y-3">
             <div class="flex items-center justify-between px-1">
                 <h3 class="font-black text-surface-text uppercase tracking-widest text-xs flex items-center gap-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Comigo (Em Rota)</span>
+                    <span>Em Rota</span>
                 </h3>
                 <span class="text-xs font-black px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500">
-                    {{ myDeliveries.length }}
+                    {{ inRouteDeliveries.length }}
                 </span>
             </div>
 
-            <div v-if="myDeliveries.length === 0" class="text-center py-6 border border-dashed border-surface-border rounded-2xl text-surface-muted bg-surface-1/40">
-                <i class="pi pi-box text-xl opacity-40 mb-1 block"></i>
-                <p class="text-xs font-bold">Nenhum pedido na mochila de momento.</p>
+            <!-- Rota Otimizada quando houver pedidos em rota -->
+            <div v-if="inRouteDeliveries.length > 0">
+                <button
+                    @click="openGoogleMaps(inRouteDeliveries)"
+                    type="button"
+                    class="w-full bg-surface-1 text-primary-600 dark:text-primary-400 font-black text-xs uppercase tracking-wider py-3.5 px-4 rounded-2xl shadow-sm border border-surface-border flex items-center justify-center gap-2.5 active:scale-98 transition-all outline-none cursor-pointer hover:border-primary-500/40"
+                >
+                    <i class="pi pi-map text-base text-primary-500"></i>
+                    <span>
+                        {{ inRouteDeliveries.length > 1
+                            ? `Gerar Rota Otimizada no Maps (${inRouteDeliveries.length})`
+                            : 'Abrir Rota no Google Maps' }}
+                    </span>
+                </button>
+            </div>
+
+            <div v-if="inRouteDeliveries.length === 0" class="text-center py-5 border border-dashed border-surface-border rounded-2xl text-surface-muted bg-surface-1/40">
+                <i class="pi pi-truck text-xl opacity-40 mb-1 block"></i>
+                <p class="text-xs font-bold">Nenhuma entrega em rota no momento.</p>
             </div>
 
             <div v-else class="space-y-3">
                 <DeliveryDriverCard
-                    v-for="order in myDeliveries"
+                    v-for="order in inRouteDeliveries"
                     :key="order.id"
                     :order="order"
+                    status-badge="Em Rota"
+                    status-tone="success"
                     @charge-pix="openPixModal"
                 >
                     <template #actions>
-                        <div class="flex gap-2 pt-1">
-                            <button
-                                v-if="order.status !== 'dispatched'"
-                                @click="updateStatus(order.id, 'dispatched')"
-                                type="button"
-                                class="flex-1 h-11 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer shadow-sm active:scale-98"
-                            >
-                                <i class="pi pi-truck text-xs"></i>
-                                <span>Sair p/ Entrega</span>
-                            </button>
-
-                            <button
-                                v-if="order.status === 'dispatched'"
-                                @click="updateStatus(order.id, 'delivered')"
-                                type="button"
-                                class="flex-1 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer shadow-sm active:scale-98"
-                            >
-                                <i class="pi pi-check-circle text-xs"></i>
-                                <span>Confirmar Entrega</span>
-                            </button>
-                        </div>
+                        <button
+                            @click="updateStatus(order.id, 'delivered')"
+                            :disabled="processingOrderId === order.id"
+                            type="button"
+                            class="w-full h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer shadow-sm active:scale-98"
+                        >
+                            <i class="pi pi-check-circle text-xs"></i>
+                            <span>Confirmar Entrega</span>
+                        </button>
                     </template>
                 </DeliveryDriverCard>
             </div>
-        </div>
+        </section>
 
-        <!-- 📦 SECÇÃO 2: EM DESPACHO (PRONTOS NO BALCÃO) -->
-        <div v-if="activeTab === 'all' || activeTab === 'dispatch'" class="space-y-3">
+        <!-- 2️⃣ SECÇÃO 2: DESPACHANDO (PRONTOS PARA SAIR) -->
+        <section class="space-y-3">
             <div class="flex items-center justify-between px-1">
                 <h3 class="font-black text-surface-text uppercase tracking-widest text-xs flex items-center gap-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-primary-500"></span>
-                    <span>Em Despacho (Prontos no Balcão)</span>
+                    <span>Despachando (Prontos)</span>
                 </h3>
                 <span class="text-xs font-black px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-500">
                     {{ readyDeliveries.length }}
                 </span>
             </div>
 
+            <!-- Saída em lote quando houver 2+ pedidos prontos atribuídos a este motoboy -->
+            <div v-if="myReadyDeliveries.length > 1">
+                <button
+                    @click="dispatchAllMyReady"
+                    :disabled="isBatchDispatching"
+                    type="button"
+                    class="w-full h-11 rounded-2xl bg-primary-500 hover:bg-primary-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider shadow-sm active:scale-98 transition-all border-none cursor-pointer flex items-center justify-center gap-2"
+                >
+                    <i class="pi pi-truck text-xs"></i>
+                    <span>Sair com Todos ({{ myReadyDeliveries.length }} Pedidos)</span>
+                </button>
+            </div>
+
             <div v-if="readyDeliveries.length === 0" class="text-center py-5 border border-dashed border-surface-border rounded-2xl text-surface-muted bg-surface-1/40">
-                <p class="text-xs font-medium">Nenhum pedido pronto a aguardar retirada.</p>
+                <p class="text-xs font-medium">Nenhum pedido pronto aguardando saída.</p>
             </div>
 
             <div v-else class="space-y-3">
@@ -98,21 +94,61 @@
                     v-for="order in readyDeliveries"
                     :key="order.id"
                     :order="order"
+                    :status-badge="isAssignedToMe(order) ? 'Pronto • Seu' : 'Aguardando caixa atribuir'"
+                    :status-tone="isAssignedToMe(order) ? 'info' : 'warning'"
                     @charge-pix="openPixModal"
                 >
                     <template #actions>
                         <button
-                            @click="assignToMe(order.id)"
+                            v-if="isAssignedToMe(order)"
+                            @click="updateStatus(order.id, 'dispatched')"
+                            :disabled="processingOrderId === order.id"
                             type="button"
-                            class="w-full h-11 rounded-xl bg-surface-text text-surface-1 font-black text-xs uppercase tracking-wider shadow-sm active:scale-98 transition-all border-none cursor-pointer flex items-center justify-center gap-1.5"
+                            class="w-full h-11 rounded-xl bg-primary-500 hover:bg-primary-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer shadow-sm active:scale-98"
                         >
-                            <i class="pi pi-plus text-xs"></i>
-                            <span>Pegar Pedido</span>
+                            <i class="pi pi-truck text-xs"></i>
+                            <span>Sair p/ Entrega</span>
                         </button>
+
+                        <div
+                            v-else
+                            class="w-full h-11 px-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 text-center"
+                        >
+                            <i class="pi pi-clock text-xs shrink-0"></i>
+                            <span>Aguardando caixa atribuir</span>
+                        </div>
                     </template>
                 </DeliveryDriverCard>
             </div>
-        </div>
+        </section>
+
+        <!-- 3️⃣ SECÇÃO 3: NA COZINHA (EM PREPARO / FILA) -->
+        <section class="space-y-3">
+            <div class="flex items-center justify-between px-1">
+                <h3 class="font-black text-surface-text uppercase tracking-widest text-xs flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                    <span>Na Cozinha</span>
+                </h3>
+                <span class="text-xs font-black px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    {{ kitchenDeliveries.length }}
+                </span>
+            </div>
+
+            <div v-if="kitchenDeliveries.length === 0" class="text-center py-5 border border-dashed border-surface-border rounded-2xl text-surface-muted bg-surface-1/40">
+                <p class="text-xs font-medium">Nenhum pedido de delivery na cozinha no momento.</p>
+            </div>
+
+            <div v-else class="space-y-3">
+                <DeliveryDriverCard
+                    v-for="order in kitchenDeliveries"
+                    :key="order.id"
+                    :order="order"
+                    :status-badge="getKitchenBadge(order)"
+                    :status-tone="isAssignedToMe(order) ? 'info' : 'neutral'"
+                    @charge-pix="openPixModal"
+                />
+            </div>
+        </section>
 
         <!-- MODAL PIX DO ESTAFETA -->
         <OrderPixModal
@@ -131,13 +167,11 @@ import { useToast } from 'primevue/usetoast';
 import { useTenantEcho } from '@/Composables/useTenantEcho';
 import DeliveryDriverCard from '@/Pages/Team/DeliveryDriverCard.vue';
 import OrderPixModal from '@/Pages/Shared/OrderPixModal.vue';
-import SegmentedControl from '@/Components/UI/SegmentedControl.vue';
-
-const activeTab = ref('all');
-const hasTeleportTarget = ref(false);
 
 const isPixModalOpen = ref(false);
 const selectedPixOrder = ref(null);
+const processingOrderId = ref(null);
+const isBatchDispatching = ref(false);
 
 const openPixModal = (order) => {
     selectedPixOrder.value = order;
@@ -172,8 +206,6 @@ const upsertOrder = (incomingOrder) => {
 };
 
 onMounted(() => {
-    hasTeleportTarget.value = typeof document !== 'undefined' && Boolean(document.getElementById('team-header-actions'));
-
     const echo = useTenantEcho();
     echo.listenChannel('operations', '.order.created', (e) => upsertOrder(e.order || e));
     echo.listenChannel('operations', '.OrderCreated', (e) => upsertOrder(e.order || e));
@@ -181,56 +213,118 @@ onMounted(() => {
     echo.listenChannel('operations', '.OrderUpdated', (e) => upsertOrder(e.order || e));
 });
 
-// Pedidos atribuídos ao estafeta (Em Rota)
-const myDeliveries = computed(() => {
-    const userId = authUser.value.id;
-    return localOrders.value.filter(o =>
-        o.type === 'delivery' &&
-        (Number(o.driver_id) === Number(userId) || Number(o.courier_id) === Number(authUser.value?.employee_id) || Number(o.courier?.user_id) === Number(userId)) &&
-        o.status !== 'closed' &&
-        o.status !== 'cancelled' && o.status !== 'delivered'
+const isAssignedToMe = (order) => {
+    const userId = Number(authUser.value?.id || 0);
+    const empId = Number(authUser.value?.employee_id || 0);
+
+    return (
+        (userId > 0 && (Number(order.driver_id) === userId || Number(order.courier?.user_id) === userId)) ||
+        (empId > 0 && Number(order.courier_id) === empId)
+    );
+};
+
+const isUnassigned = (order) => !order.driver_id && !order.courier_id;
+
+// Filtro global: estritamente tipo 'delivery' e ainda ativo
+const activeDeliveryOrders = computed(() => {
+    return localOrders.value
+        .filter(o =>
+            o.type === 'delivery' &&
+            !['closed', 'cancelled', 'canceled', 'delivered'].includes(o.status)
+        )
+        .sort((a, b) => Number(a.id) - Number(b.id));
+});
+
+// 1️⃣ Em Rota: pedidos atribuídos a este motoboy que já saíram para entrega
+const inRouteDeliveries = computed(() => {
+    return activeDeliveryOrders.value.filter(o =>
+        isAssignedToMe(o) &&
+        ['dispatched', 'out_for_delivery'].includes(o.status)
     );
 });
 
-// Pedidos prontos no balcão (Em Despacho)
+// 2️⃣ Despachando: pedidos prontos (atribuídos a este motoboy ou aguardando atribuição do caixa)
 const readyDeliveries = computed(() => {
-    return localOrders.value.filter(o =>
-        o.type === 'delivery' &&
-        !o.driver_id && !o.courier_id &&
-        o.status === 'ready'
+    return activeDeliveryOrders.value.filter(o =>
+        ['ready', 'ready_for_pickup'].includes(o.status) &&
+        (isAssignedToMe(o) || isUnassigned(o))
     );
 });
 
-const tabOptions = computed(() => [
-    { value: 'all', label: `Todos (${myDeliveries.value.length + readyDeliveries.value.length})` },
-    { value: 'route', label: `Em Rota (${myDeliveries.value.length})`, icon: 'pi-truck' },
-    { value: 'dispatch', label: `Em Despacho (${readyDeliveries.value.length})`, icon: 'pi-box' },
-]);
+const myReadyDeliveries = computed(() => {
+    return readyDeliveries.value.filter(o => isAssignedToMe(o));
+});
 
-const assignToMe = (orderId) => {
-    router.post(route('operations.orders.assign-courier', orderId), { courier_id: authUser.value.employee_id || authUser.value.id, driver_id: authUser.value.id }, {
-        preserveScroll: true,
-        preserveState: true,
-        onSuccess: () => toast.add({
-            severity: 'success',
-            summary: 'Pedido Atribuído',
-            detail: `Comanda #${orderId} adicionada à sua rota.`,
-            life: 3000
-        })
-    });
+// 3️⃣ Na Cozinha: pedidos em fila/preparo (atribuídos a este motoboy ou ainda sem atribuição)
+const kitchenDeliveries = computed(() => {
+    return activeDeliveryOrders.value.filter(o =>
+        ['pending', 'confirmed', 'preparing'].includes(o.status) &&
+        (isAssignedToMe(o) || isUnassigned(o))
+    );
+});
+
+const getKitchenBadge = (order) => {
+    const step = order.status === 'preparing' ? 'Em Preparo' : 'Na Fila';
+    const owner = isAssignedToMe(order) ? 'Seu' : 'Sem motoboy';
+    return `${step} • ${owner}`;
 };
 
 const updateStatus = (orderId, status) => {
-    router.post(route('operations.orders.update-status', orderId), { status: status }, {
+    if (processingOrderId.value) return;
+    processingOrderId.value = orderId;
+
+    router.post(route('operations.orders.update-status', orderId), { status }, {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
             if (status === 'delivered') {
-                toast.add({ severity: 'success', summary: 'Entrega Concluída', detail: `Pedido #${orderId} finalizado com sucesso!`, life: 3000 });
+                toast.add({ severity: 'success', summary: 'Entrega Concluída', detail: `Pedido #${orderId} marcado como entregue!`, life: 3000 });
             } else if (status === 'dispatched') {
-                toast.add({ severity: 'info', summary: 'Em Rota', detail: `Pedido #${orderId} marcado como em rota de entrega.`, life: 3000 });
+                toast.add({ severity: 'info', summary: 'Em Rota', detail: `Pedido #${orderId} saiu para entrega.`, life: 3000 });
             }
+        },
+        onError: (errors) => {
+            toast.add({
+                severity: 'error',
+                summary: 'Operação Bloqueada',
+                detail: errors.status || 'Não foi possível atualizar o status do pedido.',
+                life: 4500
+            });
+        },
+        onFinish: () => {
+            processingOrderId.value = null;
         }
+    });
+};
+
+const dispatchAllMyReady = async () => {
+    const queue = [...myReadyDeliveries.value];
+    if (queue.length === 0 || isBatchDispatching.value) return;
+
+    isBatchDispatching.value = true;
+    for (const order of queue) {
+        await new Promise((resolve) => {
+            router.post(route('operations.orders.update-status', order.id), { status: 'dispatched' }, {
+                preserveScroll: true,
+                preserveState: true,
+                onError: (errors) => {
+                    toast.add({
+                        severity: 'error',
+                        summary: `Pedido #${order.id}`,
+                        detail: errors.status || 'Falha ao despachar pedido.',
+                        life: 4000
+                    });
+                },
+                onFinish: () => resolve()
+            });
+        });
+    }
+    isBatchDispatching.value = false;
+    toast.add({
+        severity: 'success',
+        summary: 'Saída Confirmada',
+        detail: `${queue.length} entregas colocadas em rota.`,
+        life: 3000
     });
 };
 
@@ -248,29 +342,29 @@ const resolveDestinationString = (order) => {
             const lng = addr.coordinates.lng || addr.coordinates.longitude;
             if (lat && lng) return `${lat},${lng}`;
         }
-        
+
         const cityStr = settings.value.city ? `, ${settings.value.city}` : '';
         const stateStr = settings.value.state ? ` - ${settings.value.state}` : '';
-        
+
         return `${addr.street || ''}, ${addr.number || ''}, ${addr.neighborhood || ''}${cityStr}${stateStr}`;
     }
-    
+
     const cityStrFallback = settings.value.city ? `, ${settings.value.city}` : '';
     const stateStrFallback = settings.value.state ? ` - ${settings.value.state}` : '';
     return String(order.address || '') + cityStrFallback + stateStrFallback;
 };
 
-const openGoogleMaps = () => {
-    if (myDeliveries.value.length === 0) return;
+const openGoogleMaps = (ordersList) => {
+    if (!ordersList || ordersList.length === 0) return;
 
     const origin = `${settings.value.street || ''}, ${settings.value.number || ''}, ${settings.value.city || ''}`;
-    const lastOrder = myDeliveries.value[myDeliveries.value.length - 1];
+    const lastOrder = ordersList[ordersList.length - 1];
     const destination = resolveDestinationString(lastOrder);
 
     let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`;
 
-    if (myDeliveries.value.length > 1) {
-        const waypoints = myDeliveries.value.slice(0, -1).map(o => resolveDestinationString(o));
+    if (ordersList.length > 1) {
+        const waypoints = ordersList.slice(0, -1).map(o => resolveDestinationString(o));
         url += `&waypoints=optimize:true|${waypoints.map(w => encodeURIComponent(w)).join('|')}`;
     }
 

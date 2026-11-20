@@ -66,7 +66,7 @@ export function useCoupons() {
     };
 
     // Valida e aplica o cupom
-    const applyCoupon = async (code, subtotal) => {
+    const applyCoupon = async (code, subtotal, customerId = null) => {
         if (!code || isApplyingCoupon.value) return false;
         isApplyingCoupon.value = true;
 
@@ -74,7 +74,8 @@ export function useCoupons() {
             const response = await axios.post(route('customer.coupons.validate'), {
                 code: code,
                 subtotal: subtotal,
-                is_pos: true // 🚀 Permite cupons exclusivos do caixa
+                is_pos: true, // 🚀 Permite cupons exclusivos do caixa
+                customer_id: customerId || null
             });
 
             activeCoupon.value = response.data;

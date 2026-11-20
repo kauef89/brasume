@@ -31,7 +31,8 @@ class CouponService
             'coupon_id' => $coupon->id,
             'code'      => $coupon->code,
             'type'      => $coupon->type,
-            'value'     => (float) $coupon->value,
+            'value'       => (float) $coupon->value,
+            'customer_id' => $coupon->customer_id,
             'is_pos_only' => (bool) $coupon->is_pos_only,
         ];
     }
@@ -63,8 +64,22 @@ class CouponService
             return ['success' => false, 'message' => 'Valor mínimo para este cupom é R$ ' . number_format($coupon->min_subtotal, 2, ',', '.')];
         }
 
-        if ($coupon->customer_id && $coupon->customer_id !== $customerId) {
-            return ['success' => false, 'message' => 'Este cupom é exclusivo para outro cliente.'];
+        if ($coupon->customer_id) {
+            if (!$customerId) {
+                if ($isPos) {
+                    $ownerName = $coupon->customer?->name ?? "Cliente #{$coupon->customer_id}";
+                    return [
+                        'success' => false,
+                        'message' => "Este cupom é exclusivo para {$ownerName}. Selecione este cliente no pedido para aplicá-lo.",
+                    ];
+                }
+
+                return ['success' => false, 'message' => 'Faça login para usar este cupom exclusivo.'];
+            }
+
+            if ((int) $coupon->customer_id !== (int) $customerId) {
+                return ['success' => false, 'message' => 'Este cupom é exclusivo para outro cliente.'];
+            }
         }
 
         if ($customerId) {

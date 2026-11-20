@@ -53,6 +53,11 @@ class PosSecurityService
             }
 
             if (!$authorizer) {
+                \Illuminate\Support\Facades\Log::channel('security')->warning('Tentativa de autorização com PIN inválido', [
+                    'action' => $action,
+                    'operator_id' => $operator?->id,
+                    'context' => $context,
+                ]);
                 throw new Exception("PIN inválido ou não encontrado.");
             }
 

@@ -17,6 +17,14 @@ class OrderStatusService
 {
     public function updateStatus(Order $order, string $newStatus): void
     {
+        if ($order->type === 'delivery' && in_array($newStatus, ['dispatched', 'out_for_delivery'], true) && empty($order->courier_id) && empty($order->driver_id)) {
+            $courierService = app(CourierSettlementService::class);
+            if (!$courierService->tryAutoAssign($order)) {
+                throw new \DomainException('Não é possível despachar um pedido de delivery sem um motoboy associado.');
+            }
+            $order->refresh();
+        }
+
         $order->update(["status" => $newStatus]);
 
         // 🚀 AVALIAÇÃO FISCAL NO FECHAMENTO
