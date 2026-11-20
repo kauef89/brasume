@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Enums\PaymentEngineType;
 use App\Models\AcquirerTransaction;
 
 class Payment extends Model
@@ -96,5 +97,38 @@ class Payment extends Model
     public function paymentItems(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(OrderPaymentItem::class, 'order_payment_id');
+    }
+
+    public function scopePaid($query)
+    {
+        return $query->where('is_paid', true)
+            ->where('status', '!=', 'cancelled');
+    }
+
+    public function scopeForShift($query, CashShift $shift)
+    {
+        return $query->where(function ($q) use ($shift) {
+            $q->where('cash_shift_id', $shift->id)
+              ->orWhere(function ($sub) use ($shift) {
+                  $sub->whereNull('cash_shift_id')
+                      ->whereHas('order', fn ($oq) => $oq->where('cash_shift_id', $shift->id));
+              });
+        });
+    }
+
+    public function scopeCommercialRevenue($query)
+    {
+        return $query->paid()
+            ->whereDoesntHave('paymentMethod', function ($q) {
+                $q->whereIn('engine_type', PaymentEngineType::nonRevenueValues());
+            });
+    }
+
+    public function scopeNonRevenue($query)
+    {
+        return $query->paid()
+            ->whereHas('paymentMethod', function ($q) {
+                $q->whereIn('engine_type', PaymentEngineType::nonRevenueValues());
+            });
     }
 }

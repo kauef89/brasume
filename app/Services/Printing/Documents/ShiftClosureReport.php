@@ -224,12 +224,17 @@ class ShiftClosureReport
 
     private function buildPaymentsSection(): void
     {
-        $payments = Payment::where('cash_shift_id', $this->shift->id)
-            ->where('is_paid', true)
+        $revenuePayments = Payment::with('paymentMethod')
+            ->forShift($this->shift)
+            ->commercialRevenue()
             ->get();
 
-        $revenuePayments = $payments->reject(fn($p) => ($p->paymentMethod?->engine_type === \App\Enums\PaymentEngineType::LOSS || $p->paymentMethod?->engine_type?->value === 'loss'));
-        $grouped = $revenuePayments->groupBy(fn($p) => $p->method ?: 'Outros');
+        $nonRevenuePayments = Payment::with('paymentMethod')
+            ->forShift($this->shift)
+            ->nonRevenue()
+            ->get();
+
+        $grouped = $revenuePayments->groupBy(fn ($p) => $p->method ?: 'Outros');
 
         $this->blueprint[] = ['cmd' => 'text', 'val' => 'RESUMO DE FORMAS DE PAGAMENTO', 'bold' => true];
         $this->blueprint[] = ['cmd' => 'text', 'val' => $this->headerRow3('FORMA', 'QTD', 'TOTAL'), 'bold' => true];
@@ -241,14 +246,21 @@ class ShiftClosureReport
             $this->blueprint[] = ['cmd' => 'text', 'val' => $this->moneyRow3($methodName, $count, $sum), 'bold' => false];
         }
 
+        if ($nonRevenuePayments->isNotEmpty()) {
+            $this->blueprint[] = ['cmd' => 'text', 'val' => ' . . . . . . . . . . . . . . . . . . . . . . . .', 'bold' => false];
+            $this->blueprint[] = ['cmd' => 'text', 'val' => 'BENEFICIOS / CORTESIAS (NAO FATURADO)', 'bold' => true];
+            foreach ($nonRevenuePayments->groupBy(fn ($p) => $p->method ?: 'Outros') as $methodName => $items) {
+                $this->blueprint[] = ['cmd' => 'text', 'val' => $this->moneyRow3($methodName, $items->count() . 'x', (float) $items->sum('amount')), 'bold' => false];
+            }
+        }
+
         $this->blueprint[] = ['cmd' => 'text', 'val' => '------------------------------------------------', 'bold' => false];
     }
 
     private function buildGrandTotalSection(): void
     {
-        $totalSales = (float) Payment::where('cash_shift_id', $this->shift->id)
-            ->where('is_paid', true)
-            ->whereDoesntHave('paymentMethod', fn($q) => $q->where('engine_type', 'loss'))
+        $totalSales = (float) Payment::forShift($this->shift)
+            ->commercialRevenue()
             ->sum('amount');
 
         $this->blueprint[] = ['cmd' => 'align', 'val' => 'ct'];

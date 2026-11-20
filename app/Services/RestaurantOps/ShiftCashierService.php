@@ -147,15 +147,14 @@ class ShiftCashierService
             $expected = $this->calculateExpectedCash($shift);
             $diff = round($actual - $expected, 2);
 
-            $hasBreakage = abs($diff) >= 0.02;
-
             $terminalSettlements = $data['terminal_settlements'] ?? ($data['terminal_totals'] ?? null);
-            $totalAposDeclared = 0;
-            if (is_array($terminalSettlements)) {
-                foreach ($terminalSettlements as $t) {
-                    $totalAposDeclared += (float) ($t['total'] ?? 0);
-                }
-            }
+            $diagnostic = app(\App\Services\RestaurantOps\ShiftAuditService::class)->diagnose(
+                $shift,
+                $actual,
+                is_array($terminalSettlements) ? $terminalSettlements : []
+            );
+            $electronicDiff = round((float) ($diagnostic['electronic_difference'] ?? 0), 2);
+            $hasBreakage = abs($diff) >= 0.02 || abs($electronicDiff) >= 0.05;
 
             $updatePayload = [
                 'status'                   => 'closed',
@@ -163,8 +162,8 @@ class ShiftCashierService
                 'closing_balance_expected' => $expected,
                 'closing_balance_actual'   => $actual,
                 'cash_breakage_amount'     => $diff,
-                'apos_breakage_amount'     => round($totalAposDeclared, 2),
-                'terminal_settlements'      => $terminalSettlements,
+                'apos_breakage_amount'     => $electronicDiff,
+                'terminal_settlements'     => $terminalSettlements,
                 'has_breakage'             => $hasBreakage,
                 'closed_by'                => $operatorId,
                 'notes'                    => $data['notes'] ?? ($data['observation'] ?? null),

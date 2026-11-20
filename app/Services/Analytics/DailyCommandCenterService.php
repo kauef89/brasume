@@ -18,6 +18,7 @@ use App\Models\CompliancePermit;
 use App\Models\EmployeeSchedule;
 use App\Models\GoodsReceipt;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\ProductionOrder;
 use App\Models\ReceivedInvoice;
 use App\Models\ShoppingListItem;
@@ -34,10 +35,10 @@ class DailyCommandCenterService
         $isToday = $date->isToday();
         $isFuture = $date->isFuture();
 
-        // 1. VENDAS & FATURAMENTO DO DIA
+        // 1. VENDAS & FATURAMENTO DO DIA (Exclui cancelados e baixas internas sem receita)
         $ordersQuery = Order::query()
             ->whereDate('created_at', $dateStr)
-            ->whereNotIn('status', ['cancelled', 'canceled', 'rejected', 'draft']);
+            ->commercialRevenue();
 
         $grossRevenue = (float) (clone $ordersQuery)->sum('total');
         $ordersCount = (int) (clone $ordersQuery)->count();
@@ -427,16 +428,9 @@ class DailyCommandCenterService
         $shiftDate = $openedAt->copy()->startOfDay();
         $shiftDateStr = $shiftDate->toDateString();
 
-        // 1. Faturamento do turno (pedidos pagos no turno ou criados na janela do turno)
-        $shiftOrdersQuery = Order::query()
-            ->whereNotIn('status', ['cancelled', 'canceled', 'rejected', 'draft'])
-            ->where(function ($q) use ($shift, $openedAt, $closedAt) {
-                $q->whereHas('payments', fn ($pq) => $pq->where('cash_shift_id', $shift->id))
-                  ->orWhereBetween('created_at', [$openedAt, $closedAt]);
-            });
-
-        $shiftRevenue = (float) (clone $shiftOrdersQuery)->sum('total');
-        $shiftOrdersCount = (int) (clone $shiftOrdersQuery)->count();
+        // 1. Faturamento líquido do turno (mesmo escopo de Payment::forShift()->commercialRevenue() do cupom)
+        $shiftRevenue = round((float) Payment::forShift($shift)->commercialRevenue()->sum('amount'), 2);
+        $shiftOrdersCount = (int) Order::forShift($shift)->commercialRevenue()->count();
 
         // 2. Meta de Break-Even referente ao dia daquele turno
         if ($shiftDate->isSameMonth(Carbon::today())) {

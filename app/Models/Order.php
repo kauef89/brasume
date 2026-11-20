@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\OrderStatus;
+use App\Enums\PaymentStatus;
 use App\Models\AcquirerTransaction;
 use App\Models\Address;
 use App\Models\CashShift;
@@ -362,5 +364,38 @@ class Order extends Model
     public function isCourierSettled(): bool
     {
         return !empty($this->courier_settled_at);
+    }
+
+    // =========================================================================
+    // SCOPES DE FATURAMENTO & AUDITORIA DE TURNO
+    // =========================================================================
+
+    public function scopeNotCancelled($query)
+    {
+        return $query->whereNotIn('status', OrderStatus::cancelledValues());
+    }
+
+    public function scopeCommercialRevenue($query)
+    {
+        return $query->notCancelled()
+            ->where(function ($q) {
+                $q->whereNull('payment_status')
+                  ->orWhereNotIn('payment_status', PaymentStatus::nonRevenueValues());
+            });
+    }
+
+    public function scopeForShift($query, CashShift $shift)
+    {
+        $openedAt = $shift->opened_at ?? $shift->created_at;
+        $closedAt = $shift->closed_at ?? now();
+
+        return $query->where(function ($q) use ($shift, $openedAt, $closedAt) {
+            $q->where('cash_shift_id', $shift->id)
+              ->orWhereHas('payments', fn ($pq) => $pq->where('cash_shift_id', $shift->id))
+              ->orWhere(function ($sub) use ($openedAt, $closedAt) {
+                  $sub->whereNull('cash_shift_id')
+                      ->whereBetween('created_at', [$openedAt, $closedAt]);
+              });
+        });
     }
 }

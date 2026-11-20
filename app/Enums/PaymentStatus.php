@@ -46,4 +46,29 @@ enum PaymentStatus: string implements HasLabel, HasColor, HasIcon
             self::CANCELLED        => 'heroicon-o-x-circle',
         };
     }
+
+    /**
+     * Status financeiros de pedidos com receita comercial.
+     *
+     * @return array<int, string>
+     */
+    public static function revenueValues(): array
+    {
+        return [
+            self::PAID->value,
+            self::PARTIAL->value,
+        ];
+    }
+
+    /**
+     * Status financeiros de baixa interna sem receita comercial.
+     *
+     * @return array<int, string>
+     */
+    public static function nonRevenueValues(): array
+    {
+        return [
+            self::SETTLED_INTERNAL->value,
+        ];
+    }
 }

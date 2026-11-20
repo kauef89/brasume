@@ -108,4 +108,49 @@ enum PaymentEngineType: string implements HasLabel, HasIcon, HasColor
     {
         return in_array($this, [self::ALLOWANCE, self::INTERNAL, self::LOSS], true);
     }
+
+    /**
+     * Motores que representam abatimento, cortesia ou benefício interno (não compõem receita comercial).
+     *
+     * @return array<int, string>
+     */
+    public static function nonRevenueValues(): array
+    {
+        return [
+            self::ALLOWANCE->value,
+            self::INTERNAL->value,
+            self::INTERNAL_LOYALTY->value,
+            self::LOSS->value,
+        ];
+    }
+
+    /**
+     * Motores que representam receita comercial efetiva.
+     *
+     * @return array<int, string>
+     */
+    public static function revenueValues(): array
+    {
+        $excluded = self::nonRevenueValues();
+
+        return array_values(array_filter(
+            array_map(fn (self $case) => $case->value, self::cases()),
+            fn (string $val) => !in_array($val, $excluded, true)
+        ));
+    }
+
+    /**
+     * Motores liquidados fisicamente via terminais de cartão / APOS / TEF.
+     *
+     * @return array<int, string>
+     */
+    public static function machineValues(): array
+    {
+        return [
+            self::POS_MANUAL->value,
+            self::SMART_POS->value,
+            self::TEF->value,
+            self::PIX_MACHINE->value,
+        ];
+    }
 }

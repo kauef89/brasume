@@ -79,8 +79,8 @@ class ShiftAuditService
 
         // 2. Apuração eletrônica registrada nos pedidos do sistema
         $payments = Payment::with('paymentMethod')
-            ->where('cash_shift_id', $shift->id)
-            ->where('is_paid', true)
+            ->forShift($shift)
+            ->paid()
             ->get();
 
         $sysCards = 0.0;

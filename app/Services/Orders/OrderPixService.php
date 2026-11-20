@@ -52,8 +52,12 @@ class OrderPixService
         $paymentMethod = PaymentMethod::whereIn('engine_type', [PaymentEngineType::BANK_API, 'bank_api', 'sicredi_pix'])->first()
             ?? PaymentMethod::where('name', 'like', '%Pix%')->first();
 
+        $shiftId = $order->cash_shift_id
+            ?? \App\Models\CashShift::where('status', 'open')->latest('id')->value('id');
+
         $order->payments()->create([
             'payment_method_id' => $paymentMethod?->id,
+            'cash_shift_id'     => $shiftId,
             'method'            => $paymentMethod?->name ?? 'Pix',
             'amount'            => $balanceDue,
             'status'            => 'pending',
@@ -190,13 +194,18 @@ class OrderPixService
         $order = null;
 
         if ($payment) {
+            $order = $payment->order;
+            $resolvedShiftId = $payment->cash_shift_id
+                ?? $order?->cash_shift_id
+                ?? \App\Models\CashShift::where('status', 'open')->latest('id')->value('id');
+
             $payment->update([
+                'cash_shift_id' => $resolvedShiftId,
                 'status'        => 'completed',
                 'is_paid'       => true,
                 'end_to_end_id' => $endToEndId,
                 'amount'        => $amount
             ]);
-            $order = $payment->order;
         } else {
             $order = Order::where('txid', $txid)->first();
             if ($order) {

@@ -155,8 +155,15 @@
                         <div class="flex flex-wrap items-center gap-2 text-[11px]">
                             {{-- 1. Conferência PDV --}}
                             @if($lcs['has_breakage'])
+                                @php
+                                    $hasCashBrk = abs((float) $lcs['cash_breakage']) >= 0.02;
+                                    $hasAposBrk = abs((float) $lcs['apos_breakage']) >= 0.05;
+                                    $brkLabel = ($hasCashBrk && $hasAposBrk)
+                                        ? 'Gaveta ' . $fmt($lcs['cash_breakage']) . ' | Cartões ' . $fmt($lcs['apos_breakage'])
+                                        : $fmt($lcs['cash_breakage'] + $lcs['apos_breakage']);
+                                @endphp
                                 <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md font-semibold bg-danger-50 text-danger-700 dark:bg-danger-500/10 dark:text-danger-300 ring-1 ring-inset ring-danger-600/20">
-                                    Quebra PDV: {{ $fmt($lcs['cash_breakage'] + $lcs['apos_breakage']) }}
+                                    Quebra PDV: {{ $brkLabel }}
                                 </span>
                             @else
                                 <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md font-semibold bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300 ring-1 ring-inset ring-success-600/20">

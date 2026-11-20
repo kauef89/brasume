@@ -66,4 +66,34 @@ enum OrderStatus: string implements HasLabel, HasColor, HasIcon
             self::TRANSFERRED              => 'heroicon-o-arrows-right-left',
         };
     }
+
+    /**
+     * Status inválidos ou cancelados que nunca entram em faturamento.
+     *
+     * @return array<int, string>
+     */
+    public static function cancelledValues(): array
+    {
+        return [
+            self::CANCELLED->value,
+            'canceled',
+            'rejected',
+            'draft',
+            self::TRANSFERRED->value,
+        ];
+    }
+
+    /**
+     * Status considerados concluídos/finalizados operacionalmente.
+     *
+     * @return array<int, string>
+     */
+    public static function closedValues(): array
+    {
+        return [
+            self::CLOSED->value,
+            self::COMPLETED->value,
+            self::DELIVERED->value,
+        ];
+    }
 }
