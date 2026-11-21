@@ -99,11 +99,23 @@ class PosOrderSubmitRequest extends FormRequest
             'routing.customer.phone'                                => ['nullable', 'string', 'max:20'],
             'routing.customer.cpf'                                  => ['nullable', 'string'],
 
-            // Endereço (Delivery flexibilizado)
-            'routing.address_id'                                    => ['nullable'],
-            'routing.address'                                       => ['nullable'], // Não força array para aceitar id direto
-            'routing.address.id'                                    => [Rule::requiredIf(!$isAppend && $type === 'delivery'), 'nullable', 'integer', 'exists:addresses,id'],
-            'routing.address.delivery_fee'                          => [Rule::requiredIf(!$isAppend && $type === 'delivery'), 'nullable', 'numeric', 'min:0'],
+            // Endereço (Delivery: aceita endereço cadastrado OU endereço avulso de guest user)
+            'routing.address_id'                                    => ['nullable', 'integer', 'exists:addresses,id'],
+            'routing.address'                                       => [Rule::requiredIf(!$isAppend && $type === 'delivery'), 'nullable', 'array'],
+            'routing.address.id'                                    => ['nullable', 'integer', 'exists:addresses,id'],
+            'routing.address.nickname'                              => ['nullable', 'string', 'max:100'],
+            'routing.address.street'                                => ['nullable'],
+            'routing.address.street_id'                             => ['nullable', 'integer'],
+            'routing.address.neighborhood'                          => ['nullable'],
+            'routing.address.neighborhood_id'                       => ['nullable', 'integer'],
+            'routing.address.number'                                => ['nullable', 'string', 'max:50'],
+            'routing.address.no_number'                             => ['nullable', 'boolean'],
+            'routing.address.noNumber'                              => ['nullable', 'boolean'],
+            'routing.address.complement'                            => ['nullable', 'string', 'max:255'],
+            'routing.address.reference'                             => ['nullable', 'string', 'max:255'],
+            'routing.address.full_address'                          => ['nullable', 'string', 'max:500'],
+            'routing.address.location_link'                         => ['nullable', 'string', 'max:500'],
+            'routing.address.delivery_fee'                          => ['nullable', 'numeric', 'min:0'],
 
             // Pagamento
             'routing.payment_method_id'                             => ['nullable', 'integer', 'exists:payment_methods,id'],
@@ -147,6 +159,20 @@ class PosOrderSubmitRequest extends FormRequest
 
             $finalTotal = (float) data_get($this->all(), 'financials.finalTotal', 0);
             $changeTarget = (float) (data_get($this->all(), 'routing.change_target') ?? data_get($this->all(), 'routing.cash_change_target', 0));
+
+            $isAppendReq = !empty($this->input('order_id'));
+            if (!$isAppendReq && $isDelivery) {
+                $addrId = data_get($this->all(), 'routing.address.id') ?? data_get($this->all(), 'routing.address_id');
+                $hasStreet = filled(data_get($this->all(), 'routing.address.street')) || filled(data_get($this->all(), 'routing.address.street_id'));
+                $hasNeighborhood = filled(data_get($this->all(), 'routing.address.neighborhood')) || filled(data_get($this->all(), 'routing.address.neighborhood_id'));
+
+                if (empty($addrId) && (!$hasStreet || !$hasNeighborhood)) {
+                    $validator->errors()->add(
+                        'routing.address',
+                        'Informe um endereço cadastrado ou preencha rua e bairro para a entrega.'
+                    );
+                }
+            }
 
             // Valida teto de troco no Delivery conforme CompanySetting
             if ($isDelivery && $isCash && $changeTarget > $finalTotal) {
@@ -211,47 +237,51 @@ class PosOrderSubmitRequest extends FormRequest
             }
         }
 
-        // 3. Normalização Polimórfica de Endereço (Delivery)
+        // 3. Normalização Polimórfica de Endereço (Delivery - Registered e Guest)
         if (isset($routing['type']) && $routing['type'] === 'delivery') {
             $rawAddress = $routing['address'] ?? null;
             $rawAddressId = $routing['address_id'] ?? null;
 
-            if (is_numeric($rawAddress)) {
-                // Front mandou routing.address = 14 (inteiro puro)
-                $addressModel = Address::with(['neighborhood', 'street'])->find((int) $rawAddress);
-                $fee = (float) ($addressModel?->neighborhood?->delivery_fee ?? ($financials['deliveryFee'] ?? 0));
-
-                $routing['address_id'] = (int) $rawAddress;
-                $routing['address'] = [
-                    'id'           => (int) $rawAddress,
-                    'delivery_fee' => $fee,
-                    'street'       => $addressModel?->street?->name ?? ($addressModel?->street ?? ''),
-                    'number'       => $addressModel?->number ?? '',
-                ];
-            } elseif (is_array($rawAddress)) {
-                // Front mandou routing.address = { id: 14, ... }
-                $addrId = $rawAddress['id'] ?? ($rawAddressId ?? null);
-                if ($addrId && is_numeric($addrId)) {
-                    $routing['address_id'] = (int) $addrId;
-                    $routing['address']['id'] = (int) $addrId;
-
-                    if (!isset($routing['address']['delivery_fee'])) {
-                        $addressModel = Address::with('neighborhood')->find((int) $addrId);
-                        $routing['address']['delivery_fee'] = (float) ($addressModel?->neighborhood?->delivery_fee ?? ($financials['deliveryFee'] ?? 0));
-                    }
+            $resolveValidDbId = static function ($candidate): ?int {
+                if ($candidate === null || $candidate === '' || !is_numeric($candidate)) {
+                    return null;
                 }
-            } elseif ($rawAddressId && is_numeric($rawAddressId)) {
-                // Front mandou routing.address_id = 14
-                $addressModel = Address::with(['neighborhood', 'street'])->find((int) $rawAddressId);
-                $fee = (float) ($addressModel?->neighborhood?->delivery_fee ?? ($financials['deliveryFee'] ?? 0));
+                $num = (float) $candidate;
+                if ($num <= 0 || $num > 2147483647) {
+                    return null;
+                }
+                $id = (int) $num;
+                return Address::whereKey($id)->exists() ? $id : null;
+            };
 
-                $routing['address_id'] = (int) $rawAddressId;
-                $routing['address'] = [
-                    'id'           => (int) $rawAddressId,
-                    'delivery_fee' => $fee,
-                    'street'       => $addressModel?->street?->name ?? ($addressModel?->street ?? ''),
-                    'number'       => $addressModel?->number ?? '',
-                ];
+            if (!is_array($rawAddress)) {
+                $validId = $resolveValidDbId($rawAddress) ?? $resolveValidDbId($rawAddressId);
+                if ($validId) {
+                    $addressModel = Address::with(['neighborhood', 'street'])->find($validId);
+                    $fee = (float) ($addressModel?->neighborhood?->delivery_fee ?? ($financials['deliveryFee'] ?? 0));
+
+                    $routing['address_id'] = $validId;
+                    $routing['address'] = [
+                        'id'           => $validId,
+                        'delivery_fee' => $fee,
+                        'street'       => $addressModel?->street?->name ?? ($addressModel?->street ?? ''),
+                        'number'       => $addressModel?->number ?? '',
+                    ];
+                } else {
+                    $routing['address_id'] = null;
+                    $routing['address'] = null;
+                }
+            } else {
+                $validId = $resolveValidDbId($rawAddress['id'] ?? $rawAddressId);
+                $routing['address_id'] = $validId;
+                $routing['address']['id'] = $validId;
+
+                if ($validId && !isset($routing['address']['delivery_fee'])) {
+                    $addressModel = Address::with('neighborhood')->find($validId);
+                    $routing['address']['delivery_fee'] = (float) ($addressModel?->neighborhood?->delivery_fee ?? ($financials['deliveryFee'] ?? 0));
+                } elseif (!isset($routing['address']['delivery_fee'])) {
+                    $routing['address']['delivery_fee'] = (float) ($financials['deliveryFee'] ?? 0);
+                }
             }
         } elseif (isset($routing['type']) && $routing['type'] !== 'delivery') {
             $routing['address'] = null;

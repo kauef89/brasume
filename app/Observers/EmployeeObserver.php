@@ -5,7 +5,9 @@ namespace App\Observers;
 use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 
 class EmployeeObserver
@@ -117,8 +119,20 @@ class EmployeeObserver
                 $userUpdates['is_active'] = (bool) $employee->is_active;
             }
 
+            if ((bool) $employee->is_active === false) {
+                $userUpdates['remember_token'] = Str::random(60);
+            }
+
             if (!empty($userUpdates)) {
                 $user->update($userUpdates);
+            }
+
+            if ((bool) $employee->is_active === false) {
+                try {
+                    DB::table('sessions')->where('user_id', $user->id)->delete();
+                } catch (\Throwable $e) {
+                    // Ignora caso o driver de sessão não seja database
+                }
             }
 
             // 4. Espelhamento direto: Employee -> Spatie Roles

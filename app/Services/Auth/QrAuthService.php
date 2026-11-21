@@ -15,6 +15,11 @@ class QrAuthService
      */
     public function authorizeTerminal(string $token, int $userId): void
     {
+        $user = \App\Models\User::find($userId);
+        if (!$user || $user->is_active === false) {
+            throw new Exception('Colaborador inativo ou não autorizado.', 403);
+        }
+
         Cache::put('qr_auth_' . $token, $userId, 120);
         event(new DeviceQrAuthorized($token, $userId));
         Log::info("✅ SUCESSO! Evento WebSocket disparado para a chave qr-auth.{$token}");
@@ -46,7 +51,7 @@ class QrAuthService
             throw new Exception('Máquina não autorizada.', 404);
         }
 
-        $device->update(['last_active_at' => now()]);
+        $device->updateQuietly(['last_active_at' => now()]);
 
         return $device;
     }

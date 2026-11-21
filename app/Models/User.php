@@ -36,11 +36,20 @@ class User extends Authenticatable implements HasTenants, FilamentUser
             'email_verified_at' => 'datetime',
             'password'          => 'hashed',
             'pin'               => 'hashed',
+            'is_active'         => 'boolean',
         ];
     }
 
     public function canAccessPanel(\Filament\Panel $panel): bool
     {
+        if ($this->is_active === false) {
+            return false;
+        }
+
+        if ($this->employee && $this->employee->is_active === false) {
+            return false;
+        }
+
         if ($panel->getId() === 'admin' && $this->hasRole('investor') && !$this->hasAnyRole(['admin', 'manager'])) {
             return false;
         }

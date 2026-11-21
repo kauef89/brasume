@@ -3,11 +3,14 @@
 namespace App\Models;
 
 use App\Enums\DeviceType;
+use App\Observers\DeviceObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
+#[ObservedBy([DeviceObserver::class])]
 class Device extends Model
 {
     use SoftDeletes;
